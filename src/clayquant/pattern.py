@@ -30,7 +30,7 @@ import numpy as np
 from .crystal import Crystal
 from .emission import CU_KA_5LINE, EmissionProfile
 from .mixed_layer import MixedLayerStack
-from .optics import lorentz_polarization, march_dollase
+from .optics import Divergence, lorentz_polarization, march_dollase
 from .profile import PeakShape, accumulate_peaks, convolve_variable_fwhm
 
 __all__ = [
@@ -112,14 +112,24 @@ class Instrument:
     lp_mode: str = "powder"
     monochromator_two_theta: float | None = None
     lines_per_emission: int = 1
+    divergence: Divergence | None = None
 
     def sample_emission(self) -> tuple[np.ndarray, np.ndarray]:
         return self.emission.sample(self.lines_per_emission)
 
     def lp(self, two_theta: np.ndarray) -> np.ndarray:
-        return lorentz_polarization(
+        """Lorentz-polarization factor including the beam overflow correction.
+
+        Without the overflow correction the Lorentz factor diverges as the angle
+        goes to zero, which puts an unphysical ramp under the low-angle basal
+        reflections that matter most for clays.
+        """
+        factor = lorentz_polarization(
             two_theta, mode=self.lp_mode, monochromator_two_theta=self.monochromator_two_theta
         )
+        if self.divergence is not None:
+            factor = factor * self.divergence.factor(two_theta)
+        return factor
 
 
 @dataclass
@@ -330,6 +340,8 @@ def mixed_layer_pattern(
     r_march_dollase: float = 1.0,
     include_non_basal: bool = True,
     name: str = "",
+    basal_scale: float | None = None,
+    host_reflections: Reflections | None = None,
 ) -> Pattern:
     """Pattern of an interstratified stack including the host's non-basal reflections.
 
@@ -340,19 +352,29 @@ def mixed_layer_pattern(
     therefore treated as a property of the individual layers rather than of the
     interstratified crystallite.  By construction the result converges to the
     pure host pattern as the expandable fraction goes to zero.
+
+    ``basal_scale`` and ``host_reflections`` accept precomputed values.  Neither
+    depends on the layer proportion or on the orientation parameter, so a series
+    of compositions can reuse one pair instead of recomputing them per pattern.
     """
     grid = two_theta_grid() if grid is None else np.asarray(grid, dtype=float)
     instrument = instrument or Instrument()
 
-    scale = basal_scale_factor(host, layers_per_cell, grid, instrument, stack.csds)
+    scale = (
+        basal_scale_factor(host, layers_per_cell, grid, instrument, stack.csds)
+        if basal_scale is None
+        else float(basal_scale)
+    )
     basal = basal_pattern(stack, grid, instrument, r_march_dollase)
     total = scale * basal.intensity
 
     n_non_basal = 0
     if include_non_basal:
-        wavelengths, _ = instrument.sample_emission()
-        d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
-        found = reflections(host, d_min)
+        if host_reflections is None:
+            wavelengths, _ = instrument.sample_emission()
+            d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
+            host_reflections = reflections(host, d_min)
+        found = host_reflections
         non_basal = found.select(~found.is_basal)
         n_non_basal = len(non_basal.d)
         total = total + stack.fraction_a * _build_from_reflections(

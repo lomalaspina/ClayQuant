@@ -35,13 +35,34 @@ where ``alpha`` is the angle between the reflection vector and the texture axis
 coincides with the specimen normal).  ``r = 1`` is a random powder; ``r < 1``
 describes platelets lying flat, enhancing 00l and suppressing hk0.  The
 function conserves total scattered intensity: its average over the sphere is 1.
+
+Beam overflow at low angles
+---------------------------
+The Lorentz factor diverges as ``1/sin^2(theta)``, but a real measurement does
+not, because at low angles the irradiated length of a flat specimen,
+
+    L_irr(theta) = R * gamma / sin(theta)
+
+(``R`` the goniometer radius, ``gamma`` the equatorial divergence in radians),
+grows beyond the specimen itself and part of the beam misses it.  Only the
+fraction that lands on the specimen is diffracted, so the intensity carries
+
+    phi(theta) = min(1, L_specimen * sin(theta) / (R * gamma))
+
+This matters precisely where clay basal reflections live.  Reynolds (1965)
+avoided the correction by changing beam slits with angle so that the beam never
+exceeded his specimen (following Klug & Alexander 1954); with fixed slits it has
+to be applied, otherwise every calculated pattern carries an unphysical
+low-angle ramp.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
-__all__ = ["lorentz_polarization", "march_dollase", "LP_MODES"]
+__all__ = ["lorentz_polarization", "march_dollase", "Divergence", "LP_MODES"]
 
 LP_MODES = ("powder", "crystal", "none")
 
@@ -85,6 +106,46 @@ def lorentz_polarization(
             lorentz = np.full(tt.shape, 0.5)
         result = polarization * lorentz
     return np.where(np.isfinite(result), result, 0.0)
+
+
+@dataclass(frozen=True)
+class Divergence:
+    """Beam overflow correction for a flat specimen in Bragg-Brentano geometry.
+
+    Attributes
+    ----------
+    specimen_length:
+        Length of the specimen along the beam in mm.
+    goniometer_radius:
+        Goniometer radius in mm (280 mm on a Bruker D8, 240 mm on a D2).
+    divergence:
+        Equatorial divergence of the incident beam in degrees, i.e. the
+        divergence slit setting.
+    """
+
+    specimen_length: float = 20.0
+    goniometer_radius: float = 280.0
+    divergence: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.specimen_length <= 0 or self.goniometer_radius <= 0 or self.divergence <= 0:
+            raise ValueError("specimen length, goniometer radius and divergence must be positive")
+
+    @property
+    def full_illumination_two_theta(self) -> float:
+        """2theta in degrees above which the beam is fully intercepted."""
+        ratio = self.goniometer_radius * np.radians(self.divergence) / self.specimen_length
+        if ratio >= 1.0:
+            return 180.0
+        return float(np.degrees(2.0 * np.arcsin(ratio)))
+
+    def factor(self, two_theta: np.ndarray) -> np.ndarray:
+        """The fraction of the beam intercepted by the specimen."""
+        theta = np.radians(np.asarray(two_theta, dtype=float)) / 2.0
+        irradiated = self.goniometer_radius * np.radians(self.divergence)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            fraction = self.specimen_length * np.sin(theta) / irradiated
+        return np.clip(np.nan_to_num(fraction), 0.0, 1.0)
 
 
 def march_dollase(alpha: np.ndarray, r: float) -> np.ndarray:
