@@ -255,25 +255,85 @@ def _parse_brml_root(root) -> tuple[np.ndarray, np.ndarray, dict] | None:
 
 
 def _read_xrdml(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    root = ElementTree.fromstring(path.read_text(errors="replace"))
-    counts: list[float] = []
-    start = stop = None
+    """Read a PANalytical XRDML scan.
+
+    Intensities appear as ``<counts>`` or ``<intensities>`` depending on the
+    software version, and a measurement may hold several appended ``<scan>``
+    elements, which are concatenated.  The instrument configuration carried in
+    the file (wavelengths, goniometer radius, divergence slit) is returned as
+    metadata, so a calculation can be set up to match the measurement.
+    """
+    root = ElementTree.fromstring(path.read_text(encoding="utf-8-sig", errors="replace"))
+
+    two_theta_parts: list[np.ndarray] = []
+    intensity_parts: list[np.ndarray] = []
+    for scan in (element for element in root.iter() if _localname(element.tag) == "scan"):
+        counts: list[float] = []
+        start = stop = None
+        positions: list[float] = []
+        for element in scan.iter():
+            tag = _localname(element.tag)
+            if tag in {"counts", "intensities"} and element.text:
+                counts = _numbers(element.text)
+            elif tag == "positions" and (element.get("axis") or "").lower() == "2theta":
+                for child in element:
+                    child_tag = _localname(child.tag)
+                    if child_tag == "startPosition" and child.text:
+                        start = float(child.text)
+                    elif child_tag == "endPosition" and child.text:
+                        stop = float(child.text)
+                    elif child_tag == "listPositions" and child.text:
+                        positions = _numbers(child.text)
+        if not counts:
+            continue
+        if positions and len(positions) == len(counts):
+            two_theta_parts.append(np.asarray(positions, dtype=float))
+        elif start is not None and stop is not None:
+            two_theta_parts.append(np.linspace(start, stop, len(counts)))
+        else:
+            continue
+        intensity_parts.append(np.asarray(counts, dtype=float))
+
+    if not two_theta_parts:
+        raise ValueError(
+            f"{path.name}: could not read a 2theta scan from the XRDML file. "
+            f"Expected a <scan> containing <dataPoints> with <counts> or <intensities> "
+            f"and a 2Theta <positions> range."
+        )
+
+    metadata: dict = {}
     for element in root.iter():
         tag = _localname(element.tag)
-        if tag == "intensities" and element.text:
-            counts = _numbers(element.text)
-        elif tag == "positions" and (element.get("axis") or "").lower() == "2theta":
-            for child in element:
-                if _localname(child.tag) == "startPosition" and child.text:
-                    start = float(child.text)
-                elif _localname(child.tag) == "endPosition" and child.text:
-                    stop = float(child.text)
-    if not counts or start is None or stop is None:
-        raise ValueError(f"{path.name}: could not read a 2theta scan from the XRDML file")
+        text = (element.text or "").strip()
+        if tag == "kAlpha1" and text:
+            metadata["wavelength"] = float(text)
+            metadata["k_alpha1"] = float(text)
+        elif tag == "kAlpha2" and text:
+            metadata["k_alpha2"] = float(text)
+        elif tag == "ratioKAlpha2KAlpha1" and text:
+            metadata["k_alpha2_ratio"] = float(text)
+        elif tag == "radius" and text:
+            metadata.setdefault("goniometer_radius", float(text))
+        elif tag == "anodeMaterial" and text:
+            metadata["anode"] = text
+        elif tag == "commonCountingTime" and text:
+            metadata["counting_time"] = float(text)
+        elif tag == "id" and text and "sample_id" not in metadata:
+            metadata["sample_id"] = text
+    for element in root.iter():
+        if _localname(element.tag) != "divergenceSlit":
+            continue
+        for child in element:
+            if _localname(child.tag) == "angle" and (child.text or "").strip():
+                metadata["divergence_slit"] = float(child.text)
+                break
+        if "divergence_slit" in metadata:
+            break
+
     return (
-        np.linspace(start, stop, len(counts)),
-        np.asarray(counts, dtype=float),
-        {},
+        np.concatenate(two_theta_parts),
+        np.concatenate(intensity_parts),
+        metadata,
     )
 
 

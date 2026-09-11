@@ -44,7 +44,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-__all__ = ["BackgroundModel", "BackgroundFit", "snip_baseline", "select_background_points"]
+__all__ = [
+    "BackgroundModel",
+    "BackgroundFit",
+    "StrippedBackground",
+    "snip_baseline",
+    "select_background_points",
+]
 
 
 @dataclass
@@ -282,6 +288,71 @@ class BackgroundFit:
         residual = float(np.sum((observed - predicted) ** 2))
         total = float(np.sum((observed - observed.mean()) ** 2))
         return 1.0 - residual / total if total > 0 else float("nan")
+
+
+@dataclass
+class StrippedBackground:
+    """A non-parametric background: the peak-stripped estimate itself.
+
+    The parametric models cannot always follow a measured background.  On an
+    oriented clay mount the direct-beam tail below about 6 deg falls steeply and
+    is not a low-order polynomial; fitting one leaves oscillating residuals of
+    hundreds of counts exactly where the 16.9 A glycol reflection sits, which
+    then appear as spurious peaks.  Using the stripped estimate directly follows
+    any shape, at the cost of having no parameters to report.
+
+    It carries the same interface as :class:`BackgroundFit`, so it can be used
+    anywhere one is expected.
+    """
+
+    two_theta: np.ndarray
+    baseline: np.ndarray
+    window: float = 4.0
+
+    def __post_init__(self) -> None:
+        self.two_theta = np.asarray(self.two_theta, dtype=float)
+        self.baseline = np.asarray(self.baseline, dtype=float)
+        if self.two_theta.shape != self.baseline.shape:
+            raise ValueError("two_theta and baseline must have the same shape")
+
+    @classmethod
+    def fit(
+        cls, two_theta: np.ndarray, intensity: np.ndarray, window: float = 4.0
+    ) -> "StrippedBackground":
+        two_theta = np.asarray(two_theta, dtype=float)
+        return cls(
+            two_theta=two_theta,
+            baseline=snip_baseline(two_theta, intensity, window=window),
+            window=window,
+        )
+
+    @property
+    def model(self) -> str:
+        return f"peak-stripped ({self.window:g} deg)"
+
+    @property
+    def points(self) -> np.ndarray:
+        return np.ones(self.two_theta.shape, dtype=bool)
+
+    @property
+    def target(self) -> np.ndarray:
+        return self.baseline
+
+    def __call__(self, two_theta: np.ndarray) -> np.ndarray:
+        return np.interp(
+            np.asarray(two_theta, dtype=float),
+            self.two_theta,
+            self.baseline,
+            left=self.baseline[0],
+            right=self.baseline[-1],
+        )
+
+    def subtract(self, two_theta: np.ndarray, intensity: np.ndarray) -> np.ndarray:
+        return np.clip(np.asarray(intensity, dtype=float) - self(two_theta), 0.0, None)
+
+    def r_squared(self, two_theta: np.ndarray, intensity: np.ndarray | None = None) -> float:
+        """Unity by construction: the background *is* the estimate it follows."""
+        return 1.0
 
 
 def snip_baseline(

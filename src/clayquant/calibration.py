@@ -18,6 +18,7 @@ Two routes are provided, matching how the calibration is done in practice:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -117,21 +118,30 @@ class ZeroErrorResult:
     observed_two_theta: float
     reference_two_theta: float
     method: str
+    height: float = 0.0
+    noise: float = 1.0
+    detected: bool = True
+    note: str = ""
 
     @property
     def raw_shift(self) -> float:
         """The offset before snapping to the step grid."""
         return self.observed_two_theta - self.reference_two_theta
 
+    @property
+    def signal_to_noise(self) -> float:
+        return self.height / self.noise if self.noise > 0 else 0.0
+
 
 def estimate_zero_error(
     pattern: Pattern,
     reference: float | None = None,
-    window: float = 1.0,
+    window: float = 0.30,
     step: float = 0.01,
     method: str = "centroid",
     d: float = QUARTZ_100_D,
     wavelength: float = CU_KA1,
+    min_signal_to_noise: float = 4.0,
 ) -> ZeroErrorResult:
     """Determine the 2theta zero error from the quartz 100 reflection.
 
@@ -140,12 +150,75 @@ def estimate_zero_error(
     reference:
         True position of the calibration reflection in degrees.  Defaults to the
         Bragg angle of ``d`` at ``wavelength``.
+    window:
+        Half-width in degrees of the search window.  It is deliberately narrow.
+        Quartz 100 at 4.255 A does not overlap any clay *basal* reflection, but
+        it is only 0.4 deg from the kaolinite 020 band at 4.36 A, and in a clay
+        separate quartz can be weak or absent while kaolinite is strong.  With a
+        wide window the routine then locks onto kaolinite and reports a zero
+        error of about -0.4 deg, which is wrong and would shift the whole
+        pattern.
     step:
-        Grid the result is snapped to, 0.01 deg by default.
+        Grid the result is snapped to, 0.01 deg by default - half the usual
+        0.02 deg measurement step.
+    min_signal_to_noise:
+        Height above the local noise the calibration peak must reach.  Below it
+        the result is returned with ``detected = False`` and a zero shift rather
+        than a meaningless number: set the zero error by hand, or calibrate on
+        another reflection.
     """
     target = reference_two_theta(d, wavelength) if reference is None else float(reference)
+    two_theta = pattern.two_theta
+    inside = np.flatnonzero(np.abs(two_theta - target) <= window)
+    if inside.size < 3:
+        return ZeroErrorResult(
+            shift=0.0,
+            observed_two_theta=float("nan"),
+            reference_two_theta=target,
+            method=method,
+            detected=False,
+            note=(
+                f"the calibration reflection at {target:.2f} deg lies outside the scan "
+                f"({two_theta[0]:.2f} to {two_theta[-1]:.2f} deg)"
+            ),
+        )
+
+    local = pattern.intensity[inside].astype(float)
+    baseline = np.interp(two_theta[inside], [two_theta[inside[0]], two_theta[inside[-1]]],
+                         [local[0], local[-1]])
+    corrected = local - baseline
+    height = float(corrected.max())
+
+    # Noise from the scatter of successive points just outside the window.
+    flank = np.flatnonzero(
+        (np.abs(two_theta - target) > window) & (np.abs(two_theta - target) <= 3.0 * window)
+    )
+    if flank.size > 4:
+        differences = np.diff(pattern.intensity[flank].astype(float))
+        noise = max(float(np.median(np.abs(differences))) / 0.9539, 1.0)
+    else:
+        noise = max(math.sqrt(max(float(np.median(local)), 1.0)), 1.0)
+
+    if height < min_signal_to_noise * noise:
+        return ZeroErrorResult(
+            shift=0.0,
+            observed_two_theta=float("nan"),
+            reference_two_theta=target,
+            method=method,
+            height=height,
+            noise=noise,
+            detected=False,
+            note=(
+                f"no calibration peak found at {target:.2f} +/- {window:.2f} deg "
+                f"(height {height:.0f} counts, noise {noise:.0f}, "
+                f"S/N {height / noise:.1f} < {min_signal_to_noise:g}). "
+                f"In a clay separate quartz may be absent; set the zero error manually "
+                f"or use another reflection."
+            ),
+        )
+
     observed = peak_position(
-        pattern.two_theta, pattern.intensity, center=target, window=window, method=method
+        two_theta, pattern.intensity, center=target, window=window, method=method
     )
     shift = observed - target
     if step > 0:
@@ -155,6 +228,9 @@ def estimate_zero_error(
         observed_two_theta=observed,
         reference_two_theta=target,
         method=method,
+        height=height,
+        noise=noise,
+        detected=True,
     )
 
 

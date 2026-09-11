@@ -248,6 +248,63 @@ def powder_pattern(
     )
 
 
+def peak_list(
+    crystal: Crystal,
+    two_theta_range: tuple[float, float],
+    instrument: Instrument | None = None,
+    r_march_dollase: float = 1.0,
+    merge_within: float = 0.06,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Merged reflection positions and relative intensities of a crystal.
+
+    Reflections closer together than ``merge_within`` degrees are combined into
+    one entry at their intensity-weighted position, which turns the raw
+    reciprocal lattice enumeration into the peak list a diffractogram actually
+    shows.  Intensities are scaled to a maximum of 1.
+
+    Returns ``(two_theta, intensity)`` sorted by angle.
+    """
+    instrument = instrument or Instrument()
+    low, high = float(two_theta_range[0]), float(two_theta_range[1])
+    wavelength = instrument.emission.principal_wavelength
+    d_min = wavelength / (2.0 * math.sin(math.radians(high / 2.0)))
+    found = reflections(crystal, d_min)
+
+    argument = wavelength / (2.0 * found.d)
+    visible = argument < 1.0
+    two_theta = np.degrees(2.0 * np.arcsin(argument[visible]))
+    inside = (two_theta >= low) & (two_theta <= high)
+    if not np.any(inside):
+        return np.array([]), np.array([])
+    index = np.flatnonzero(visible)[inside]
+    two_theta = two_theta[inside]
+    intensity = (
+        found.f_squared[index]
+        * march_dollase(found.alpha[index], r_march_dollase)
+        * instrument.lp(two_theta)
+    )
+
+    order = np.argsort(two_theta)
+    two_theta, intensity = two_theta[order], intensity[order]
+
+    positions: list[float] = []
+    heights: list[float] = []
+    for angle, value in zip(two_theta, intensity):
+        if positions and angle - positions[-1] <= merge_within:
+            total = heights[-1] + value
+            positions[-1] = (positions[-1] * heights[-1] + angle * value) / max(total, 1e-30)
+            heights[-1] = total
+        else:
+            positions.append(float(angle))
+            heights.append(float(value))
+
+    peaks = np.asarray(positions)
+    values = np.asarray(heights)
+    if values.max() > 0:
+        values = values / values.max()
+    return peaks, values
+
+
 def basal_pattern(
     stack: MixedLayerStack,
     grid: np.ndarray | None = None,
