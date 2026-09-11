@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clayquant"
+version = "0.1.0"
+description = "Simulation of X-ray powder diffraction patterns of mica/illite and interstratified clay minerals, and quantification of clay mineral assemblages from oriented-mount measurements"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Lorraine Malaspina" }]
+keywords = ["XRD", "clay minerals", "illite", "smectite", "interstratification", "Rietveld", "NNLS"]
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+gui = ["dash>=2.14", "plotly>=5.18"]
+plot = ["matplotlib>=3.7"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+clayquant-build-library = "clayquant.library:main"
+clayquant-gui = "clayquant.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+clayquant = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.DS_Store
+
+# Generated pattern libraries (regenerate with `clayquant-build-library`)
+library/
+*.npz
+!tests/data/*.npz
+
+# ICSD CIF files are licensed data (c) FIZ Karlsruhe and must not be redistributed.
+# Put your own exported CIFs here; see structures/README.md.
+src/clayquant/data/structures/*.cif
+structures/*.cif
