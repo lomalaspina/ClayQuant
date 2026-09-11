@@ -20,12 +20,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
 
 from .background import snip_baseline
+from .crystal import Crystal
 from .emission import CU_KA_5LINE
 from .mixed_layer import CSDS, MixedLayerStack, lognormal_csds
 from .optics import Divergence
@@ -49,6 +50,9 @@ __all__ = [
     "PREFERRED_ORIENTATIONS",
     "ILLITE_SMECTITE_FRACTIONS",
     "CHLORITE_SMECTITE_FRACTIONS",
+    "CSDS_MEANS",
+    "HOST_THICKNESSES",
+    "scaled_to_d001",
     "NORMALIZATION_FLOOR",
     "main",
 ]
@@ -81,6 +85,45 @@ CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (0.95, 0.90, 0.85)
 NORMALIZATION_FLOOR = 4.0
 """Patterns are normalised on their maximum above this 2theta, in degrees."""
 
+HOST_THICKNESSES: dict[str, tuple[float, ...]] = {
+    "illite": (9.95, 10.02, 10.10),
+    "chlorite": (14.20, 14.35),
+}
+"""Layer repeat distances in A spanned for each interstratification host.
+
+The basal spacing of illite is not a constant: it runs from about 9.95 to
+10.10 A with interlayer potassium content and hydration, and the value that
+comes out of any single refined structure is only one point in that range.
+Measured here, ICSD 90144 gives 10.022 A while a real sample's 001 and 002 both
+put it at 9.95 A - a difference of 0.066 deg at the 001 reflection, half a peak
+width, which for a fixed library is the difference between fitting that peak and
+missing it almost entirely.  Spanning the range lets the fit pick the spacing
+instead of being told it.
+"""
+
+CSDS_MEANS: tuple[float, ...] = (5.0, 15.0, 50.0)
+"""Default mean crystallite thicknesses, in layers, spanned by the library.
+
+Basal peak width is set by how many layers a crystallite stacks, and that varies
+far too much between samples to fix in advance: 10 layers give a 001 width near
+0.8 deg, while a well crystallised illite measures nearer 0.12 deg and needs
+about 70 layers.  The library therefore carries each interstratified composition
+at several thicknesses and lets the fit choose.
+"""
+
+
+def scaled_to_d001(crystal: Crystal, layers_per_cell: int, thickness: float) -> Crystal:
+    """A copy of ``crystal`` whose single-layer basal spacing is ``thickness`` [A].
+
+    Only the ``c`` axis is scaled, since the basal spacing of a phyllosilicate
+    changes with what sits between the layers and not with the layer's own
+    in-plane dimensions.
+    """
+    current = crystal.d001 / layers_per_cell
+    if current <= 0:
+        raise ValueError(f"{crystal.name}: basal spacing is not positive")
+    return replace(crystal, c=crystal.c * thickness / current)
+
 
 @dataclass
 class LibraryEntry:
@@ -91,6 +134,8 @@ class LibraryEntry:
     intensity: np.ndarray
     march_dollase: float = 1.0
     fraction: float | None = None
+    csds_mean: float | None = None
+    thickness: float | None = None
     metadata: dict = field(default_factory=dict)
 
 
@@ -125,6 +170,8 @@ class PatternLibrary:
         phase: str,
         march_dollase: float = 1.0,
         fraction: float | None = None,
+        csds_mean: float | None = None,
+        thickness: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
         strip_continuum: bool = True,
     ) -> None:
@@ -161,6 +208,8 @@ class PatternLibrary:
                 intensity=intensity / scale,
                 march_dollase=march_dollase,
                 fraction=fraction,
+                csds_mean=csds_mean,
+                thickness=thickness,
                 metadata=pattern.metadata,
             )
         )
@@ -221,6 +270,12 @@ class PatternLibrary:
             fraction=np.array(
                 [np.nan if entry.fraction is None else entry.fraction for entry in self.entries]
             ),
+            csds_mean=np.array(
+                [np.nan if entry.csds_mean is None else entry.csds_mean for entry in self.entries]
+            ),
+            thickness=np.array(
+                [np.nan if entry.thickness is None else entry.thickness for entry in self.entries]
+            ),
             entry_metadata=json.dumps([entry.metadata for entry in self.entries], default=str),
             library_metadata=json.dumps(self.metadata, default=str),
         )
@@ -231,6 +286,12 @@ class PatternLibrary:
         with np.load(Path(path), allow_pickle=True) as data:
             entry_metadata = json.loads(str(data["entry_metadata"]))
             fractions = data["fraction"]
+            # Libraries written before crystallite thickness became a library
+            # dimension carry no csds_mean column.
+            sizes = data["csds_mean"] if "csds_mean" in data.files else np.full(len(fractions), np.nan)
+            spacings = (
+                data["thickness"] if "thickness" in data.files else np.full(len(fractions), np.nan)
+            )
             entries = [
                 LibraryEntry(
                     name=str(name),
@@ -238,14 +299,18 @@ class PatternLibrary:
                     intensity=np.asarray(row, dtype=float),
                     march_dollase=float(orientation),
                     fraction=None if np.isnan(fraction) else float(fraction),
+                    csds_mean=None if np.isnan(size) else float(size),
+                    thickness=None if np.isnan(spacing) else float(spacing),
                     metadata=metadata,
                 )
-                for name, phase, row, orientation, fraction, metadata in zip(
+                for name, phase, row, orientation, fraction, size, spacing, metadata in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
                     data["march_dollase"],
                     fractions,
+                    sizes,
+                    spacings,
                     entry_metadata,
                 )
             ]
@@ -272,7 +337,9 @@ def build_library(
     orientations: tuple[float, ...] = PREFERRED_ORIENTATIONS,
     illite_smectite: tuple[float, ...] = ILLITE_SMECTITE_FRACTIONS,
     chlorite_smectite: tuple[float, ...] = CHLORITE_SMECTITE_FRACTIONS,
-    csds: CSDS | None = None,
+    csds_means: tuple[float, ...] = CSDS_MEANS,
+    csds_beta: float = 0.35,
+    host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
     progress: bool = False,
 ) -> PatternLibrary:
@@ -280,9 +347,21 @@ def build_library(
 
     Parameters
     ----------
-    csds:
-        Crystallite size distribution along ``c*`` used for the interstratified
-        stacks; defaults to a lognormal distribution with a mean of 10 layers.
+    csds_means:
+        Mean numbers of layers per crystallite for the interstratified stacks,
+        one set of patterns per value.  Crystallite thickness along ``c*`` sets
+        the basal peak width, and it varies far too much between samples to fix
+        in advance: a mean of 10 layers gives a 001 width near 0.8 deg, while a
+        well crystallised illite measures nearer 0.12 deg, which needs about 70
+        layers.  Spanning the range lets the fit choose, instead of forcing
+        every interstratified pattern to one sharpness and leaving the peak tops
+        unexplained.
+    csds_beta:
+        Width of each lognormal distribution in ``ln(N)``.
+    host_thicknesses:
+        Layer repeat distances in A to span per phase; see
+        :data:`HOST_THICKNESSES`, which is the default.  Pass ``{}`` to use each
+        structure's own refined spacing only.
     smectite_thickness:
         Layer repeat of the glycolated smectite in A; defaults to the 16.86 A
         measured by Reynolds (1965).
@@ -294,7 +373,11 @@ def build_library(
         lp_mode="powder",
         divergence=Divergence(),
     )
-    csds = csds or lognormal_csds(10.0)
+    host_thicknesses = HOST_THICKNESSES if host_thicknesses is None else host_thicknesses
+    distributions = [lognormal_csds(float(mean), csds_beta) for mean in csds_means]
+    if not distributions:
+        raise ValueError("at least one CSDS mean is needed")
+    csds = distributions[0]
 
     missing = [key for key, present in available_phases().items() if not present]
     if missing:
@@ -311,7 +394,9 @@ def build_library(
             "orientations": list(orientations),
             "illite_smectite": list(illite_smectite),
             "chlorite_smectite": list(chlorite_smectite),
-            "csds_mean": csds.mean,
+            "csds_means": [distribution.mean for distribution in distributions],
+            "csds_beta": csds_beta,
+            "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
             "smectite_source": "Reynolds (1965) Am. Mineral. 50, 990-1001",
             "cif_sources": {
                 key: f"ICSD {source.icsd}: {source.description}"
@@ -324,15 +409,23 @@ def build_library(
         if progress:
             print(message, flush=True)
 
-    # Discrete phases at each orientation parameter.
-    for key in CIF_SOURCES:
-        crystal = load_crystal(key)
-        announce(f"{key}: {len(orientations)} orientations")
-        for r in orientations:
-            pattern = powder_pattern(
-                crystal, grid, instrument, r_march_dollase=r, name=f"{key} PO={r:g}"
-            )
-            library.add(pattern, phase=key, march_dollase=r)
+    # Discrete phases at each orientation parameter and layer spacing.
+    for key, source in CIF_SOURCES.items():
+        base = load_crystal(key)
+        spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
+        announce(f"{key}: {len(orientations)} orientations x {len(spacings)} layer spacings")
+        for thickness in spacings:
+            crystal = scaled_to_d001(base, source.layers_per_cell, thickness)
+            spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
+            for r in orientations:
+                pattern = powder_pattern(
+                    crystal,
+                    grid,
+                    instrument,
+                    r_march_dollase=r,
+                    name=f"{key} PO={r:g}{spacing_tag}",
+                )
+                library.add(pattern, phase=key, march_dollase=r, thickness=thickness)
 
     # Pure glycolated smectite.  All its reflections are basal, so the
     # orientation parameter only scales the pattern and one entry suffices.
@@ -353,41 +446,62 @@ def build_library(
         fraction=0.0,
     )
 
-    # Interstratified series.
+    # Interstratified series, at each layer spacing and crystallite thickness.
     for host_key, fractions, label in (
         ("illite", illite_smectite, "I/S"),
         ("chlorite", chlorite_smectite, "C/S"),
     ):
-        host = load_crystal(host_key)
-        host_layer = load_layer(host_key)
+        base_host = load_crystal(host_key)
+        base_layer = load_layer(host_key)
         layers_per_cell = CIF_SOURCES[host_key].layers_per_cell
-        scale = basal_scale_factor(host, layers_per_cell, grid, instrument, csds)
         wavelengths, _ = instrument.sample_emission()
         d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
-        host_reflections = reflections(host, d_min)
-        announce(f"{label}: {len(fractions)} compositions x {len(orientations)} orientations")
+        spacings = host_thicknesses.get(host_key) or (base_layer.thickness,)
+        announce(
+            f"{label}: {len(fractions)} compositions x {len(orientations)} orientations "
+            f"x {len(distributions)} crystallite sizes x {len(spacings)} layer spacings"
+        )
 
-        for fraction in fractions:
-            stack = MixedLayerStack(
-                host_layer,
-                smectite,
-                fraction_a=fraction,
-                csds=csds,
-                name=f"{label} {fraction:.2f}/{1.0 - fraction:.2f}",
-            )
-            for r in orientations:
-                pattern = mixed_layer_pattern(
-                    stack,
-                    host,
-                    layers_per_cell,
-                    grid,
-                    instrument,
-                    r_march_dollase=r,
-                    name=f"{label} {fraction:.2f}/{1.0 - fraction:.2f} PO={r:g}",
-                    basal_scale=scale,
-                    host_reflections=host_reflections,
-                )
-                library.add(pattern, phase=label, march_dollase=r, fraction=fraction)
+        for thickness in spacings:
+            host = scaled_to_d001(base_host, layers_per_cell, thickness)
+            host_layer = base_layer.with_thickness(thickness, scale_z=True)
+            host_reflections = reflections(host, d_min)
+            spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
+            for csds in distributions:
+                scale = basal_scale_factor(host, layers_per_cell, grid, instrument, csds)
+                for fraction in fractions:
+                    composition = f"{fraction:.2f}/{1.0 - fraction:.2f}"
+                    stack = MixedLayerStack(
+                        host_layer,
+                        smectite,
+                        fraction_a=fraction,
+                        csds=csds,
+                        name=f"{label} {composition}",
+                    )
+                    for r in orientations:
+                        pattern = mixed_layer_pattern(
+                            stack,
+                            host,
+                            layers_per_cell,
+                            grid,
+                            instrument,
+                            r_march_dollase=r,
+                            name=(
+                                f"{label} {composition} PO={r:g}"
+                                + (f" N={csds.mean:g}" if len(distributions) > 1 else "")
+                                + spacing_tag
+                            ),
+                            basal_scale=scale,
+                            host_reflections=host_reflections,
+                        )
+                        library.add(
+                            pattern,
+                            phase=label,
+                            march_dollase=r,
+                            fraction=fraction,
+                            csds_mean=csds.mean,
+                            thickness=thickness,
+                        )
 
     return library
 
@@ -403,7 +517,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stop", type=float, default=40.0, help="last 2theta in degrees")
     parser.add_argument("--step", type=float, default=0.02, help="2theta step in degrees")
     parser.add_argument(
-        "--csds-mean", type=float, default=10.0, help="mean number of layers per crystallite"
+        "--csds-means",
+        type=float,
+        nargs="+",
+        default=list(CSDS_MEANS),
+        help="mean numbers of layers per crystallite, one pattern set each",
     )
     parser.add_argument(
         "--csds-beta", type=float, default=0.35, help="width of the lognormal CSDS in ln(N)"
@@ -456,7 +574,8 @@ def main(argv: list[str] | None = None) -> int:
     library = build_library(
         grid=two_theta_grid(arguments.start, arguments.stop, arguments.step),
         instrument=instrument,
-        csds=lognormal_csds(arguments.csds_mean, arguments.csds_beta),
+        csds_means=tuple(arguments.csds_means),
+        csds_beta=arguments.csds_beta,
         smectite_thickness=arguments.smectite_thickness,
         progress=not arguments.quiet,
     )

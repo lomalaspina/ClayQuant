@@ -48,6 +48,7 @@ class FitResult:
     r_wp: float
     r_p: float
     mask: np.ndarray
+    components: dict[str, np.ndarray] = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
 
     @property
@@ -65,6 +66,24 @@ class FitResult:
             "Broad interstratified patterns carry more area per unit peak height, so the "
             "two differ; neither is a weight fraction without a reference intensity ratio."
         )
+
+    def phase_components(self) -> dict[str, np.ndarray]:
+        """Fitted curve of each phase, summed over that phase's library entries.
+
+        Only phases with a non-zero coefficient appear.  The curves are on
+        :attr:`two_theta` and already carry their fitted scale, so they sum to
+        :attr:`calculated`.
+        """
+        by_phase: dict[str, np.ndarray] = {}
+        for name, phase in zip(self.names, self.phases):
+            curve = self.components.get(name)
+            if curve is None:
+                continue
+            if phase in by_phase:
+                by_phase[phase] = by_phase[phase] + curve
+            else:
+                by_phase[phase] = curve.copy()
+        return by_phase
 
     def active(self, threshold: float = 1e-4) -> list[tuple[str, float, float]]:
         """Entries with a non-negligible share, as ``(name, coefficient, share)``."""
@@ -159,9 +178,8 @@ def nnls_fit(
         raise ValueError("the library is empty")
 
     two_theta = measured.two_theta
-    observed = measured.intensity.astype(float)
-    if background is not None:
-        observed = background.subtract(two_theta, observed)
+    raw = measured.intensity.astype(float)
+    observed = background.subtract(two_theta, raw) if background is not None else raw
 
     selection = np.ones(two_theta.shape, dtype=bool)
     if range_two_theta is not None:
@@ -179,11 +197,30 @@ def nnls_fit(
 
     design = library.matrix(two_theta[selection]).T  # (n_points, n_entries)
     target = observed[selection]
-    coefficients, _ = nnls(design, target)
+
+    # Counting statistics come from the *raw* counts: the variance of a point is
+    # the number of photons recorded there, which background subtraction does not
+    # reduce.  Weighting by the subtracted intensity instead would put the
+    # largest weight on the flat regions between peaks, where the subtracted
+    # value is near zero and only noise remains, and almost none on the peaks
+    # that carry the information - which inflates Rwp and biases the solution
+    # towards the background.
+    variance = np.clip(raw[selection], 1.0, None)
+    weights = 1.0 / variance
+    root = np.sqrt(weights)
+    coefficients, _ = nnls(design * root[:, None], target * root)
 
     calculated_selected = design @ coefficients
     calculated = np.zeros_like(observed)
     calculated[selection] = calculated_selected
+
+    components: dict[str, np.ndarray] = {}
+    for column, (name, coefficient) in enumerate(zip(library.names, coefficients)):
+        if coefficient <= 0.0:
+            continue
+        curve = np.zeros_like(observed)
+        curve[selection] = coefficient * design[:, column]
+        components[name] = curve
 
     areas = np.array(
         [np.trapezoid(column, two_theta[selection]) for column in design.T]
@@ -196,10 +233,13 @@ def nnls_fit(
         coefficients / amplitude_total if amplitude_total > 0 else np.zeros_like(coefficients)
     )
 
-    weights = 1.0 / np.clip(target, 1.0, None)
     denominator = float(np.sum(weights * target**2))
     residual = target - calculated_selected
-    r_wp = float(np.sqrt(np.sum(weights * residual**2) / denominator)) if denominator > 0 else float("nan")
+    r_wp = (
+        float(np.sqrt(np.sum(weights * residual**2) / denominator))
+        if denominator > 0
+        else float("nan")
+    )
     total_observed = float(np.sum(np.abs(target)))
     r_p = float(np.sum(np.abs(residual)) / total_observed) if total_observed > 0 else float("nan")
 
@@ -215,6 +255,7 @@ def nnls_fit(
         r_wp=r_wp,
         r_p=r_p,
         mask=selection,
+        components=components,
         metadata={
             "measurement": measured.name,
             "n_points": int(selection.sum()),

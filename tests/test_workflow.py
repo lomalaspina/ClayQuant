@@ -22,7 +22,6 @@ from clayquant.calibration import (
 )
 from clayquant.diagnostics import kaolinite_collapse, measure_peak, smectite_swelling
 from clayquant.library import build_library
-from clayquant.mixed_layer import lognormal_csds
 from clayquant.models import available_phases
 from clayquant.nnls import nnls_fit
 from clayquant.optics import Divergence
@@ -49,7 +48,10 @@ def library():
         orientations=(0.2,),
         illite_smectite=(0.80,),
         chlorite_smectite=(0.90,),
-        csds=lognormal_csds(10.0),
+        csds_means=(10.0,),
+        # One spacing per phase keeps the fixture small and its entry names
+        # free of the d= tag.
+        host_thicknesses={},
     )
 
 

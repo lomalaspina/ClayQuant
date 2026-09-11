@@ -76,6 +76,20 @@ class SessionState:
     directory: Path | None = None
     library: PatternLibrary | None = None
     library_path: Path | None = None
+    phase_database: dict = field(default_factory=dict)
+    phase_database_path: Path | None = None
+    detected: list = field(default_factory=list)
+    selected_main: list[str] = field(default_factory=list)
+    fit_result: object | None = None
+    quantification: object | None = None
+
+    def load_phase_database(self, path: str | Path) -> int:
+        """Load the accompanying-mineral phase database, returning its size."""
+        from ..bern import load_phase_database
+
+        self.phase_database = load_phase_database(path)
+        self.phase_database_path = Path(path)
+        return len(self.phase_database)
 
     def list_files(self, directory: str | Path) -> list[str]:
         """Supported data files in ``directory``, sorted by name."""

@@ -8,13 +8,16 @@ bench:
    steps in 0.01 deg - half the usual measurement step;
 3. choose and tune a background, with the ``1/x`` term accumulable on top of
    any of the other components;
-4. compare air-dried with heated to find kaolinite by its collapse;
-5. compare air-dried with glycolated to find expandable clay by its swelling;
-6. fit the glycolated mount against the calculated library by non-negative
-   least squares.
+4. search for the accompanying ("main") minerals and confirm which of them to
+   fit alongside the clays;
+5. compare air-dried with heated to find kaolinite by its collapse;
+6. compare air-dried with glycolated to find expandable clay by its swelling;
+7. fit the glycolated mount against the calculated library by non-negative least
+   squares, and read the quantification on a clay-only and an all-phase basis,
+   with the three mounts, the fit, and the phases separated, as four plots.
 
-A seventh tab is the pattern simulator, which drives the interstratification
-model directly for any composition, stacking order and crystallite thickness.
+A last tab is the pattern simulator, which drives the interstratification model
+directly for any composition, stacking order and crystallite thickness.
 
 Start it with ``clayquant-gui`` or ``python -m clayquant.gui.app``.
 """
@@ -28,8 +31,11 @@ from pathlib import Path
 import numpy as np
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, dcc, html, no_update
+from dash.exceptions import PreventUpdate
 
 from ..background import BackgroundModel, snip_baseline
+from ..bern import is_clay_phase
+from ..detection import detect_phases, screen_phases
 from ..calibration import (
     QUARTZ_100_D,
     estimate_zero_error,
@@ -55,10 +61,28 @@ from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crys
 from ..nnls import nnls_fit
 from ..optics import Divergence
 from ..pattern import Instrument, mixed_layer_pattern, powder_pattern, two_theta_grid
+from ..plots import (
+    plot_clay_components,
+    plot_components,
+    plot_fit,
+    plot_mounts,
+    save_report,
+)
 from ..profile import PeakShape
+from ..quantification import quantify
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
 COLORS = {"air": "#1f77b4", "glycol": "#2ca02c", "heated": "#d62728"}
+_PHASE_PALETTE = (
+    "#ff7f0e",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#bcbd22",
+    "#17becf",
+    "#1f77b4",
+    "#2ca02c",
+)
 GRAPH_HEIGHT = 480
 
 
@@ -119,6 +143,122 @@ def gui_instrument(
             goniometer_radius=goniometer_radius,
             divergence=divergence_slit,
         ),
+    )
+
+
+def _with_main_minerals(library):
+    """Return the library with the confirmed main minerals appended.
+
+    Each selected phase is calculated on the library's own grid and added as one
+    entry.  They are deliberately calculated without preferred orientation:
+    quartz, feldspar and carbonate grains that survive the separation are
+    scattered through the mount rather than plated onto the glass, so there is no
+    reason to apply the clay texture to them.
+    """
+    if not STATE.selected_main or not STATE.phase_database:
+        return library, 0
+
+    from ..library import PatternLibrary
+
+    extended = PatternLibrary(
+        two_theta=library.two_theta,
+        entries=list(library.entries),
+        metadata=dict(library.metadata),
+    )
+    instrument = gui_instrument()
+    added = 0
+    for name in STATE.selected_main:
+        crystal = STATE.phase_database.get(name)
+        if crystal is None:
+            continue
+        pattern = powder_pattern(
+            crystal, library.two_theta, instrument, r_march_dollase=1.0, name=name
+        )
+        if float(np.max(pattern.intensity)) <= 0.0:
+            continue
+        extended.add(pattern, phase=name, march_dollase=1.0)
+        added += 1
+    return extended, added
+
+
+def _quantification_table(quantification, result) -> html.Div:
+    """The clay-basis and all-phase tables, side by side."""
+
+    def build(rows, caption: str, note: str) -> html.Div:
+        return html.Div(
+            [
+                html.H4(caption, style={"marginBottom": "4px"}),
+                html.Div(note, style={"fontSize": "0.78rem", "color": "#555",
+                                      "marginBottom": "6px"}),
+                html.Table(
+                    [
+                        html.Thead(
+                            html.Tr(
+                                [
+                                    html.Th("Phase"),
+                                    html.Th("Group"),
+                                    html.Th("Scattering %"),
+                                    html.Th("Amplitude %"),
+                                ]
+                            )
+                        ),
+                        html.Tbody(
+                            [
+                                html.Tr(
+                                    [
+                                        html.Td(row["phase"]),
+                                        html.Td(row["group"]),
+                                        html.Td(f"{row['scattering_percent']:.2f}"),
+                                        html.Td(f"{row['amplitude_percent']:.2f}"),
+                                    ]
+                                )
+                                for row in rows
+                            ]
+                        ),
+                    ],
+                    style={"fontSize": "0.85rem", "borderCollapse": "collapse"},
+                ),
+            ],
+            style={"flex": "1", "minWidth": "0"},
+        )
+
+    clay_note = (
+        f"Accompanying minerals removed and the clays renormalised to 100%. "
+        f"The clay minerals are {100.0 * quantification.clay_total_scattering:.1f}% "
+        f"of the whole pattern."
+    )
+    return html.Div(
+        [
+            html.Div(
+                [
+                    build(quantification.table(clay_basis=True), "Clay minerals", clay_note),
+                    build(
+                        quantification.table(),
+                        "All fitted phases",
+                        "Shares of the whole pattern, clays and accompanying minerals together.",
+                    ),
+                ],
+                style={"display": "flex", "gap": "24px"},
+            ),
+            html.H4("Contributing patterns"),
+            html.Table(
+                [
+                    html.Thead(
+                        html.Tr([html.Th(text) for text in
+                                 ["Pattern", "Coefficient", "Scattering %"]])
+                    ),
+                    html.Tbody(
+                        [
+                            html.Tr([html.Td(name), html.Td(f"{coefficient:.4g}"),
+                                     html.Td(f"{100.0 * share:.2f}")])
+                            for name, coefficient, share in result.active(threshold=1e-3)
+                        ]
+                    ),
+                ],
+                style={"fontSize": "0.85rem"},
+            ),
+            html.P(result.metrics_note, style={"fontSize": "0.78rem", "color": "#555"}),
+        ]
     )
 
 
@@ -378,6 +518,67 @@ def smectite_tab() -> html.Div:
     )
 
 
+def main_minerals_tab() -> html.Div:
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.P(
+                        "A clay separate carries quartz, feldspars and carbonates through "
+                        "the separation. This searches the measurement for them so they can "
+                        "be fitted alongside the clays and then normalised out of the clay "
+                        "percentages.",
+                        style={"fontSize": "0.82rem", "color": "#444"},
+                    ),
+                    label("Phase database (.json)"),
+                    dcc.Input(id="db-path", type="text", value="structures/phases.json",
+                              style={"width": "100%"}, debounce=True),
+                    html.Button("Load database", id="db-load", n_clicks=0,
+                                style={"marginTop": "6px"}),
+                    html.Div(id="db-status", style={"marginTop": "8px", "fontSize": "0.82rem"}),
+                    html.Hr(),
+                    label("Mount to search"),
+                    dcc.RadioItems(
+                        id="detect-mount",
+                        options=[{"label": MOUNT_LABELS[m], "value": m} for m in MOUNTS],
+                        value="air",
+                    ),
+                    label("Unit cell allowance (%)"),
+                    dcc.Slider(id="detect-allowance", min=0.0, max=5.0, step=0.25, value=2.0,
+                               marks={0: "0", 2: "2", 5: "5"},
+                               tooltip={"placement": "bottom", "always_visible": True}),
+                    label("Minimum share (‰) or score (%)"),
+                    dcc.Slider(id="detect-score", min=5, max=95, step=5, value=10,
+                               marks={5: "5", 50: "50", 95: "95"},
+                               tooltip={"placement": "bottom", "always_visible": True}),
+                    label("Minimum peak S/N"),
+                    dcc.Slider(id="detect-snr", min=2, max=20, step=1, value=5,
+                               marks={2: "2", 10: "10", 20: "20"},
+                               tooltip={"placement": "bottom"}),
+                    label("Search range (°2θ)"),
+                    dcc.RangeSlider(id="detect-range", min=2.0, max=70.0, step=0.5,
+                                    value=[4.0, 40.0],
+                                    tooltip={"placement": "bottom", "always_visible": True}),
+                    html.Button("Search for main minerals", id="detect-run", n_clicks=0,
+                                style={"marginTop": "10px"}),
+                    html.Div(id="detect-status", style={"marginTop": "10px"}),
+                ],
+                style=CONTROL_PANEL,
+            ),
+            html.Div(
+                [
+                    html.Div(id="detect-dialog"),
+                    dcc.Graph(id="detect-graph",
+                              figure=empty_figure("Load a phase database and search")),
+                    html.Div(id="detect-selection", style={"marginTop": "8px"}),
+                ],
+                style=GRAPH_BOX,
+            ),
+        ],
+        style=ROW,
+    )
+
+
 def fit_tab() -> html.Div:
     return html.Div(
         [
@@ -422,7 +623,52 @@ def fit_tab() -> html.Div:
             ),
             html.Div(
                 [
-                    dcc.Graph(id="fit-graph", figure=empty_figure("Load a library and a mount")),
+                    dcc.Tabs(
+                        id="result-tabs",
+                        value="fit",
+                        children=[
+                            dcc.Tab(
+                                label="Fit",
+                                value="fit",
+                                children=[
+                                    dcc.Graph(
+                                        id="fit-graph",
+                                        figure=empty_figure("Load a library and a mount"),
+                                    )
+                                ],
+                            ),
+                            dcc.Tab(
+                                label="All phases",
+                                value="phases",
+                                children=[dcc.Graph(id="fit-components-graph",
+                                                    figure=empty_figure("Run the fit"))],
+                            ),
+                            dcc.Tab(
+                                label="Clay phases",
+                                value="clays",
+                                children=[dcc.Graph(id="fit-clay-graph",
+                                                    figure=empty_figure("Run the fit"))],
+                            ),
+                            dcc.Tab(
+                                label="Three mounts",
+                                value="mounts",
+                                children=[dcc.Graph(id="fit-mounts-graph",
+                                                    figure=empty_figure("Load the mounts"))],
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        [
+                            label("Export folder"),
+                            dcc.Input(id="export-path", type="text", value="results",
+                                      style={"width": "60%"}),
+                            html.Button("Export tables and plots", id="export-run", n_clicks=0,
+                                        style={"marginLeft": "8px"}),
+                            html.Div(id="export-status", style={"marginTop": "6px",
+                                                                "fontSize": "0.82rem"}),
+                        ],
+                        style={"marginTop": "10px"},
+                    ),
                     html.Div(id="fit-table"),
                 ],
                 style=GRAPH_BOX,
@@ -541,9 +787,10 @@ def build_layout() -> html.Div:
                     dcc.Tab(label="1. Load", value="load", children=load_tab()),
                     dcc.Tab(label="2. Zero error", value="zero", children=zero_tab()),
                     dcc.Tab(label="3. Background", value="background", children=background_tab()),
-                    dcc.Tab(label="4. Kaolinite", value="kaolinite", children=kaolinite_tab()),
-                    dcc.Tab(label="5. Expandable", value="smectite", children=smectite_tab()),
-                    dcc.Tab(label="6. NNLS fit", value="fit", children=fit_tab()),
+                    dcc.Tab(label="4. Main minerals", value="main", children=main_minerals_tab()),
+                    dcc.Tab(label="5. Kaolinite", value="kaolinite", children=kaolinite_tab()),
+                    dcc.Tab(label="6. Expandable", value="smectite", children=smectite_tab()),
+                    dcc.Tab(label="7. Fit and results", value="fit", children=fit_tab()),
                     dcc.Tab(label="Simulator", value="simulator", children=simulator_tab()),
                 ],
             ),
@@ -854,6 +1101,203 @@ def register_callbacks(app: Dash) -> None:
         return figure, html.Div([html.B(verdict), html.Div(result.summary())])
 
     @app.callback(
+        Output("db-status", "children"),
+        Input("db-load", "n_clicks"),
+        State("db-path", "value"),
+        prevent_initial_call=True,
+    )
+    def load_database(_clicks, path):
+        try:
+            count = STATE.load_phase_database(path)
+        except Exception as exc:  # noqa: BLE001
+            return error_message(exc)
+        clays = sum(1 for name in STATE.phase_database if is_clay_phase(name))
+        return html.Div(
+            f"{count} phases loaded ({clays} phyllosilicates, which are left to the clay "
+            f"library and not offered here)."
+        )
+
+    @app.callback(
+        Output("detect-graph", "figure"),
+        Output("detect-dialog", "children"),
+        Output("detect-status", "children"),
+        Input("detect-run", "n_clicks"),
+        State("detect-mount", "value"),
+        State("detect-allowance", "value"),
+        State("detect-score", "value"),
+        State("detect-snr", "value"),
+        State("detect-range", "value"),
+        prevent_initial_call=True,
+    )
+    def run_detection(_clicks, mount, allowance, min_score, snr, search_range):
+        if not STATE.phase_database:
+            return no_update, None, error_message(
+                ValueError("Load a phase database first.")
+            )
+        pattern = STATE.mounts[mount].subtracted()
+        if pattern is None:
+            return no_update, None, error_message(
+                ValueError(f"{MOUNT_LABELS[mount]} is not loaded.")
+            )
+        # With a clay library loaded the candidates can be fitted in competition
+        # with the clays, which discriminates far better than matching peak
+        # positions; without one, fall back to position matching.
+        screened = STATE.library is not None
+        try:
+            if screened:
+                findings = screen_phases(
+                    STATE.mounts[mount].corrected(),
+                    STATE.phase_database,
+                    STATE.library.select(march_dollase=[0.1, 0.5, 1.0]),
+                    background=STATE.mounts[mount].background_fit,
+                    two_theta_range=tuple(search_range),
+                    instrument=gui_instrument(),
+                    min_share=float(min_score) / 1000.0,
+                    cell_allowance=float(allowance) / 100.0,
+                )
+            else:
+                findings = detect_phases(
+                    pattern,
+                    STATE.phase_database,
+                    cell_allowance=float(allowance) / 100.0,
+                    min_score=float(min_score) / 100.0,
+                    min_signal_to_noise=float(snr),
+                    two_theta_range=tuple(search_range),
+                    instrument=gui_instrument(),
+                    subtract_background=STATE.mounts[mount].background_fit is None,
+                )
+        except Exception as exc:  # noqa: BLE001
+            return no_update, None, error_message(exc)
+        STATE.detected = findings
+
+        figure = go.Figure()
+        figure.add_scatter(x=pattern.two_theta, y=pattern.intensity, name="measured",
+                           line={"color": "#333333", "width": 1})
+        peak_height = float(np.max(pattern.intensity)) or 1.0
+        for index, evidence in enumerate(findings[:8]):
+            colour = _PHASE_PALETTE[index % len(_PHASE_PALETTE)]
+            matched = [match for match in evidence.matches if match.matched]
+            if not matched:
+                continue
+            figure.add_scatter(
+                x=[match.found_two_theta for match in matched],
+                y=[match.height for match in matched],
+                mode="markers",
+                marker={"color": colour, "size": 9, "symbol": "triangle-down"},
+                name=f"{evidence.name} ({100.0 * evidence.score:.0f}%)",
+            )
+        figure.update_yaxes(range=[0, 1.15 * peak_height])
+        style_axes(figure, "Counts (background subtracted)")
+
+        if not findings:
+            return figure, None, html.Div(
+                "No accompanying minerals reached the score threshold. Lower the minimum "
+                "score or widen the search range if you expect some."
+            )
+        dialog = html.Div(
+            [
+                html.Div(
+                    [
+                        html.H4(
+                            "Evidence for the following main minerals has been found in the data:",
+                            style={"marginTop": 0},
+                        ),
+                        dcc.Checklist(
+                            id="detect-choices",
+                            options=[
+                                {
+                                    "label": f"  {evidence.name} — "
+                                    + (
+                                        f"{100.0 * evidence.score:.1f}% of the pattern, "
+                                        if screened
+                                        else f"score {100.0 * evidence.score:.0f}%, "
+                                    )
+                                    + f"{evidence.n_matched}/{evidence.n_expected} expected "
+                                    f"lines found, best S/N "
+                                    f"{evidence.best_signal_to_noise:.0f}",
+                                    "value": evidence.name,
+                                }
+                                for evidence in findings[:25]
+                            ],
+                            # Ticked by default only where the share is clear.  The
+                            # screen's tail at one or two percent is largely
+                            # least-squares slack rather than real mineralogy, so
+                            # it is listed but left for the analyst to judge.
+                            value=[
+                                evidence.name
+                                for evidence in findings
+                                if evidence.score >= (0.03 if screened else 0.9)
+                            ],
+                            style={"maxHeight": "260px", "overflowY": "auto"},
+                            labelStyle={"display": "block", "fontSize": "0.85rem"},
+                        ),
+                        html.P(
+                            "Phases with similar cells cannot be separated on peak positions "
+                            "alone, so check the list against what the sample can plausibly "
+                            "contain. Selected phases are fitted with the clays and then "
+                            "normalised out of the clay percentages.",
+                            style={"fontSize": "0.78rem", "color": "#555"},
+                        ),
+                        html.Button("Include selected in the fit", id="detect-accept", n_clicks=0),
+                        html.Button("Dismiss", id="detect-dismiss", n_clicks=0,
+                                    style={"marginLeft": "8px"}),
+                    ],
+                    style={
+                        "background": "#fffaf0",
+                        "border": "2px solid #ffb74d",
+                        "borderRadius": "8px",
+                        "padding": "14px",
+                        "marginBottom": "10px",
+                        "boxShadow": "0 2px 10px rgba(0,0,0,0.12)",
+                    },
+                )
+            ]
+        )
+        method = (
+            "fitted in competition with the clay library"
+            if screened
+            else "matched on peak positions (load a clay library for the sharper test)"
+        )
+        return figure, dialog, html.Div(f"{len(findings)} candidate phases, {method}.")
+
+    @app.callback(
+        Output("detect-selection", "children"),
+        Output("detect-dialog", "children", allow_duplicate=True),
+        Input("detect-accept", "n_clicks"),
+        Input("detect-dismiss", "n_clicks"),
+        State("detect-choices", "value"),
+        prevent_initial_call=True,
+    )
+    def accept_detection(accept_clicks, dismiss_clicks, chosen):
+        # The dialog and its buttons are created by the search callback, and Dash
+        # fires callbacks once for newly added components.  Without this guard the
+        # dialog accepts itself the moment it appears, taking whatever was checked
+        # by default and never letting the analyst choose.
+        if not accept_clicks and not dismiss_clicks:
+            raise PreventUpdate
+        triggered = callback_context.triggered[0]["prop_id"]
+        if "detect-dismiss" in triggered:
+            STATE.selected_main = []
+            return html.Div("No main minerals will be included in the fit."), None
+        STATE.selected_main = list(chosen or [])
+        if not STATE.selected_main:
+            return html.Div("Nothing selected; the fit will use the clay library only."), None
+        return (
+            html.Div(
+                [
+                    html.B("Included in the fit: "),
+                    html.Span(", ".join(STATE.selected_main)),
+                    html.Div(
+                        "These are fitted together with the clays and reported separately, "
+                        "then removed when the clay percentages are normalised.",
+                        style={"fontSize": "0.8rem", "color": "#555"},
+                    ),
+                ]
+            ),
+            None,
+        )
+
+    @app.callback(
         Output("lib-status", "children"),
         Input("lib-load", "n_clicks"),
         Input("lib-build", "n_clicks"),
@@ -876,6 +1320,9 @@ def register_callbacks(app: Dash) -> None:
 
     @app.callback(
         Output("fit-graph", "figure"),
+        Output("fit-components-graph", "figure"),
+        Output("fit-clay-graph", "figure"),
+        Output("fit-mounts-graph", "figure"),
         Output("fit-table", "children"),
         Output("fit-status", "children"),
         Input("fit-run", "n_clicks"),
@@ -886,22 +1333,28 @@ def register_callbacks(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract):
+        blank = (no_update,) * 5
         if STATE.library is None:
-            return no_update, no_update, error_message(
-                ValueError("Load or build a library first.")
-            )
+            return (*blank, error_message(ValueError("Load or build a library first.")))
         state = STATE.mounts[mount]
         if state.raw is None:
-            return no_update, no_update, error_message(
-                ValueError(f"{MOUNT_LABELS[mount]} is not loaded.")
-            )
+            return (*blank, error_message(ValueError(f"{MOUNT_LABELS[mount]} is not loaded.")))
+
         library = STATE.library
         if orientations:
             library = library.select(march_dollase=orientations)
             if len(library) == 0:
-                return no_update, no_update, error_message(
-                    ValueError("No library entries match the selected orientation parameters.")
+                return (
+                    *blank,
+                    error_message(
+                        ValueError("No library entries match the selected orientation parameters.")
+                    ),
                 )
+        try:
+            library, added = _with_main_minerals(library)
+        except Exception as exc:  # noqa: BLE001
+            return (*blank, error_message(exc))
+
         use_background = bool(subtract) and "on" in subtract
         try:
             result = nnls_fit(
@@ -910,53 +1363,68 @@ def register_callbacks(app: Dash) -> None:
                 background=state.background_fit if use_background else None,
                 range_two_theta=tuple(fit_range),
             )
+            quantification = quantify(result)
         except Exception as exc:  # noqa: BLE001
-            return no_update, no_update, error_message(exc)
+            return (*blank, error_message(exc))
 
-        inside = result.mask
-        figure = go.Figure()
-        figure.add_scatter(x=result.two_theta[inside], y=result.observed[inside], name="observed",
-                           line={"color": "#1f77b4", "width": 1})
-        figure.add_scatter(x=result.two_theta[inside], y=result.calculated[inside],
-                           name="calculated", line={"color": "#d62728", "width": 1.5})
-        figure.add_scatter(x=result.two_theta[inside],
-                           y=result.residual[inside] - float(np.max(result.observed[inside])) * 0.15,
-                           name="difference", line={"color": "#7f7f7f", "width": 1})
-        style_axes(figure, "Counts")
+        STATE.fit_result = result
+        STATE.quantification = quantification
 
-        header = ["Phase", "Scattering share", "Amplitude share"]
-        amplitude = result.by_phase("amplitude")
-        rows = [
-            html.Tr([html.Td(phase), html.Td(f"{100.0 * share:.2f}%"),
-                     html.Td(f"{100.0 * amplitude.get(phase, 0.0):.2f}%")])
-            for phase, share in result.by_phase().items()
-            if share > 1e-4 or amplitude.get(phase, 0.0) > 1e-4
-        ]
-        entry_rows = [
-            html.Tr([html.Td(name), html.Td(f"{coefficient:.4g}"), html.Td(f"{100.0 * share:.2f}%")])
-            for name, coefficient, share in result.active(threshold=1e-3)
-        ]
-        table = html.Div(
-            [
-                html.H4("By phase"),
-                html.Table([html.Thead(html.Tr([html.Th(text) for text in header])),
-                            html.Tbody(rows)], style={"fontSize": "0.85rem"}),
-                html.H4("Contributing patterns"),
-                html.Table(
-                    [
-                        html.Thead(html.Tr([html.Th(text) for text in
-                                            ["Pattern", "Coefficient", "Scattering share"]])),
-                        html.Tbody(entry_rows),
-                    ],
-                    style={"fontSize": "0.85rem"},
-                ),
-                html.P(result.metrics_note, style={"fontSize": "0.78rem", "color": "#555"}),
-            ]
-        )
-        return figure, table, html.Div(
+        mounts = {
+            key: STATE.mounts[key].corrected()
+            for key in MOUNTS
+            if STATE.mounts[key].is_loaded
+        }
+        try:
+            mounts_figure = (
+                plot_mounts(mounts) if mounts else empty_figure("No mounts loaded")
+            )
+        except Exception:  # noqa: BLE001
+            mounts_figure = empty_figure("Could not draw the mounts")
+
+        table = _quantification_table(quantification, result)
+        status = html.Div(
             f"Rwp = {100.0 * result.r_wp:.2f}%, Rp = {100.0 * result.r_p:.2f}% over "
-            f"{result.metadata['n_points']} points and {len(library)} library patterns."
-            + ("" if use_background else " Fitted without background subtraction.")
+            f"{result.metadata['n_points']} points and {len(library)} patterns"
+            + (f" (including {added} main mineral{'s' if added != 1 else ''})" if added else "")
+            + ("" if use_background else ". Fitted without background subtraction")
+            + "."
+        )
+        return (
+            plot_fit(result),
+            plot_components(result),
+            plot_clay_components(result, quantification),
+            mounts_figure,
+            table,
+            status,
+        )
+
+    @app.callback(
+        Output("export-status", "children"),
+        Input("export-run", "n_clicks"),
+        State("export-path", "value"),
+        prevent_initial_call=True,
+    )
+    def export_results(_clicks, folder):
+        if STATE.fit_result is None:
+            return error_message(ValueError("Run the fit first."))
+        mounts = {
+            key: STATE.mounts[key].corrected()
+            for key in MOUNTS
+            if STATE.mounts[key].is_loaded
+        }
+        try:
+            written = save_report(
+                folder or "results",
+                STATE.fit_result,
+                mounts=mounts,
+                quantification=STATE.quantification,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return error_message(exc)
+        return html.Div(
+            [html.B(f"{len(written)} files written:")]
+            + [html.Div(str(path), style={"fontSize": "0.78rem"}) for path in written]
         )
 
     @app.callback(
@@ -1058,7 +1526,9 @@ def _reference_angle(reference: str) -> float:
 
 
 def create_app() -> Dash:
-    app = Dash(__name__, title="ClayQuant")
+    # The main mineral dialog and its checkboxes are created by a callback, so
+    # callbacks referring to them must be allowed before they exist.
+    app = Dash(__name__, title="ClayQuant", suppress_callback_exceptions=True)
     app.layout = build_layout
     register_callbacks(app)
     return app
