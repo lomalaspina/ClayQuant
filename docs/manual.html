@@ -121,6 +121,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-8">A.8 Layer spacing</a>
 <a href="#a-9">A.9 Fit weighting</a>
 <a href="#a-12">A.12 Summary</a>
+<a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
 <a class="top" href="#c">C Symbols</a>
 </nav>
@@ -185,6 +186,7 @@ tests by which the program was verified.</p>
 <li><a href="#s9">Limitations</a></li>
 <li><a href="#s10">References</a></li>
 <li><a href="#a">Appendix A &mdash; Record of verification tests</a></li>
+<li><a href="#d">Appendix D &mdash; Provenance of the accompanying-mineral structures</a></li>
 <li><a href="#b">Appendix B &mdash; File formats read</a></li>
 <li><a href="#c">Appendix C &mdash; Symbols</a></li>
 </ol>
@@ -1350,6 +1352,12 @@ absorption between phases.</li>
 
 <h2 id="s10">10 References</h2>
 
+<p>The list below covers the physical model, the numerical methods, the software libraries, and the
+four crystal structures on which ClayQuant's clay mineral calculations rest. The accompanying
+mineral structures come from a user-supplied library and are not covered here, because their
+citations belong to the database they were drawn from; every one of them is identified by database
+and entry number in <a href="#d">Appendix D</a>, from which the citation can be retrieved.</p>
+
 <ol class="refs">
 <li>Bish, D. L. &amp; Von Dreele, R. B. (1989) Rietveld refinement of non-hydrogen atomic positions
 in kaolinite. <em>Clays and Clay Minerals</em> <strong>37</strong>, 289&ndash;296.</li>
@@ -1372,10 +1380,20 @@ Bertaut&ndash;Warren&ndash;Averbach technique. <em>Clays and Clay Minerals</em> 
 Kristallographie</em> <strong>83</strong>, 75&ndash;88.</li>
 <li>Gualtieri, A. F. (2000) Accuracy of XRPD QPA using the combined Rietveld&ndash;RIR method.
 <em>Journal of Applied Crystallography</em> <strong>33</strong>, 267&ndash;278.</li>
+<li>Harris, C. R., Millman, K. J., van der Walt, S. J. <em>et al.</em> (2020) Array programming
+with NumPy. <em>Nature</em> <strong>585</strong>, 357&ndash;362.</li>
 <li>Hendricks, S. &amp; Teller, E. (1942) X-ray interference in partially ordered layer lattices.
 <em>Journal of Chemical Physics</em> <strong>10</strong>, 147&ndash;167.</li>
+<li>Ibers, J. A. (1962) Atomic scattering factors. In K. Lonsdale (ed.) <em>International Tables
+for X-Ray Crystallography</em>, Vol. III, Kynoch Press, Birmingham. <span class="small">(The
+scattering factors used in the original refinement of the glycol&ndash;smectite model; ClayQuant
+uses Waasmaier &amp; Kirfel (1995) in their place.)</span></li>
 <li>Kakinoki, J. &amp; Komura, Y. (1952) Intensity of X-ray diffraction by a one-dimensionally
 disordered crystal. <em>Journal of the Physical Society of Japan</em> <strong>7</strong>, 30&ndash;35.</li>
+<li>Kerr, P. F., Hamilton, P. K., Pill, R. J. <em>et al.</em> (1950) Analytical data on reference
+clay materials. <em>American Petroleum Institute Project 49</em>, Preliminary Report 7.
+<span class="small">(Source of the octahedral composition of the Clay Spur bentonite used in the
+glycol&ndash;smectite layer model.)</span></li>
 <li>Klug, H. P. &amp; Alexander, L. E. (1954) <em>X-ray Diffraction Procedures</em>. Wiley, New York.</li>
 <li>Lawson, C. L. &amp; Hanson, R. J. (1974) <em>Solving Least Squares Problems</em>. Prentice-Hall,
 Englewood Cliffs.</li>
@@ -1384,10 +1402,19 @@ Faraday Society</em> <strong>44</strong>, 349&ndash;367.</li>
 <li>MacEwan, D. M. C., Amil, A. R. &amp; Brown, G. (1961) Interstratified clay minerals. In
 G. Brown (ed.) <em>The X-ray Identification and Crystal Structures of Clay Minerals</em>,
 Mineralogical Society, London, 393&ndash;445.</li>
+<li>Krekel, H., Oliveira, B., Pfannschmidt, R., Bruynooghe, F., Laugher, B. &amp; Bruhin, F.
+(2004&ndash;) <em>pytest</em>. https://pytest.org</li>
 <li>March, A. (1932) Mathematische Theorie der Regelung nach der Korngestalt bei affiner Deformation.
 <em>Zeitschrift f&uuml;r Kristallographie</em> <strong>81</strong>, 285&ndash;297.</li>
 <li>Moore, D. M. &amp; Reynolds, R. C. Jr. (1997) <em>X-Ray Diffraction and the Identification and
 Analysis of Clay Minerals</em>, 2nd edn. Oxford University Press, Oxford.</li>
+<li>P&eacute;zerat, H. &amp; M&eacute;ring, J. (1954) Influence des substitutions isomorphes sur les
+param&egrave;tres de structure des phyllites. <em>Clay Minerals Bulletin</em> <strong>2</strong>,
+156&ndash;162. <span class="small">(Source of the 2:1 layer coordinates on which the
+glycol&ndash;smectite model is based.)</span></li>
+<li>Plotly Technologies Inc. (2015) <em>Collaborative data science</em>. Plotly Technologies Inc.,
+Montr&eacute;al. https://plot.ly <span class="small">(Plotly and Dash, used for the interface and
+the result figures.)</span></li>
 <li>Reynolds, R. C. Jr. (1965) An X-ray study of an ethylene glycol&ndash;montmorillonite complex.
 <em>The American Mineralogist</em> <strong>50</strong>, 990&ndash;1001.</li>
 <li>Reynolds, R. C. Jr. (1980) Interstratified clay minerals. In G. W. Brindley &amp; G. Brown (eds)
@@ -1395,8 +1422,14 @@ Analysis of Clay Minerals</em>, 2nd edn. Oxford University Press, Oxford.</li>
 London, 249&ndash;303.</li>
 <li>Schoen, R. (1962) Semi-quantitative analysis of chlorites by X-ray diffraction. <em>The American
 Mineralogist</em> <strong>47</strong>, 1384&ndash;1392.</li>
+<li>Virtanen, P., Gommers, R., Oliphant, T. E. <em>et al.</em> (2020) SciPy 1.0: fundamental
+algorithms for scientific computing in Python. <em>Nature Methods</em> <strong>17</strong>,
+261&ndash;272.</li>
 <li>Waasmaier, D. &amp; Kirfel, A. (1995) New analytical scattering-factor functions for free atoms
 and ions. <em>Acta Crystallographica</em> <strong>A51</strong>, 416&ndash;431.</li>
+<li>Wojdyr, M. (2022) GEMMI: a library for structural biology. <em>Journal of Open Source
+Software</em> <strong>7</strong>, 4200. <span class="small">(Used to expand space group symbols
+when importing a structure library.)</span></li>
 <li>Zanazzi, P. F., Comodi, P., Nazzareni, S. &amp; Andreozzi, G. B. (2009) Thermal behaviour of
 chlorite: an in-situ single-crystal and powder diffraction study. <em>European Journal of
 Mineralogy</em> <strong>21</strong>, 581&ndash;589.</li>
@@ -1907,6 +1940,250 @@ of any function, and was caught only by driving the interface and looking at wha
 <p>The automated suite comprises <strong>45 tests</strong> and runs in under two seconds
 (<span class="kw">pytest -q</span>). Ten of them are skipped automatically when structure data is not
 installed.</p>
+
+
+<h2 id="d">Appendix D &mdash; Provenance of the accompanying-mineral structures</h2>
+
+<p>The 209 structures below are those of the TOPAS structure library used during development. They
+are <strong>not</strong> distributed with ClayQuant and are not part of it: the library is
+user-supplied, imported by <span class="kw">clayquant-import-structures</span>
+(&sect;<a href="#s4-3">4.3</a>), and every ClayQuant installation may use a different one. The table
+is given so that any pattern the program calculates can be traced to the structure it came from, and
+that structure to its source database and entry.</p>
+
+<div class="warn"><strong>Why the citations are not printed here.</strong> Of the 209 entries, 200
+are ICSD, 3 AMCSD and 2 COD, and 4 carry no identifier. ICSD is a licensed database with no open
+lookup from an entry number to its publication, so those citations could not be retrieved and
+verified for this manual, and they have deliberately <em>not</em> been guessed: an invented
+reference is worse than an absent one. The identifiers below are exact, taken from the library file
+itself, and each resolves to its full bibliographic record in the database named &mdash; through an
+ICSD subscription, through <em>rruff.geo.arizona.edu/AMS</em> for AMCSD, or through
+<em>crystallography.net</em> for COD, all of which report the original publication for the entry.
+A machine-readable copy with an empty <span class="kw">citation</span> column to fill in is in the
+repository as <span class="kw">docs/structure_provenance.csv</span>.</div>
+
+<p>The four clay mineral structures are not in this table: they are integral to the program, are
+named in &sect;<a href="#s4-2">4.2</a>, and their publications are cited in full in
+&sect;<a href="#s10">10</a>.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th>Database</th><th class="num">Entry</th></tr>
+<tr><td>Actinolite</td><td>ICSD</td><td class="num">68319</td></tr>
+<tr><td>Aegirine</td><td>ICSD</td><td class="num">156560</td></tr>
+<tr><td>Akermanite</td><td>ICSD</td><td class="num">158177</td></tr>
+<tr><td>Albite</td><td>ICSD</td><td class="num">68913</td></tr>
+<tr><td>AliteM3</td><td>ICSD</td><td class="num">94742</td></tr>
+<tr><td>Almandine</td><td>ICSD</td><td class="num">71895</td></tr>
+<tr><td>AluminateC</td><td>ICSD</td><td class="num">1841</td></tr>
+<tr><td>AluminateO</td><td>ICSD</td><td class="num">1880</td></tr>
+<tr><td>Aluminium</td><td>ICSD</td><td class="num">606001</td></tr>
+<tr><td>Amorphous</td><td>&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Analcime</td><td>ICSD</td><td class="num">156593</td></tr>
+<tr><td>Anatase</td><td>ICSD</td><td class="num">9852</td></tr>
+<tr><td>Andalusite</td><td>ICSD</td><td class="num">84613</td></tr>
+<tr><td>Anglesite</td><td>ICSD</td><td class="num">92609</td></tr>
+<tr><td>Anhydrite</td><td>ICSD</td><td class="num">16382</td></tr>
+<tr><td>Ankerite</td><td>ICSD</td><td class="num">66338</td></tr>
+<tr><td>Anorthite</td><td>ICSD</td><td class="num">34942</td></tr>
+<tr><td>Apatite</td><td>ICSD</td><td class="num">26204</td></tr>
+<tr><td>Aphthitalite</td><td>ICSD</td><td class="num">26018</td></tr>
+<tr><td>Aragonite</td><td>ICSD</td><td class="num">157992</td></tr>
+<tr><td>Arcanite</td><td>ICSD</td><td class="num">2827</td></tr>
+<tr><td>Augite</td><td>ICSD</td><td class="num">90143</td></tr>
+<tr><td>Austenite</td><td>ICSD</td><td class="num">186833</td></tr>
+<tr><td>Azurite</td><td>ICSD</td><td class="num">158577</td></tr>
+<tr><td>Baricite</td><td>ICSD</td><td class="num">202099</td></tr>
+<tr><td>Barite</td><td>ICSD</td><td class="num">16904</td></tr>
+<tr><td>Bassanite</td><td>ICSD</td><td class="num">79529</td></tr>
+<tr><td>Bayerite</td><td>ICSD</td><td class="num">26830</td></tr>
+<tr><td>Belite Alpha H</td><td>ICSD</td><td class="num">82997</td></tr>
+<tr><td>Belite Beta</td><td>ICSD</td><td class="num">81096</td></tr>
+<tr><td>Biotite</td><td>ICSD</td><td class="num">95359</td></tr>
+<tr><td>Boehmite</td><td>ICSD</td><td class="num">41215</td></tr>
+<tr><td>Bornite</td><td>ICSD</td><td class="num">1963</td></tr>
+<tr><td>Bredigite</td><td>ICSD</td><td class="num">9828</td></tr>
+<tr><td>Brookite</td><td>ICSD</td><td class="num">36408</td></tr>
+<tr><td>Brownmillerite</td><td>ICSD</td><td class="num">2842</td></tr>
+<tr><td>Brucite</td><td>ICSD</td><td class="num">79031</td></tr>
+<tr><td>Brushite</td><td>ICSD</td><td class="num">16132</td></tr>
+<tr><td>Ca2P2O7</td><td>ICSD</td><td class="num">14313</td></tr>
+<tr><td>Calciolangbeinite</td><td>ICSD</td><td class="num">290622</td></tr>
+<tr><td>Calcite</td><td>ICSD</td><td class="num">73446</td></tr>
+<tr><td>Calcite-Superlorentz</td><td>ICSD</td><td class="num">73446</td></tr>
+<tr><td>Caledonite</td><td>ICSD</td><td class="num">164674</td></tr>
+<tr><td>Cassiterite</td><td>ICSD</td><td class="num">262768</td></tr>
+<tr><td>Celestine</td><td>ICSD</td><td class="num">22322</td></tr>
+<tr><td>Cementite</td><td>AMCSD</td><td class="num">13523</td></tr>
+<tr><td>Cerussite</td><td>ICSD</td><td class="num">6178</td></tr>
+<tr><td>Chalcopyrite</td><td>ICSD</td><td class="num">2518</td></tr>
+<tr><td>Chamosite</td><td>ICSD</td><td class="num">80080</td></tr>
+<tr><td>Chlorite</td><td>ICSD</td><td class="num">164234</td></tr>
+<tr><td>Chlorite Pawley</td><td>ICSD</td><td class="num">164234</td></tr>
+<tr><td>Chloroxiphite</td><td>ICSD</td><td class="num">164137</td></tr>
+<tr><td>Chromite</td><td>ICSD</td><td class="num">171121</td></tr>
+<tr><td>Chrysotile</td><td>ICSD</td><td class="num">77747</td></tr>
+<tr><td>Coesite</td><td>ICSD</td><td class="num">100749</td></tr>
+<tr><td>Copper</td><td>ICSD</td><td class="num">53247</td></tr>
+<tr><td>Corundum</td><td>ICSD</td><td class="num">51687</td></tr>
+<tr><td>Cotunnite</td><td>ICSD</td><td class="num">43344</td></tr>
+<tr><td>Covellite</td><td>ICSD</td><td class="num">63327</td></tr>
+<tr><td>Cristobalite</td><td>ICSD</td><td class="num">75483</td></tr>
+<tr><td>Cubanite</td><td>ICSD</td><td class="num">42104</td></tr>
+<tr><td>Cuprite</td><td>ICSD</td><td class="num">63281</td></tr>
+<tr><td>Diaboleite</td><td>ICSD</td><td class="num">15382</td></tr>
+<tr><td>Diamond</td><td>ICSD</td><td class="num">52054</td></tr>
+<tr><td>Diaspore</td><td>ICSD</td><td class="num">29344</td></tr>
+<tr><td>Dickite</td><td>ICSD</td><td class="num">98132</td></tr>
+<tr><td>Diopside</td><td>ICSD</td><td class="num">17043</td></tr>
+<tr><td>Dolomite</td><td>ICSD</td><td class="num">100680</td></tr>
+<tr><td>Dolomite-Ankerite SS</td><td>ICSD</td><td class="num">100680</td></tr>
+<tr><td>Dolomite-Superlorentz</td><td>ICSD</td><td class="num">100680</td></tr>
+<tr><td>Ellestadite</td><td>ICSD</td><td class="num">262245</td></tr>
+<tr><td>Enstatite</td><td>ICSD</td><td class="num">9328</td></tr>
+<tr><td>Enstatite-Ferrosilite SS</td><td>ICSD</td><td class="num">9328</td></tr>
+<tr><td>Epidote</td><td>ICSD</td><td class="num">168464</td></tr>
+<tr><td>Epsomite</td><td>ICSD</td><td class="num">16595</td></tr>
+<tr><td>Eskolaite</td><td>ICSD</td><td class="num">75577</td></tr>
+<tr><td>Ettringite</td><td>ICSD</td><td class="num">155395</td></tr>
+<tr><td>Faujasite</td><td>ICSD</td><td class="num">40931</td></tr>
+<tr><td>Fayalite</td><td>ICSD</td><td class="num">54029</td></tr>
+<tr><td>Ferrosilite</td><td>ICSD</td><td class="num">34858</td></tr>
+<tr><td>Fluorite</td><td>ICSD</td><td class="num">60559</td></tr>
+<tr><td>Forsterite</td><td>ICSD</td><td class="num">9685</td></tr>
+<tr><td>Forsterite-Fayalite SS</td><td>ICSD</td><td class="num">9685</td></tr>
+<tr><td>Franklinite</td><td>ICSD</td><td class="num">91827</td></tr>
+<tr><td>Galena</td><td>ICSD</td><td class="num">63095</td></tr>
+<tr><td>Gehlenite</td><td>ICSD</td><td class="num">158171</td></tr>
+<tr><td>Ghiaraite</td><td>AMCSD</td><td class="num">19787</td></tr>
+<tr><td>Gibbsite</td><td>ICSD</td><td class="num">184708</td></tr>
+<tr><td>Goethite</td><td>ICSD</td><td class="num">245057</td></tr>
+<tr><td>Goslarite</td><td>ICSD</td><td class="num">107287</td></tr>
+<tr><td>Graphite</td><td>ICSD</td><td class="num">76767</td></tr>
+<tr><td>Griceite</td><td>ICSD</td><td class="num">41409</td></tr>
+<tr><td>Grossular</td><td>ICSD</td><td class="num">83461</td></tr>
+<tr><td>Grunerite</td><td>ICSD</td><td class="num">24214</td></tr>
+<tr><td>Gypsum</td><td>ICSD</td><td class="num">151692</td></tr>
+<tr><td>Halite</td><td>ICSD</td><td class="num">181148</td></tr>
+<tr><td>Hematite</td><td>ICSD</td><td class="num">40142</td></tr>
+<tr><td>Hercynite</td><td>ICSD</td><td class="num">40093</td></tr>
+<tr><td>Heulandite</td><td>ICSD</td><td class="num">37064</td></tr>
+<tr><td>Hornblende</td><td>ICSD</td><td class="num">158242</td></tr>
+<tr><td>Hydrocalumite</td><td>ICSD</td><td class="num">51890</td></tr>
+<tr><td>Hydrocerussite</td><td>ICSD</td><td class="num">280932</td></tr>
+<tr><td>Hydrotalcite</td><td>ICSD</td><td class="num">81963</td></tr>
+<tr><td>Illite</td><td>ICSD</td><td class="num">90144</td></tr>
+<tr><td>Illite Pawley</td><td>ICSD</td><td class="num">90144</td></tr>
+<tr><td>Ilmenite</td><td>ICSD</td><td class="num">30664</td></tr>
+<tr><td>Iron</td><td>ICSD</td><td class="num">76747</td></tr>
+<tr><td>Jarosite</td><td>ICSD</td><td class="num">166799</td></tr>
+<tr><td>Jasmundite</td><td>ICSD</td><td class="num">26407</td></tr>
+<tr><td>K2ZnCl4</td><td>&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Kaolinite 1M</td><td>ICSD</td><td class="num">63192</td></tr>
+<tr><td>Kaolinite 2M</td><td>&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Kieserite</td><td>ICSD</td><td class="num">68345</td></tr>
+<tr><td>LaB6</td><td>ICSD</td><td class="num">248440</td></tr>
+<tr><td>Labradorite</td><td>ICSD</td><td class="num">100235</td></tr>
+<tr><td>Langite</td><td>ICSD</td><td class="num">30724</td></tr>
+<tr><td>Laurionite</td><td>ICSD</td><td class="num">28035</td></tr>
+<tr><td>Lead</td><td>ICSD</td><td class="num">96501</td></tr>
+<tr><td>Lepidocrocite</td><td>ICSD</td><td class="num">108876</td></tr>
+<tr><td>Leucite</td><td>ICSD</td><td class="num">161630</td></tr>
+<tr><td>Lime</td><td>ICSD</td><td class="num">163628</td></tr>
+<tr><td>Litharge</td><td>COD</td><td class="num">9012700</td></tr>
+<tr><td>Lizardite</td><td>ICSD</td><td class="num">202358</td></tr>
+<tr><td>Maghemite</td><td>ICSD</td><td class="num">79196</td></tr>
+<tr><td>Magnesioferrite</td><td>ICSD</td><td class="num">41290</td></tr>
+<tr><td>Magnesite</td><td>ICSD</td><td class="num">73731</td></tr>
+<tr><td>Magnesite-Siderite</td><td>ICSD</td><td class="num">73731</td></tr>
+<tr><td>Magnetite</td><td>ICSD</td><td class="num">158504</td></tr>
+<tr><td>Malachite</td><td>ICSD</td><td class="num">262794</td></tr>
+<tr><td>Marcasite</td><td>ICSD</td><td class="num">42415</td></tr>
+<tr><td>Massicot</td><td>ICSD</td><td class="num">15403</td></tr>
+<tr><td>Mayenite</td><td>ICSD</td><td class="num">241243</td></tr>
+<tr><td>MCPM</td><td>ICSD</td><td class="num">133</td></tr>
+<tr><td>Melanterite</td><td>ICSD</td><td class="num">157296</td></tr>
+<tr><td>Mendipite</td><td>ICSD</td><td class="num">93003</td></tr>
+<tr><td>Merwinite</td><td>ICSD</td><td class="num">26002</td></tr>
+<tr><td>Microcline</td><td>ICSD</td><td class="num">83531</td></tr>
+<tr><td>Minium</td><td>ICSD</td><td class="num">42484</td></tr>
+<tr><td>Monetite</td><td>ICSD</td><td class="num">2745</td></tr>
+<tr><td>Montmorillonite</td><td>ICSD</td><td class="num">51636</td></tr>
+<tr><td>Mullite</td><td>ICSD</td><td class="num">75305</td></tr>
+<tr><td>Muscovite</td><td>ICSD</td><td class="num">180081</td></tr>
+<tr><td>Natron</td><td>ICSD</td><td class="num">97922</td></tr>
+<tr><td>Newberyite</td><td>ICSD</td><td class="num">31281</td></tr>
+<tr><td>Nordstrandite</td><td>ICSD</td><td class="num">16018</td></tr>
+<tr><td>Oldhamite</td><td>ICSD</td><td class="num">30236</td></tr>
+<tr><td>Orthoclase</td><td>AMCSD</td><td class="num">20540</td></tr>
+<tr><td>Otavite</td><td>ICSD</td><td class="num">156740</td></tr>
+<tr><td>Paralaurionite</td><td>ICSD</td><td class="num">74291</td></tr>
+<tr><td>PbS2O3</td><td>ICSD</td><td class="num">69532</td></tr>
+<tr><td>PbSO3</td><td>ICSD</td><td class="num">68889</td></tr>
+<tr><td>Periclase</td><td>ICSD</td><td class="num">159367</td></tr>
+<tr><td>Perovskite</td><td>ICSD</td><td class="num">62149</td></tr>
+<tr><td>Phosgenite</td><td>ICSD</td><td class="num">4240</td></tr>
+<tr><td>Pigeonite-C</td><td>ICSD</td><td class="num">9248</td></tr>
+<tr><td>Pigeonite-P</td><td>ICSD</td><td class="num">9247</td></tr>
+<tr><td>Portlandite</td><td>ICSD</td><td class="num">64950</td></tr>
+<tr><td>Prehnite</td><td>ICSD</td><td class="num">164238</td></tr>
+<tr><td>Pseudoboleite</td><td>ICSD</td><td class="num">67680</td></tr>
+<tr><td>Pumpellyite</td><td>ICSD</td><td class="num">158186</td></tr>
+<tr><td>Pyrite</td><td>ICSD</td><td class="num">15012</td></tr>
+<tr><td>Pyrope</td><td>ICSD</td><td class="num">71892</td></tr>
+<tr><td>Quartz</td><td>ICSD</td><td class="num">67121</td></tr>
+<tr><td>Qusongite</td><td>ICSD</td><td class="num">246149</td></tr>
+<tr><td>Riebeckite</td><td>ICSD</td><td class="num">200423</td></tr>
+<tr><td>Rozenite</td><td>ICSD</td><td class="num">23912</td></tr>
+<tr><td>Rutile</td><td>ICSD</td><td class="num">36412</td></tr>
+<tr><td>Sanidine</td><td>ICSD</td><td class="num">90141</td></tr>
+<tr><td>Scotlandite</td><td>ICSD</td><td class="num">30993</td></tr>
+<tr><td>Siderite</td><td>ICSD</td><td class="num">100678</td></tr>
+<tr><td>Silicon</td><td>ICSD</td><td class="num">51688</td></tr>
+<tr><td>Sillimanite</td><td>ICSD</td><td class="num">66330</td></tr>
+<tr><td>Smithsonite</td><td>ICSD</td><td class="num">100679</td></tr>
+<tr><td>Spessartine</td><td>ICSD</td><td class="num">83458</td></tr>
+<tr><td>Sphalerite</td><td>ICSD</td><td class="num">77090</td></tr>
+<tr><td>Spinel</td><td>ICSD</td><td class="num">77583</td></tr>
+<tr><td>Spurrite</td><td>ICSD</td><td class="num">156625</td></tr>
+<tr><td>Staurolite</td><td>ICSD</td><td class="num">53148</td></tr>
+<tr><td>Stilbite</td><td>ICSD</td><td class="num">83469</td></tr>
+<tr><td>Stishovite</td><td>ICSD</td><td class="num">40098</td></tr>
+<tr><td>Sylvite</td><td>ICSD</td><td class="num">165593</td></tr>
+<tr><td>Syngenite</td><td>ICSD</td><td class="num">157072</td></tr>
+<tr><td>Taenite</td><td>ICSD</td><td class="num">103555</td></tr>
+<tr><td>Talc</td><td>ICSD</td><td class="num">100682</td></tr>
+<tr><td>TCP Alpha</td><td>ICSD</td><td class="num">923</td></tr>
+<tr><td>Tenite-Superstructure</td><td>ICSD</td><td class="num">56386</td></tr>
+<tr><td>Tenorite</td><td>ICSD</td><td class="num">67850</td></tr>
+<tr><td>Thaumasite</td><td>ICSD</td><td class="num">185680</td></tr>
+<tr><td>Titanite</td><td>ICSD</td><td class="num">50144</td></tr>
+<tr><td>Tobermorite11A</td><td>ICSD</td><td class="num">92942</td></tr>
+<tr><td>Tridymite</td><td>ICSD</td><td class="num">34867</td></tr>
+<tr><td>Troilite</td><td>ICSD</td><td class="num">35005</td></tr>
+<tr><td>Trona</td><td>ICSD</td><td class="num">192710</td></tr>
+<tr><td>Vaterite</td><td>ICSD</td><td class="num">181959</td></tr>
+<tr><td>Vermiculite</td><td>ICSD</td><td class="num">192347</td></tr>
+<tr><td>Vivianite</td><td>ICSD</td><td class="num">423390</td></tr>
+<tr><td>Wadalite</td><td>ICSD</td><td class="num">151561</td></tr>
+<tr><td>Weddellite</td><td>ICSD</td><td class="num">192661</td></tr>
+<tr><td>Whewellite</td><td>ICSD</td><td class="num">153499</td></tr>
+<tr><td>Whitlockite (Ca,Mg)3(PO4)2</td><td>ICSD</td><td class="num">1490</td></tr>
+<tr><td>Whitlockite Ca3(PO4)2</td><td>&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Wollastonite</td><td>ICSD</td><td class="num">201538</td></tr>
+<tr><td>Wuelfingite</td><td>ICSD</td><td class="num">50447</td></tr>
+<tr><td>Wuestite</td><td>ICSD</td><td class="num">27237</td></tr>
+<tr><td>Wurtzite</td><td>ICSD</td><td class="num">67453</td></tr>
+<tr><td>Yeelimite</td><td>COD</td><td class="num">4001772</td></tr>
+<tr><td>Zincite</td><td>ICSD</td><td class="num">154486</td></tr>
+<tr><td>Zinkosite</td><td>ICSD</td><td class="num">71018</td></tr>
+<tr><td>Zircon</td><td>ICSD</td><td class="num">9582</td></tr>
+</table></div>
+
+<p class="small">Entries without an identifier are either not structural models (the amorphous and
+mixed-layer entries) or were added to the library without a database reference. Two entries of the
+library are Pawley (whole-pattern, structureless) phases for illite and chlorite; they carry the
+ICSD numbers of the structures their cells were taken from, which are the same illite and chlorite
+structures ClayQuant itself uses.</p>
 
 <h2 id="b">Appendix B &mdash; File formats read</h2>
 
