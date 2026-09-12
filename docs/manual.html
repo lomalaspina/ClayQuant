@@ -1,0 +1,1968 @@
+<title>ClayQuant Manual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Structure is slate; the iron-red is semantic, reserved for limitations and
+   cautions, so a red rule on the page always means "read this before relying
+   on the result". */
+:root{
+  --ink:#1b1d1f; --muted:#5c6165; --rule:#ccd2d6; --accent:#2d4a5e;
+  --caution:#8a2f24; --cautionbg:#fbf1ef; --bg:#fbfbfa; --panel:#f1f3f4; --code:#eef1f2;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.62 "Source Serif 4","Source Serif Pro","Palatino Linotype",Palatino,Georgia,serif;
+  margin:0; padding:0;
+}
+#wrap{max-width:52rem;margin:0 auto;padding:2.2rem 1.25rem 5rem}
+#rail{display:none}
+@media (min-width:1180px){
+  #rail{
+    display:block;position:fixed;top:0;left:0;width:17rem;height:100vh;overflow-y:auto;
+    padding:2.2rem 1rem 3rem 1.5rem;border-right:1px solid var(--rule);background:var(--panel);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:.79rem;line-height:1.45;
+  }
+  #rail .railtitle{font-weight:600;font-size:.9rem;margin-bottom:.6rem;color:var(--ink)}
+  #rail a{display:block;color:var(--muted);text-decoration:none;padding:.16rem 0}
+  #rail a:hover{color:var(--accent)}
+  #rail a.top{color:var(--ink);font-weight:500;margin-top:.5rem}
+  #wrap{margin-left:17rem}
+}
+h1,h2,h3,h4{font-family:"IBM Plex Sans",Optima,Candara,"Segoe UI",system-ui,sans-serif;font-weight:600;line-height:1.25}
+h1{font-size:2.1rem;margin:0 0 .2rem}
+h2{font-size:1.42rem;margin:2.6rem 0 .7rem;padding-bottom:.28rem;border-bottom:2px solid var(--accent)}
+h3{font-size:1.12rem;margin:1.8rem 0 .45rem;color:#2a2a2a}
+h4{font-size:1rem;margin:1.2rem 0 .35rem;color:#333}
+p{margin:.62rem 0}
+a{color:var(--accent)}
+code,kbd,samp{font-family:"IBM Plex Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;font-size:.86em;background:var(--code);padding:.08em .32em;border-radius:3px}
+pre{background:var(--code);border-left:3px solid var(--rule);padding:.7rem .9rem;overflow-x:auto;font-size:.84rem;line-height:1.5;border-radius:0 4px 4px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:.9rem 0;font-size:.87rem}
+th,td{border:1px solid var(--rule);padding:.34rem .5rem;text-align:left;vertical-align:top}
+th{background:var(--panel);font-family:"IBM Plex Sans",Optima,Candara,"Segoe UI",sans-serif;font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+var{font-style:italic;font-family:inherit}
+.eq{margin:.9rem 0 .9rem 1.2rem;font-size:1rem;line-height:1.9}
+.eq .n{float:right;color:var(--muted)}
+.note,.warn,.lim{border-left:3px solid var(--rule);background:var(--panel);padding:.55rem .85rem;margin:.9rem 0;font-size:.92rem}
+.warn,.lim{border-left-color:var(--caution);background:var(--cautionbg)}
+.small{font-size:.86rem;color:var(--muted)}
+#toc{background:var(--panel);border:1px solid var(--rule);padding:.9rem 1.2rem;margin:1.6rem 0;font-size:.9rem;border-radius:4px}
+#toc ol{margin:.2rem 0;padding-left:1.4rem;list-style:none;counter-reset:item}
+#toc li{counter-increment:item}
+#toc li>a::before{content:counters(item,".") "\00a0\00a0";color:var(--muted);font-variant-numeric:tabular-nums}
+#toc>ol>li{margin:.18rem 0}
+#toc ol ol{padding-left:1.1rem;color:var(--muted)}
+#toc a{text-decoration:none}
+#toc a:hover{text-decoration:underline}
+.title-block{border-bottom:3px double var(--accent);padding-bottom:1rem;margin-bottom:1.2rem}
+.subtitle{font-family:"IBM Plex Sans",Optima,Candara,"Segoe UI",sans-serif;font-size:1.05rem;color:var(--muted);margin:.1rem 0 .6rem}
+.meta{font-size:.85rem;color:var(--muted)}
+figure{margin:1rem 0}
+figcaption{font-size:.85rem;color:var(--muted);margin-top:.3rem}
+ul,ol{margin:.55rem 0;padding-left:1.5rem}
+li{margin:.22rem 0}
+dl dt{font-weight:600;margin-top:.5rem}
+dl dd{margin:0 0 .3rem 1.2rem}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+.kw{font-family:"IBM Plex Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;font-size:.85em;white-space:nowrap}
+@media print{
+  #rail{display:none}
+  body{font-size:10.5pt}
+  #wrap{max-width:none;padding:0}
+  h2{page-break-after:avoid;break-after:avoid}
+  h3,h4{page-break-after:avoid;break-after:avoid}
+  table,pre,.eq,figure{page-break-inside:avoid;break-inside:avoid}
+  #toc{break-after:page}
+  a{color:var(--ink);text-decoration:none}
+}
+@media (max-width:520px){ #wrap{padding:1.2rem .85rem} body{font-size:14px} }
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e6e9eb; --muted:#9aa3a9; --rule:#3a4247; --accent:#8fb8cf;
+    --caution:#e0938a; --cautionbg:#2a2220; --bg:#16191b; --panel:#1e2325; --code:#212729;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e6e9eb; --muted:#9aa3a9; --rule:#3a4247; --accent:#8fb8cf;
+  --caution:#e0938a; --cautionbg:#2a2220; --bg:#16191b; --panel:#1e2325; --code:#212729;
+}
+</style>
+
+<nav id="rail" aria-label="Contents">
+<div class="railtitle">ClayQuant Manual</div>
+<a class="top" href="#s1">1 Introduction</a>
+<a class="top" href="#s2">2 Theory</a>
+<a href="#s2-5">2.5 Matrix method</a>
+<a href="#s2-8">2.8 Lorentz&ndash;polarization</a>
+<a href="#s2-13">2.13 Quantification</a>
+<a class="top" href="#s3">3 Implementation</a>
+<a href="#s3-3">3.3 Reference library</a>
+<a class="top" href="#s4">4 Installation</a>
+<a href="#s4-1">4.1 Requirements and procedure</a>
+<a href="#s4-2">4.2 Structure data</a>
+<a class="top" href="#s5">5 Operating procedure</a>
+<a href="#s5-3">5.3 Zero error</a>
+<a href="#s5-5">5.5 Main minerals</a>
+<a href="#s5-8">5.8 Fit and results</a>
+<a class="top" href="#s6">6 Interface controls</a>
+<a class="top" href="#s7">7 Command line</a>
+<a class="top" href="#s8">8 Output files</a>
+<a class="top" href="#s9">9 Limitations</a>
+<a class="top" href="#s10">10 References</a>
+<a class="top" href="#a">A Verification tests</a>
+<a href="#a-2">A.2 Reynolds (1965)</a>
+<a href="#a-5">A.5 Readers, zero error</a>
+<a href="#a-6">A.6 Mineral search</a>
+<a href="#a-7">A.7 Crystallite thickness</a>
+<a href="#a-8">A.8 Layer spacing</a>
+<a href="#a-9">A.9 Fit weighting</a>
+<a href="#a-12">A.12 Summary</a>
+<a class="top" href="#b">B File formats</a>
+<a class="top" href="#c">C Symbols</a>
+</nav>
+
+<div id="wrap">
+
+<div class="title-block">
+<h1>ClayQuant</h1>
+<div class="subtitle">Calculation of X-ray powder diffraction patterns of interstratified clay minerals,
+and quantification of clay mineral assemblages from oriented mounts</div>
+<div class="meta">User and reference manual &middot; Program version 0.1.0 &middot; September 2026</div>
+</div>
+
+<p><strong>Scope.</strong> ClayQuant computes one-dimensional (00<var>l</var>) and three-dimensional
+(<var>hkl</var>) X-ray powder diffraction patterns for mica-type (illite), chlorite and kaolinite
+layer structures, for the ethylene glycol&ndash;smectite complex, and for randomly or non-randomly
+interstratified two-component stacks of these layers, with arbitrary preferred orientation and
+crystallite thickness distribution. It then uses those calculated patterns to quantify the clay
+mineral assemblage of a clay separate measured as three oriented mounts (air-dried, ethylene
+glycol-solvated and heated), by non-negative least squares over the whole pattern.</p>
+
+<p>The program is written in Python, is operated through a local browser interface or from the
+command line, and is distributed as source. This manual documents the physical model, the
+implementation, the operating procedure, every control of the interface, the output files, and the
+tests by which the program was verified.</p>
+
+<div id="toc">
+<strong>Contents</strong>
+<ol>
+<li><a href="#s1">Introduction</a>
+  <ol><li><a href="#s1-1">Purpose</a></li><li><a href="#s1-2">What the program does and does not do</a></li>
+  <li><a href="#s1-3">Notation and conventions</a></li><li><a href="#s1-4">Related programs</a></li></ol></li>
+<li><a href="#s2">Theory</a>
+  <ol><li><a href="#s2-1">The oriented mount</a></li>
+  <li><a href="#s2-2">Scattering factors and the structure factor</a></li>
+  <li><a href="#s2-3">The one-dimensional layer model</a></li>
+  <li><a href="#s2-4">Basal reflections of a periodic stack</a></li>
+  <li><a href="#s2-5">Interstratification: the matrix method</a></li>
+  <li><a href="#s2-6">Crystallite thickness</a></li>
+  <li><a href="#s2-7">Ordering and Reichweite</a></li>
+  <li><a href="#s2-8">The Lorentz&ndash;polarization factor</a></li>
+  <li><a href="#s2-9">Preferred orientation</a></li>
+  <li><a href="#s2-10">Beam overflow</a></li>
+  <li><a href="#s2-11">Emission profile and peak shape</a></li>
+  <li><a href="#s2-12">Assembling a pattern</a></li>
+  <li><a href="#s2-13">Quantification</a></li></ol></li>
+<li><a href="#s3">Implementation</a>
+  <ol><li><a href="#s3-1">Module map</a></li><li><a href="#s3-2">Data flow</a></li>
+  <li><a href="#s3-3">The reference library</a></li><li><a href="#s3-4">Numerical notes</a></li></ol></li>
+<li><a href="#s4">Installation and structure data</a>
+  <ol><li><a href="#s4-1">Installation</a></li><li><a href="#s4-2">Structure data and licensing</a></li>
+  <li><a href="#s4-3">Importing a TOPAS structure library</a></li><li><a href="#s4-4">Building the reference library</a></li></ol></li>
+<li><a href="#s5">Operating procedure</a>
+  <ol><li><a href="#s5-1">Specimen preparation assumed</a></li><li><a href="#s5-2">Step 1 &mdash; Load</a></li>
+  <li><a href="#s5-3">Step 2 &mdash; Zero error</a></li><li><a href="#s5-4">Step 3 &mdash; Background</a></li>
+  <li><a href="#s5-5">Step 4 &mdash; Main minerals</a></li><li><a href="#s5-6">Step 5 &mdash; Kaolinite</a></li>
+  <li><a href="#s5-7">Step 6 &mdash; Expandable clay</a></li><li><a href="#s5-8">Step 7 &mdash; Fit and results</a></li>
+  <li><a href="#s5-9">The simulator</a></li></ol></li>
+<li><a href="#s6">Reference: interface controls</a></li>
+<li><a href="#s7">Reference: command line</a></li>
+<li><a href="#s8">Output files</a></li>
+<li><a href="#s9">Limitations</a></li>
+<li><a href="#s10">References</a></li>
+<li><a href="#a">Appendix A &mdash; Record of verification tests</a></li>
+<li><a href="#b">Appendix B &mdash; File formats read</a></li>
+<li><a href="#c">Appendix C &mdash; Symbols</a></li>
+</ol>
+</div>
+
+<h2 id="s1">1 Introduction</h2>
+
+<h3 id="s1-1">1.1 Purpose</h3>
+
+<p>Quantitative analysis of clay mineral assemblages by X-ray diffraction is made difficult by three
+properties of the minerals themselves. Clay minerals are platy, so a specimen prepared for analysis
+is strongly textured rather than randomly oriented. They are frequently interstratified, so that a
+crystallite is a stack of two or more different layer types and produces neither the pattern of one
+end member nor a superposition of both. And they are finely divided, so that crystallites are only
+a few tens of layers thick and their reflections are correspondingly broad. None of these is a
+defect of the measurement; all three are properties of the material that a calculation must
+reproduce before a quantification can mean anything.</p>
+
+<p>ClayQuant addresses these by calculating the pattern that each candidate phase would produce
+<em>under the conditions of the measurement</em> &mdash; its texture, its crystallite thickness, its
+layer spacing, the instrument's emission profile and slit geometry &mdash; and then fitting the
+measured pattern as a non-negative combination of those calculated patterns.</p>
+
+<h3 id="s1-2">1.2 What the program does and does not do</h3>
+
+<p>It does:</p>
+<ul>
+<li>compute 00<var>l</var> and <var>hkl</var> intensities from crystal structures supplied as CIF;</li>
+<li>compute the diffracted intensity of a two-component interstratified stack with arbitrary
+junction probabilities and a distribution of crystallite thicknesses;</li>
+<li>apply preferred orientation, Lorentz&ndash;polarization, beam overflow, an arbitrary emission
+profile and an adjustable peak shape;</li>
+<li>read the common vendor file formats, determine the 2&theta; zero error, model the background,
+identify kaolinite and expandable clay from the three-mount comparison, identify accompanying
+non-clay minerals, and fit and report the assemblage.</li>
+</ul>
+
+<p>It does not:</p>
+<ul>
+<li>refine structures. Cell parameters, atomic coordinates, site occupancies and displacement
+parameters are taken as given and are not adjusted against the data. ClayQuant is not a Rietveld
+program;</li>
+<li>refine peak positions, widths or orientation continuously. The fit chooses among
+<em>pre-computed</em> patterns, so the achievable agreement is limited by how finely the library
+samples those parameters (&sect;<a href="#s3-3">3.3</a>, &sect;<a href="#s9">9</a>);</li>
+<li>report weight percent. What is reported is each phase's share of diffracted intensity; the
+conversion requires a reference intensity ratio per phase (&sect;<a href="#s2-13">2.13</a>);</li>
+<li>model three-component interstratifications, or interstratifications with a lateral (<var>ab</var>)
+component of disorder beyond that implied by the treatment of &sect;<a href="#s2-12">2.12</a>.</li>
+</ul>
+
+<h3 id="s1-3">1.3 Notation and conventions</h3>
+
+<p>Throughout, <var>&lambda;</var> is the wavelength in &aring;ngstr&ouml;m, <var>&theta;</var> the
+Bragg angle, and</p>
+
+<div class="eq"><var>s</var> = 2 sin<var>&theta;</var> / <var>&lambda;</var> = 1/<var>d</var>
+<span class="n">(1.1)</span></div>
+
+<p>the length of the scattering vector, in &aring;<sup>&minus;1</sup>. Note that <var>s</var> is defined
+here without the factor 2&pi; and without the factor &frac12; used in some crystallographic
+literature; the quantity <var>q</var> = sin<var>&theta;</var>/<var>&lambda;</var> = <var>s</var>/2 is
+used only as the argument of scattering factors and displacement factors, matching International
+Tables convention. The stacking axis of a layer structure is <var>c</var>*, and heights along it are
+given in &aring;ngstr&ouml;m and denoted <var>z</var>. Layer repeat distances are denoted
+<var>d</var><sub>A</sub>, <var>d</var><sub>B</sub>. Intensities are per unit incident flux and are
+reported in arbitrary units, since only relative intensities enter the analysis.</p>
+
+<h3 id="s1-4">1.4 Related programs</h3>
+
+<p>The one-dimensional part of the calculation follows the same physics as NEWMOD (Reynolds),
+PyXRD (Dumon &amp; Van Ranst) and Sybilla, all of which implement the matrix formalism of
+&sect;<a href="#s2-5">2.5</a>. ClayQuant differs from these chiefly in coupling the calculation
+directly to a whole-pattern non-negative least-squares quantification, in computing the
+three-dimensional <var>hkl</var> contribution of the host phases from crystal structures rather
+than treating only basal reflections, and in being open source and scriptable.</p>
+
+<h2 id="s2">2 Theory</h2>
+
+<h3 id="s2-1">2.1 The oriented mount</h3>
+
+<p>A clay separate is deposited on a glass slide so that the platelets lie with (001) close to the
+slide surface. In Bragg&ndash;Brentano reflection geometry the diffraction vector is always parallel
+to the specimen normal, so such a specimen presents predominantly its basal (00<var>l</var>)
+reflections. The degree to which this is true is a property of the preparation, not a constant, and
+is treated here as an adjustable texture parameter (&sect;<a href="#s2-9">2.9</a>).</p>
+
+<p>Three mounts of the same separate are measured:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th>Treatment</th><th>Diagnostic role</th></tr>
+<tr><td>Air-dried</td><td>as deposited, equilibrated with laboratory air</td><td>reference state</td></tr>
+<tr><td>Glycol-solvated</td><td>exposed to ethylene glycol vapour</td><td>expandable layers swell to a two-layer complex near 16.9 &aring;</td></tr>
+<tr><td>Heated</td><td>typically 500 &deg;C</td><td>kaolinite dehydroxylates and its 7.15 &aring; reflection is lost; chlorite survives</td></tr>
+</table></div>
+
+<p>The quantitative fit is performed on the glycol-solvated mount, because glycolation separates the
+expandable from the non-expandable component and resolves the illite/smectite series, which in the
+air-dried state overlap near 10&ndash;14 &aring;.</p>
+
+<h3 id="s2-2">2.2 Scattering factors and the structure factor</h3>
+
+<p>Atomic scattering factors <var>f</var><sub>0</sub>(<var>q</var>) are evaluated from the
+eleven-parameter analytical expansion of Waasmaier &amp; Kirfel (1995),</p>
+
+<div class="eq"><var>f</var><sub>0</sub>(<var>q</var>) = <var>c</var> +
+&Sigma;<sub><var>i</var>=1</sub><sup>5</sup> <var>a<sub>i</sub></var>
+exp(&minus;<var>b<sub>i</sub></var> <var>q</var><sup>2</sup>)
+<span class="n">(2.1)</span></div>
+
+<p>valid to <var>q</var> = 6 &aring;<sup>&minus;1</sup>, with <var>q</var> =
+sin<var>&theta;</var>/<var>&lambda;</var>. Ionic species are used where the tabulation provides
+them and the CIF specifies a charge; otherwise the neutral atom is used, and a species that is not
+tabulated falls back to its neutral atom with a warning. Isotropic displacement is applied as</p>
+
+<div class="eq"><var>T</var>(<var>q</var>) = exp(&minus;<var>B</var> <var>q</var><sup>2</sup>)
+<span class="n">(2.2)</span></div>
+
+<p>with <var>B</var> in &aring;<sup>2</sup>. Where a CIF reports <var>U</var><sub>iso</sub>, the
+conversion <var>B</var> = 8&pi;<sup>2</sup><var>U</var> is applied. The structure factor of a
+reflection <var>hkl</var> is then</p>
+
+<div class="eq"><var>F</var>(<var>hkl</var>) = &Sigma;<sub><var>j</var></sub>
+<var>n<sub>j</sub></var> <var>f<sub>j</sub></var>(<var>q</var>)
+exp(&minus;<var>B<sub>j</sub></var><var>q</var><sup>2</sup>)
+exp[2&pi;<var>i</var>(<var>hx<sub>j</sub></var> + <var>ky<sub>j</sub></var> + <var>lz<sub>j</sub></var>)]
+<span class="n">(2.3)</span></div>
+
+<p>summed over the symmetry-expanded content of the unit cell, with <var>n<sub>j</sub></var> the
+site occupancy. Symmetry operations are taken from the CIF as written, parsed into a rotation and a
+translation, applied to each asymmetric-unit site, and duplicate positions removed within a
+tolerance of 10<sup>&minus;4</sup> in fractional coordinates.</p>
+
+<h3 id="s2-3">2.3 The one-dimensional layer model</h3>
+
+<p>For a basal reflection <var>h</var> = <var>k</var> = 0, equation (2.3) reduces to</p>
+
+<div class="eq"><var>F</var>(00<var>l</var>) = &Sigma;<sub><var>j</var></sub>
+<var>n<sub>j</sub></var> <var>f<sub>j</sub></var> <var>T<sub>j</sub></var>
+exp(2&pi;<var>i l z<sub>j</sub></var>)
+<span class="n">(2.4)</span></div>
+
+<p>which depends only on the fractional coordinate along <var>c</var>, whatever the cell angles: the
+scalar product of the reciprocal vector (00<var>l</var>) with a position
+<var>x</var><b>a</b>+<var>y</var><b>b</b>+<var>z</var><b>c</b> is <var>lz</var> exactly. No
+projection correction is required. The basal spacing follows from the triclinic metric as</p>
+
+<div class="eq"><var>d</var>(001) = 1/|<b>c</b>*| = <var>V</var> / (<var>ab</var> sin<var>&gamma;</var>)
+<span class="n">(2.5)</span></div>
+
+<p>A <em>layer model</em> is therefore a list of scatterers at absolute heights <var>z</var> (in
+&aring;ngstr&ouml;m) within one layer of repeat distance <var>d</var>, each with an occupancy and a
+displacement parameter, together with the continuous layer structure factor</p>
+
+<div class="eq"><var>F</var>(<var>s</var>) = &Sigma;<sub><var>j</var></sub>
+<var>n<sub>j</sub></var> <var>f<sub>j</sub></var>(<var>s</var>/2)
+exp(&minus;<var>B<sub>j</sub> s</var><sup>2</sup>/4)
+exp(2&pi;<var>i s z<sub>j</sub></var>)
+<span class="n">(2.6)</span></div>
+
+<p>Here <var>s</var> is continuous, not restricted to <var>l</var>/<var>d</var>: an interstratified
+stack is not periodic and scatters at every <var>s</var>, which is precisely what
+&sect;<a href="#s2-5">2.5</a> integrates.</p>
+
+<h4>Deriving a layer model from a polytype cell</h4>
+
+<p>The structures available for illite, chlorite and kaolinite are multi-layer polytypes: illite
+ICSD 90144 is a two-layer <var>C</var>2/<var>c</var> cell, kaolinite 2<var>M</var> ICSD 30285 a
+two-layer <var>C</var>1<var>c</var>1 cell. Successive layers in these polytypes are related by
+operations of the form (<var>x</var>, &minus;<var>y</var>, <var>z</var>+&frac12;) &mdash; a rotation
+or reflection in the <var>ab</var> plane combined with a translation of exactly half the cell along
+<var>c</var>. Such an operation leaves the projection of the electron density on <var>c</var>*
+unchanged. The projected density therefore repeats every <var>d</var>(001)/<var>n</var>, and a
+single-layer model is obtained exactly by folding all atomic heights modulo that distance. This is
+done automatically; the fold is exact for the 2<var>M</var><sub>1</sub> and IIb polytypes used here
+and was verified numerically (&sect;<a href="#a-1">A.1</a>).</p>
+
+<div class="note"><strong>Consequence.</strong> Because only the projection on <var>c</var>* enters,
+kaolinite 1<var>M</var> and kaolinite 2<var>M</var> have nearly identical basal series and are not
+distinguishable from 00<var>l</var> intensities alone. They are separable only through their
+<var>hkl</var> reflections, which in a strongly oriented mount are weak. Both are provided, and a
+fit that divides intensity between them should not be read as a polytype determination.</div>
+
+<h3 id="s2-4">2.4 Basal reflections of a periodic stack</h3>
+
+<p>For a crystallite of <var>N</var> identical layers of thickness <var>d</var>, the amplitudes add
+with a phase 2&pi;<var>s d</var> per layer and</p>
+
+<div class="eq"><var>I</var>(<var>s</var>) = |<var>F</var>(<var>s</var>)|<sup>2</sup>
+&middot; sin<sup>2</sup>(&pi;<var>N s d</var>) / sin<sup>2</sup>(&pi;<var>s d</var>)
+<span class="n">(2.7)</span></div>
+
+<p>the familiar Laue interference function, which has maxima of height <var>N</var><sup>2</sup> at
+<var>s</var> = <var>l</var>/<var>d</var> and a width in <var>s</var> of about 1/(<var>Nd</var>).
+Equation (2.7) is the <var>A</var> = <var>B</var> limit of the general result below, and is used as
+a closed-form check on it (&sect;<a href="#a-1">A.1</a>).</p>
+
+<h3 id="s2-5">2.5 Interstratification: the matrix method</h3>
+
+<p>Consider a crystallite of <var>N</var> layers stacked along <var>c</var>*, each of type A or B,
+with layer structure factors <var>F</var><sub>A</sub>(<var>s</var>), <var>F</var><sub>B</sub>(<var>s</var>)
+and thicknesses <var>d</var><sub>A</sub>, <var>d</var><sub>B</sub>. Let the sequence be a stationary
+first-order Markov chain with transition matrix <b>P</b>, where <var>P</var><sub><var>mn</var></sub>
+is the probability that a layer of type <var>m</var> is followed by one of type <var>n</var>, and
+with stationary proportions <b>W</b> satisfying <b>WP</b> = <b>W</b>.</p>
+
+<p>The scattered amplitude is</p>
+
+<div class="eq"><var>A</var>(<var>s</var>) = &Sigma;<sub><var>j</var>=1</sub><sup><var>N</var></sup>
+<var>F</var><sub><var>t<sub>j</sub></var></sub>(<var>s</var>) exp(2&pi;<var>i s z<sub>j</sub></var>),
+&nbsp;&nbsp; <var>z<sub>j</sub></var> = &Sigma;<sub><var>k</var>&lt;<var>j</var></sub> <var>d</var><sub><var>t<sub>k</sub></var></sub>
+<span class="n">(2.8)</span></div>
+
+<p>and the expected intensity &lang;|<var>A</var>|<sup>2</sup>&rang; separates into a self term and
+a pair term,</p>
+
+<div class="eq"><var>I</var>(<var>s</var>) = &Sigma;<sub><var>j</var></sub>
+&lang;|<var>F</var><sub><var>t<sub>j</sub></var></sub>|<sup>2</sup>&rang;
++ 2 Re &Sigma;<sub><var>j</var>&lt;<var>k</var></sub>
+&lang;<var>F</var><sub><var>t<sub>k</sub></var></sub>
+<var>F</var>*<sub><var>t<sub>j</sub></var></sub>
+exp(2&pi;<var>i s</var>(<var>z<sub>k</sub></var>&minus;<var>z<sub>j</sub></var>))&rang;
+<span class="n">(2.9)</span></div>
+
+<p>Define the matrix</p>
+
+<div class="eq"><var>T</var><sub><var>mn</var></sub>(<var>s</var>) =
+<var>P</var><sub><var>mn</var></sub> exp(2&pi;<var>i s d<sub>m</sub></var>)
+<span class="n">(2.10)</span></div>
+
+<p>Then the sum over all sequences of <var>n</var> steps from type <var>m</var> to type <var>p</var>,
+weighted by probability and carrying the accumulated phase, is exactly
+[<b>T</b><sup><var>n</var></sup>]<sub><var>mp</var></sub>. Writing
+<var>f<sub>m</sub></var> = <var>W<sub>m</sub></var><var>F</var>*<sub><var>m</var></sub>, the pair at
+separation <var>n</var> contributes <b>f</b><sup>T</sup><b>T</b><sup><var>n</var></sup><b>F</b>, and
+counting the (<var>N</var>&minus;<var>n</var>) pairs at that separation gives</p>
+
+<div class="eq"><var>I</var>(<var>s</var>) = <var>N</var> &Sigma;<sub><var>m</var></sub>
+<var>W<sub>m</sub></var>|<var>F<sub>m</sub></var>|<sup>2</sup>
++ 2 Re &Sigma;<sub><var>n</var>=1</sub><sup><var>N</var>&minus;1</sup>
+(<var>N</var>&minus;<var>n</var>) <b>f</b><sup>T</sup><b>T</b><sup><var>n</var></sup><b>F</b>
+<span class="n">(2.11)</span></div>
+
+<p>which is the result implemented. Dividing by <var>N</var> and letting <var>N</var>&rarr;&infin;
+gives the Kakinoki&ndash;Komura form</p>
+
+<div class="eq"><var>I</var><sub>&infin;</sub>(<var>s</var>)/<var>N</var> = Re{
+<b>f</b><sup>T</sup>[2(<b>I</b>&minus;<b>T</b>)<sup>&minus;1</sup>&minus;<b>I</b>]<b>F</b> }
+<span class="n">(2.12)</span></div>
+
+<p>since &Sigma;<sub><var>n</var>&ge;1</sub><b>T</b><sup><var>n</var></sup> =
+(<b>I</b>&minus;<b>T</b>)<sup>&minus;1</sup>&minus;<b>I</b> and
+<b>f</b><sup>T</sup><b>F</b> = &Sigma;<var>W<sub>m</sub></var>|<var>F<sub>m</sub></var>|<sup>2</sup>.
+ClayQuant uses the finite form (2.11), because crystallite thickness controls basal peak width and
+the infinite limit would give delta functions.</p>
+
+<div class="note"><strong>On the phase convention.</strong> The distance from the origin of layer
+<var>j</var> to that of layer <var>j</var>+1 is the thickness of layer <var>j</var>, not of layer
+<var>j</var>+1. This is why the exponential in (2.10) carries <var>d<sub>m</sub></var>, the thickness
+of the layer being <em>left</em>. Using the other convention transposes the roles of the two
+components and is a common source of error; the implementation is checked against the pure end
+members and against the closed form (2.7) for this reason (&sect;<a href="#a-1">A.1</a>).</div>
+
+<h3 id="s2-6">2.6 Crystallite thickness</h3>
+
+<p>Real specimens contain crystallites of many thicknesses. Averaging (2.11) over a distribution
+<var>p</var>(<var>N</var>) and normalising per layer gives</p>
+
+<div class="eq"><var>I</var>(<var>s</var>)/&lang;<var>N</var>&rang; =
+&Sigma;<sub><var>m</var></sub><var>W<sub>m</sub></var>|<var>F<sub>m</sub></var>|<sup>2</sup>
++ 2 Re &Sigma;<sub><var>n</var>&ge;1</sub> <var>G</var>(<var>n</var>)
+<b>f</b><sup>T</sup><b>T</b><sup><var>n</var></sup><b>F</b>
+<span class="n">(2.13)</span></div>
+
+<p>with the pair weights</p>
+
+<div class="eq"><var>G</var>(<var>n</var>) = &lang;max(<var>N</var>&minus;<var>n</var>, 0)&rang; /
+&lang;<var>N</var>&rang;
+<span class="n">(2.14)</span></div>
+
+<p>so the thickness distribution enters through one vector of weights, computed once and reused at
+every <var>s</var>. The distribution used is lognormal in <var>N</var>, parameterised by its mean
+&lang;<var>N</var>&rang; and by the width <var>&beta;</var> of the underlying normal distribution in
+ln <var>N</var>, following the crystallite size distribution (CSDS) treatment standard in this field
+(Drits, Eberl &amp; &#346;rodo&#324;). <var>G</var>(<var>n</var>) is normalised so that
+<var>G</var>(0) = 1.</p>
+
+<p>Crystallite thickness is the dominant control on basal peak width. For a 10 &aring; layer, a mean
+of 10 layers gives a 001 width of order 0.8&deg; 2&theta;, while a well-crystallised illite may show
+0.12&deg;, which requires of order 70 layers (&sect;<a href="#a-7">A.7</a>). It cannot be assumed;
+it must either be spanned by the library or determined from the data.</p>
+
+<h3 id="s2-7">2.7 Ordering and Reichweite</h3>
+
+<p>The transition matrix carries the ordering. For a two-component system with proportions
+<var>W</var><sub>A</sub>, <var>W</var><sub>B</sub>:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Case</th><th>Transition probabilities</th><th>Description</th></tr>
+<tr><td>Random, <var>R</var> = 0</td><td><var>P</var><sub>AB</sub> = <var>W</var><sub>B</sub>,
+<var>P</var><sub>BA</sub> = <var>W</var><sub>A</sub></td>
+<td>a layer's identity is independent of its neighbour</td></tr>
+<tr><td>Ordered, <var>R</var> = 1</td><td><var>P</var><sub>AB</sub> &gt; <var>W</var><sub>B</sub></td>
+<td>unlike layers tend to alternate; the limit
+<var>P</var><sub>AB</sub> = 1 at <var>W</var><sub>A</sub> = &frac12; is a regular alternation
+(rectorite-like)</td></tr>
+<tr><td>Segregated</td><td><var>P</var><sub>AB</sub> &lt; <var>W</var><sub>B</sub></td>
+<td>like layers cluster; the limit <var>P</var><sub>AB</sub> = 0 is a physical mixture</td></tr>
+</table></div>
+
+<p>Ordering is expressed through a single parameter <var>P</var><sub>AB</sub>, from which the
+remaining probabilities follow by the stationarity and normalisation conditions
+<var>W</var><sub>A</sub><var>P</var><sub>AB</sub> = <var>W</var><sub>B</sub><var>P</var><sub>BA</sub>
+and <var>P</var><sub><var>m</var>A</sub>+<var>P</var><sub><var>m</var>B</sub> = 1. Values of
+<var>P</var><sub>AB</sub> for which any probability would fall outside [0,1] are rejected. The
+supplied reference library is computed for the random case, which is the appropriate default for
+illite/smectite and chlorite/smectite in most sedimentary settings; ordered stacks can be computed
+in the simulator or by calling the library builder directly.</p>
+
+<h3 id="s2-8">2.8 The Lorentz&ndash;polarization factor</h3>
+
+<p>Which Lorentz factor applies to an oriented clay aggregate measured on a diffractometer is a
+genuine and long-standing question, and the choice matters: the two candidate conventions differ by
+a factor <var>l</var> across a basal series after normalisation at 001, so an incorrect choice
+distorts every relative basal intensity and therefore every quantification derived from them.</p>
+
+<p>The two candidates are the random-powder (Debye&ndash;Scherrer) form</p>
+
+<div class="eq">LP<sub>powder</sub> = (1 + cos<sup>2</sup>2<var>&theta;</var>) /
+(2 sin<sup>2</sup><var>&theta;</var> cos<var>&theta;</var>)
+<span class="n">(2.15)</span></div>
+
+<p>and the single-crystal form appropriate to a one-dimensionally periodic, perfectly oriented
+specimen,</p>
+
+<div class="eq">LP<sub>crystal</sub> = (1 + cos<sup>2</sup>2<var>&theta;</var>) / (2 sin 2<var>&theta;</var>)
+<span class="n">(2.16)</span></div>
+
+<p>Bradley (1954) and Schoen (1962) found the random-powder factor to work for oriented aggregates;
+MacEwan, Amil &amp; Brown (1961) argued for something intermediate. The matter was settled
+empirically by Reynolds (1965), who showed for an ethylene glycol&ndash;montmorillonite complex
+(his Table 2) and independently for a dry Na-montmorillonite (his Table 4) that the random-powder
+factor is <em>required</em> to reproduce observed basal intensities, the single-crystal factor giving
+large deviations &mdash; for the dry montmorillonite, a calculated 003 intensity of 141 against an
+observed 55.</p>
+
+<p><strong>ClayQuant therefore uses (2.15) by default.</strong> This is not merely a convention: the
+published one-dimensional clay layer models, including the glycol&ndash;smectite model used here,
+were refined under it, and their structure factors are only consistent when it is applied. Equation
+(2.16) is selectable for comparison. A monochromator-modified polarization factor,</p>
+
+<div class="eq"><var>p</var> = (1 + cos<sup>2</sup>2<var>&theta;</var> cos<sup>2</sup>2<var>&theta;<sub>M</sub></var>) /
+(1 + cos<sup>2</sup>2<var>&theta;<sub>M</sub></var>)
+<span class="n">(2.17)</span></div>
+
+<p>is available for a crystal-monochromated beam.</p>
+
+<h3 id="s2-9">2.9 Preferred orientation</h3>
+
+<p>Texture is described by the March&ndash;Dollase model (March 1932; Dollase 1986). For a reflection
+whose scattering vector makes an angle <var>&alpha;</var> with the texture axis,</p>
+
+<div class="eq"><var>P</var>(<var>&alpha;</var>; <var>r</var>) =
+(<var>r</var><sup>2</sup>cos<sup>2</sup><var>&alpha;</var> +
+sin<sup>2</sup><var>&alpha;</var>/<var>r</var>)<sup>&minus;3/2</sup>
+<span class="n">(2.18)</span></div>
+
+<p>The texture axis is <var>c</var>*, the platelet normal, which in Bragg&ndash;Brentano reflection
+geometry coincides with the specimen normal. <var>r</var> = 1 is a random powder; <var>r</var> &lt; 1
+describes platelets lying in the specimen plane, enhancing 00<var>l</var> and suppressing
+<var>hk</var>0. The function conserves total scattered intensity, its average over the sphere being
+unity, so <var>r</var> redistributes intensity rather than creating it.</p>
+
+<div class="note"><strong>Preferred orientation does not change a purely basal pattern.</strong> For
+every 00<var>l</var> reflection <var>&alpha;</var> = 0, so <var>P</var> = <var>r</var><sup>&minus;3</sup>
+for all of them alike: a common scale factor. The March&ndash;Dollase parameter therefore has no
+effect on the <em>shape</em> of a basal series, and acts only on the ratio of basal to non-basal
+intensity. This is why the ten orientation parameters of the reference library change an
+interstratified pattern only through its <var>hkl</var> contribution
+(&sect;<a href="#s2-12">2.12</a>), and why <var>r</var> cannot be determined from basal reflections
+alone.</div>
+
+<h3 id="s2-10">2.10 Beam overflow</h3>
+
+<p>The Lorentz factor diverges as 1/sin<sup>2</sup><var>&theta;</var>, but a real measurement does
+not, because at low angle the irradiated length of a flat specimen,</p>
+
+<div class="eq"><var>L</var><sub>irr</sub>(<var>&theta;</var>) = <var>R &gamma;</var> / sin<var>&theta;</var>
+<span class="n">(2.19)</span></div>
+
+<p>with <var>R</var> the goniometer radius and <var>&gamma;</var> the equatorial divergence in
+radians, exceeds the specimen and part of the beam misses it. Only the intercepted fraction
+diffracts:</p>
+
+<div class="eq"><var>&phi;</var>(<var>&theta;</var>) = min[1,
+<var>L</var><sub>spec</sub> sin<var>&theta;</var> / (<var>R &gamma;</var>)]
+<span class="n">(2.20)</span></div>
+
+<p>This matters precisely where clay basal reflections lie. Reynolds (1965) avoided the correction by
+changing beam slits with angle so that the beam never exceeded his specimen, following Klug &amp;
+Alexander (1954); with the fixed slits of a modern instrument it must be applied, or every
+calculated pattern carries an unphysical low-angle ramp. The specimen length, goniometer radius and
+divergence are settable; for a variable-divergence (automatic) slit, which keeps the irradiated
+length constant, the correction should be disabled.</p>
+
+<h3 id="s2-11">2.11 Emission profile and peak shape</h3>
+
+<p>The source is described as a sum of Lorentzian-weighted lines, each with its own wavelength,
+relative intensity and intrinsic width. The default Cu K&alpha; profile is the five-line description</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Line</th><th class="num">&lambda; (&aring;)</th><th class="num">Relative weight</th><th class="num">Width</th></tr>
+<tr><td class="num">1</td><td class="num">1.534753</td><td class="num">0.0159</td><td class="num">3.6854</td></tr>
+<tr><td class="num">2</td><td class="num">1.540596</td><td class="num">0.5691</td><td class="num">0.4370</td></tr>
+<tr><td class="num">3</td><td class="num">1.541058</td><td class="num">0.0762</td><td class="num">0.6000</td></tr>
+<tr><td class="num">4</td><td class="num">1.544410</td><td class="num">0.2517</td><td class="num">0.5200</td></tr>
+<tr><td class="num">5</td><td class="num">1.544721</td><td class="num">0.0871</td><td class="num">0.6200</td></tr>
+</table></div>
+
+<p>Every reflection is generated once per emission line, at the 2&theta; corresponding to that line's
+wavelength and scaled by its weight, so the K&alpha;<sub>1</sub>/K&alpha;<sub>2</sub> separation
+emerges naturally and correctly with angle rather than being imposed. Other profiles, including a
+single K&alpha;<sub>1</sub> line, are available.</p>
+
+<p>The instrumental profile is a pseudo-Voigt whose Gaussian width follows the Caglioti relation</p>
+
+<div class="eq">FWHM<sup>2</sup> = <var>U</var> tan<sup>2</sup><var>&theta;</var> +
+<var>V</var> tan<var>&theta;</var> + <var>W</var>
+<span class="n">(2.21)</span></div>
+
+<p>with a mixing parameter <var>&eta;</var> between Gaussian and Lorentzian, optionally combined with
+a Scherrer broadening from a finite in-plane crystallite dimension. Note that broadening along
+<var>c</var>* is <em>not</em> imposed through (2.21): for interstratified phases it arises
+physically from the crystallite thickness distribution of &sect;<a href="#s2-6">2.6</a>.</p>
+
+<h3 id="s2-12">2.12 Assembling a pattern</h3>
+
+<p>A pattern of a discrete crystalline phase is computed by enumerating every reciprocal lattice
+point within the measurable range, evaluating (2.3), and applying preferred orientation,
+Lorentz&ndash;polarization and beam overflow before convolution with the emission profile and peak
+shape. Reflections are enumerated individually rather than by symmetry-equivalent family, so
+multiplicity is accounted for by the enumeration itself and each reflection receives its own
+March&ndash;Dollase factor according to its own angle to <var>c</var>* &mdash; which is what the
+texture correction requires.</p>
+
+<p>An interstratified pattern is assembled from two contributions:</p>
+<ol>
+<li>the continuous basal intensity of &sect;<a href="#s2-5">2.5</a>, evaluated at every point of the
+2&theta; grid and carrying LP, beam overflow and the emission profile;</li>
+<li>the non-basal (<var>hkl</var>, <var>k</var>&ne;0 or <var>h</var>&ne;0) reflections of the host
+phase, computed from its crystal structure and scaled by their March&ndash;Dollase factors.</li>
+</ol>
+
+<div class="lim"><strong>Approximation.</strong> Contribution (2) treats the non-basal scattering of
+an interstratified crystal as that of its host layer type, scaled by the host's proportion. This is
+an approximation. In reality, turbostratic stacking produces two-dimensional <var>hk</var> bands
+with a characteristic sawtooth profile rather than sharp three-dimensional reflections, and the
+interstratified component contributes its own non-basal scattering. The approximation is acceptable
+for a strongly oriented mount, where non-basal intensity is heavily suppressed by the texture, and
+it degrades as <var>r</var> approaches 1. The relative scaling of the two contributions is fixed by
+computing, for a pure host stack, the ratio of its basal intensity in the two formulations, so that
+a pure end member reproduces its own three-dimensional calculation
+(&sect;<a href="#a-1">A.1</a>).</div>
+
+<h3 id="s2-13">2.13 Quantification</h3>
+
+<p>The measured pattern <var>y</var>(2&theta;), after zero-error correction and background
+subtraction, is fitted as</p>
+
+<div class="eq"><var>y</var>(2<var>&theta;</var>) &asymp; &Sigma;<sub><var>p</var></sub>
+<var>c<sub>p</sub></var> <var>y<sub>p</sub></var>(2<var>&theta;</var>),
+&nbsp;&nbsp; <var>c<sub>p</sub></var> &ge; 0
+<span class="n">(2.22)</span></div>
+
+<p>over the library patterns <var>y<sub>p</sub></var>, by non-negative least squares. The
+non-negativity constraint is physical &mdash; a phase cannot be present in negative amount &mdash;
+and has the useful side effect of producing a sparse solution, so that of several hundred candidate
+patterns only a handful take non-zero coefficients.</p>
+
+<p>The solve is weighted. The variance of a counting measurement at a point is the number of counts
+recorded there, so the weight is</p>
+
+<div class="eq"><var>w<sub>i</sub></var> = 1 / max(<var>y</var><sub>raw,<var>i</var></sub>, 1)
+<span class="n">(2.23)</span></div>
+
+<p>taken from the <em>raw</em> counts, before background subtraction: subtracting a background does
+not reduce the Poisson variance of the measurement. Weighting instead by the background-subtracted
+intensity &mdash; an easy error &mdash; places the greatest weight on the flat regions between peaks,
+where the subtracted value is near zero and only noise remains, and almost none on the peaks that
+carry the information (&sect;<a href="#a-9">A.9</a>). Agreement is reported as</p>
+
+<div class="eq"><var>R</var><sub>wp</sub> = [ &Sigma;<var>w<sub>i</sub></var>
+(<var>y<sub>i</sub></var>&minus;<var>y</var><sub>calc,<var>i</var></sub>)<sup>2</sup> /
+&Sigma;<var>w<sub>i</sub></var><var>y<sub>i</sub></var><sup>2</sup> ]<sup>1/2</sup>,
+&nbsp;&nbsp;
+<var>R</var><sub>p</sub> = &Sigma;|<var>y<sub>i</sub></var>&minus;<var>y</var><sub>calc,<var>i</var></sub>|
+/ &Sigma;|<var>y<sub>i</sub></var>|
+<span class="n">(2.24)</span></div>
+
+<h4>From coefficients to proportions</h4>
+
+<p>Two measures are reported for each phase, and they answer different questions:</p>
+
+<dl>
+<dt>Scattering share</dt>
+<dd>the phase's fraction of the total calculated integrated intensity,
+<var>c<sub>p</sub></var>&int;<var>y<sub>p</sub></var> / &Sigma;<var>c<sub>q</sub></var>&int;<var>y<sub>q</sub></var>.
+This is the quantity the diffractogram actually measures.</dd>
+<dt>Amplitude share</dt>
+<dd>the phase's fraction of the summed scale factors,
+<var>c<sub>p</sub></var>/&Sigma;<var>c<sub>q</sub></var>. Broad interstratified patterns carry far
+more integrated area per unit peak height than a sharp discrete phase, so the two can differ by a
+factor of several.</dd>
+</dl>
+
+<div class="warn"><strong>Neither is a weight percent.</strong> Converting a scattering share to a
+mass fraction requires a reference intensity ratio per phase &mdash; the calculated intensity per
+unit mass in the same geometry &mdash; and for an oriented mount it depends additionally on how the
+mount was prepared, since texture differs between phases and between preparations. A method is
+provided to apply calibrated ratios if they are available
+(<span class="kw">Quantification.weight_percent</span>); in their absence the numbers are relative
+and should be reported as such.</div>
+
+<p>Results are given on two bases: over all fitted phases, and over the clay minerals alone,
+renormalised to 100 % with the accompanying minerals removed. The latter is the customary basis for
+reporting a clay mineral assemblage.</p>
+
+<h2 id="s3">3 Implementation</h2>
+
+<h3 id="s3-1">3.1 Module map</h3>
+
+<div class="tablewrap"><table>
+<tr><th>Module</th><th>Contents</th></tr>
+<tr><td class="kw">crystal.py</td><td>CIF reading, symmetry expansion, the <span class="kw">Crystal</span> and
+<span class="kw">LayerModel</span> classes, structure factors, derivation of a layer model from a polytype cell</td></tr>
+<tr><td class="kw">scattering.py</td><td>Waasmaier&ndash;Kirfel scattering factors, species normalisation, displacement factors</td></tr>
+<tr><td class="kw">emission.py</td><td>emission profiles, including the five-line Cu K&alpha; description</td></tr>
+<tr><td class="kw">optics.py</td><td>Lorentz&ndash;polarization, March&ndash;Dollase, beam overflow</td></tr>
+<tr><td class="kw">profile.py</td><td>pseudo-Voigt peak shapes, Caglioti widths, Scherrer broadening</td></tr>
+<tr><td class="kw">mixed_layer.py</td><td>the matrix method, transition matrices, the CSDS and its pair weights</td></tr>
+<tr><td class="kw">pattern.py</td><td><span class="kw">Instrument</span>, reflection enumeration, powder, basal and mixed-layer pattern assembly, peak lists</td></tr>
+<tr><td class="kw">library.py</td><td>the <span class="kw">PatternLibrary</span>, its builder, storage, and the spanning of orientation, thickness and spacing</td></tr>
+<tr><td class="kw">models.py</td><td>the expected CIF sources, the structure search path, the Reynolds (1965) glycol&ndash;smectite layer</td></tr>
+<tr><td class="kw">bern.py</td><td>import of a TOPAS/jEdit structure library into a phase database; clay/non-clay classification</td></tr>
+<tr><td class="kw">io.py</td><td>readers for XRDML, <span class="kw">.xy</span>, Bruker <span class="kw">.raw</span> and two-column text</td></tr>
+<tr><td class="kw">calibration.py</td><td>2&theta; zero error on the quartz 100 reflection, merit profile for the slider</td></tr>
+<tr><td class="kw">background.py</td><td>background components, peak stripping, the non-parametric background</td></tr>
+<tr><td class="kw">diagnostics.py</td><td>kaolinite collapse and expandable-clay swelling</td></tr>
+<tr><td class="kw">detection.py</td><td>finding accompanying minerals, by competitive fit or by peak matching</td></tr>
+<tr><td class="kw">nnls.py</td><td>the weighted non-negative least-squares fit and its metrics</td></tr>
+<tr><td class="kw">quantification.py</td><td>grouping by phase, the two normalisation bases, CSV export</td></tr>
+<tr><td class="kw">plots.py</td><td>the four result figures and the report writer</td></tr>
+<tr><td class="kw">gui/</td><td>the browser interface and its session state</td></tr>
+</table></div>
+
+<h3 id="s3-2">3.2 Data flow</h3>
+
+<pre><code>CIF files ─────┐
+               ├─► Crystal ──► LayerModel ──┐
+TOPAS library ─┘                            ├─► MixedLayerStack ──┐
+                                            │                     ├─► PatternLibrary ──┐
+Reynolds (1965) glycol-smectite ────────────┘                     │                    │
+                                                  Instrument ─────┘                    │
+                                                  (emission, peak shape, LP, slits)    │
+                                                                                       ▼
+measurement ──► read ──► zero error ──► background ──► [diagnostics]      weighted NNLS fit
+   (3 mounts)                                │                                         │
+                                             └──► phase screening ──► confirmed ───────┤
+                                                  (accompanying minerals)              │
+                                                                                       ▼
+                                                        quantification ──► tables, CSV, four plots</code></pre>
+
+<h3 id="s3-3">3.3 The reference library</h3>
+
+<p>Because the fit selects among pre-computed patterns rather than refining parameters, the library
+must span the parameters that actually vary between specimens. Three are spanned:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Dimension</th><th>Values</th><th>Why it must be spanned</th></tr>
+<tr><td>Preferred orientation <var>r</var></td><td>0.1 to 1.0 in steps of 0.1</td>
+<td>texture is a property of the preparation, not of the mineral; it sets the ratio of basal to non-basal intensity</td></tr>
+<tr><td>Mean crystallite thickness &lang;<var>N</var>&rang;</td><td>5, 15, 50 layers</td>
+<td>sets basal peak width; 10 layers give a 001 width near 0.8&deg; where a well-crystallised illite shows 0.12&deg;</td></tr>
+<tr><td>Layer spacing <var>d</var></td><td>illite 9.95, 10.02, 10.10 &aring;; chlorite 14.20, 14.35 &aring;</td>
+<td>illite <var>d</var>(001) varies with interlayer potassium and hydration; an error of 0.07 &aring; displaces the 001 by half a peak width</td></tr>
+</table></div>
+
+<p>Together with the compositional series this gives, with default settings, 1601 patterns:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Patterns</th><th>Composition range</th></tr>
+<tr><td>Illite/smectite (I/S)</td><td class="num">1350</td><td>15 compositions, 0.20/0.80 to 0.99/0.01</td></tr>
+<tr><td>Chlorite/smectite (C/S)</td><td class="num">180</td><td>0.95/0.05, 0.90/0.10, 0.85/0.15</td></tr>
+<tr><td>Illite</td><td class="num">30</td><td>discrete</td></tr>
+<tr><td>Chlorite</td><td class="num">20</td><td>discrete</td></tr>
+<tr><td>Kaolinite 1<var>M</var>, 2<var>M</var></td><td class="num">10 + 10</td><td>discrete</td></tr>
+<tr><td>Glycol&ndash;smectite</td><td class="num">1</td><td>pure end member</td></tr>
+</table></div>
+
+<p>Each pattern is stored normalised to unit maximum <em>above 4&deg; 2&theta;</em>, not to its global
+maximum. Intensity rises steeply towards zero angle &mdash; the Lorentz factor still diverges after
+the beam-overflow correction &mdash; and no clay basal reflection of interest lies below about 4&deg;;
+normalising on that rise would shrink the diffraction peaks themselves and leave the fit poorly
+conditioned.</p>
+
+<p>Each pattern also has its own smooth continuum stripped before storage. An interstratified stack
+of finite thickness scatters a genuine diffuse continuum rising towards zero angle, but in a
+measurement that continuum is inseparable from air scatter and the direct beam and is always treated
+as background. Leaving it in the basis patterns would let a phase absorb the measured background and
+inflate its apparent share.</p>
+
+<h3 id="s3-4">3.4 Numerical notes</h3>
+
+<ul>
+<li>Symmetry operations are parsed by an explicit tokeniser, never by evaluating file content as
+code.</li>
+<li>The matrix sum (2.13) is truncated at the largest <var>N</var> carrying appreciable weight; the
+2&times;2 matrix powers are accumulated once for all grid points simultaneously.</li>
+<li>Reflection enumeration is bounded by the measurable <var>d</var><sub>min</sub> at the longest
+wavelength in the emission profile.</li>
+<li>The NNLS solve is that of Lawson &amp; Hanson as implemented in SciPy, applied to the
+row-weighted system; with 1600 columns and about 1800 points a fit takes well under a second.</li>
+</ul>
+
+<h2 id="s4">4 Installation and structure data</h2>
+
+<h3 id="s4-1">4.1 Installation</h3>
+
+<h4>Requirements</h4>
+
+<div class="tablewrap"><table>
+<tr><th>Component</th><th>Requirement</th><th>Notes</th></tr>
+<tr><td>Python</td><td>3.10 or later</td><td>developed and tested on 3.11</td></tr>
+<tr><td>NumPy</td><td>&ge; 1.24</td><td>required</td></tr>
+<tr><td>SciPy</td><td>&ge; 1.10</td><td>required, for the NNLS solver</td></tr>
+<tr><td>Dash</td><td>&ge; 2.14</td><td>extra <span class="kw">gui</span>; needed only for the interface</td></tr>
+<tr><td>Plotly</td><td>&ge; 5.18</td><td>extra <span class="kw">gui</span>; also used by the figure export</td></tr>
+<tr><td>gemmi</td><td>&ge; 0.6</td><td>extra <span class="kw">import</span>; needed only to import a TOPAS structure library</td></tr>
+<tr><td>pytest</td><td>&ge; 7.4</td><td>extra <span class="kw">dev</span>; needed only to run the test suite</td></tr>
+<tr><td>Operating system</td><td>any</td><td>pure Python; no compiler required. Linux, macOS and Windows</td></tr>
+<tr><td>Disk</td><td>~200 MB</td><td>dependencies, plus 30&ndash;60 MB per stored reference library</td></tr>
+<tr><td>Memory</td><td>~1 GB</td><td>a default library holds 1601 patterns on the measurement grid</td></tr>
+<tr><td>Browser</td><td>any current</td><td>the interface runs locally at <span class="kw">127.0.0.1</span>; nothing is sent over the network</td></tr>
+</table></div>
+
+<h4>Procedure</h4>
+
+<p>1. Obtain the source and create an isolated environment. A virtual environment is strongly
+recommended so that ClayQuant's dependencies do not disturb other Python installations.</p>
+
+<pre><code>git clone https://github.com/lomalaspina/ClayQuant.git
+cd ClayQuant
+python -m venv .venv</code></pre>
+
+<p>2. Activate the environment.</p>
+
+<pre><code># Linux and macOS
+source .venv/bin/activate
+
+# Windows, PowerShell
+.venv\Scripts\Activate.ps1
+
+# Windows, cmd.exe
+.venv\Scripts\activate.bat</code></pre>
+
+<p>3. Install. The extras select optional components; installing all of them is normal for
+interactive use.</p>
+
+<pre><code>pip install -e ".[gui,import,dev]"</code></pre>
+
+<p>The editable install (<span class="kw">-e</span>) means edits to the source take effect without
+reinstalling. To install only what is needed to compute patterns from a script, omit the extras:
+<span class="kw">pip install -e .</span></p>
+
+<p>4. Verify the installation. The test suite runs in a few seconds.</p>
+
+<pre><code>pytest -q</code></pre>
+
+<p>Tests that need structure data are skipped automatically when it is absent, and report as
+<span class="kw">s</span> rather than as failures; see &sect;<a href="#s4-2">4.2</a>. With no
+structure data installed, expect 29 passed and 10 skipped; with the four CIFs in place, 45 passed.
+Any <em>failure</em> indicates a problem and should be reported.</p>
+
+<p>5. Provide structure data (&sect;<a href="#s4-2">4.2</a>), build a reference library
+(&sect;<a href="#s4-4">4.4</a>), and start the interface:</p>
+
+<pre><code>clayquant-gui</code></pre>
+
+<p>which prints a local address, by default <span class="kw">http://127.0.0.1:8050</span>, to open in
+a browser. Use <span class="kw">--port</span> to choose another port and <span class="kw">--host</span>
+to bind an interface other than the loopback.</p>
+
+<div class="note"><strong>Upgrading.</strong> After pulling a new revision, re-run
+<span class="kw">pip install -e ".[gui,import,dev]"</span> to pick up any dependency change, and
+rebuild the reference library if the pattern calculation has changed. Stored libraries carry the
+metadata of the settings they were built with, and a library built by an older revision is read but
+may not correspond to the current calculation.</div>
+
+<h3 id="s4-2">4.2 Structure data and licensing</h3>
+
+<div class="warn"><strong>No structure data is distributed with ClayQuant.</strong> The crystal
+structures it uses are ICSD entries, which are licensed by FIZ Karlsruhe and may not be
+redistributed. They must be exported from your own subscription. The repository's ignore rules are
+written so that a local copy cannot be committed by accident.</div>
+
+<p>Export each of the following as CIF and save it under exactly the name given:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">ICSD</th><th>File name</th><th>Structure reference</th></tr>
+<tr><td>Illite</td><td class="num">90144</td><td class="kw">illite_ICSD_90144.cif</td>
+<td>Gualtieri (2000)</td></tr>
+<tr><td>Chlorite (clinochlore IIb-4)</td><td class="num">164234</td><td class="kw">chlorite_ICSD_164234.cif</td>
+<td>Zanazzi, Comodi, Nazzareni &amp; Andreozzi (2009)</td></tr>
+<tr><td>Kaolinite 1<var>M</var></td><td class="num">63192</td><td class="kw">kaolinite_1M_ICSD_63192.cif</td>
+<td>Bish &amp; Von Dreele (1989)</td></tr>
+<tr><td>Kaolinite 2<var>M</var></td><td class="num">30285</td><td class="kw">kaolinite_2M_ICSD_30285.cif</td>
+<td>Gruner (1932)</td></tr>
+</table></div>
+
+<p>The directory is searched in this order:</p>
+<ol>
+<li>the path in the environment variable <span class="kw">CLAYQUANT_STRUCTURE_DIR</span>, if set;</li>
+<li>a <span class="kw">structures</span> folder in the current working directory;</li>
+<li>the package data directory.</li>
+</ol>
+
+<p>To check what has been found:</p>
+
+<pre><code>python -c "from clayquant.models import available_phases, structure_directory; \
+print(structure_directory()); print(available_phases())"</code></pre>
+
+<p>The glycol&ndash;smectite layer requires no file. It is the published one-dimensional model of
+Reynolds (1965), transcribed into the source with its provenance, and is reproduced under
+&sect;<a href="#a-2">A.2</a>.</p>
+
+<h3 id="s4-3">4.3 Importing a TOPAS structure library</h3>
+
+<p>The accompanying non-clay minerals &mdash; quartz, feldspars, carbonates, sulphates, oxides
+&mdash; come from a structure library of your own. ClayQuant reads the jEdit macro-menu form in
+which TOPAS structure collections are commonly distributed: an XML file whose items each insert a
+TOPAS <span class="kw">str</span> block with a phase name, cell parameters, space group and
+<span class="kw">site</span> lines.</p>
+
+<pre><code>clayquant-import-structures my_structures.xml -o structures/phases.json</code></pre>
+
+<p>Space group symbols are expanded to explicit symmetry operations with gemmi, including the
+origin-choice settings that TOPAS writes as a trailing letter
+(<span class="kw">Fd-3mS</span> for origin choice 1, <span class="kw">Fd-3mZ</span> for choice 2;
+see &sect;<a href="#a-3">A.3</a>). The operations are stored in the generated database, so gemmi is
+not needed afterwards.</p>
+
+<p>The generated database is derived from licensed structure data and is likewise kept out of version
+control.</p>
+
+<h3 id="s4-4">4.4 Building the reference library</h3>
+
+<p>A library is built once for a given instrument configuration and measurement grid, and reused.
+Build it on the same 2&theta; grid as the measurements.</p>
+
+<pre><code>clayquant-build-library -o library/clays.npz</code></pre>
+
+<p>Building the default library takes about three minutes. Within the interface the same operation
+is available as <em>Build library now</em>, using the current instrument settings.</p>
+
+<h2 id="s5">5 Operating procedure</h2>
+
+<h3 id="s5-1">5.1 Specimen preparation assumed</h3>
+
+<p>ClayQuant assumes the preparation customary for clay mineral analysis: the bulk sample is ground,
+the clay fraction separated by sedimentation or centrifugation, and the separate deposited on glass
+slides to give oriented mounts, of which one is left air-dried, one solvated with ethylene glycol
+and one heated, typically to 500 &deg;C. A bulk (randomly oriented) measurement of the whole sample
+is useful context but is not required by the program.</p>
+
+<h3 id="s5-2">5.2 Step 1 &mdash; Load</h3>
+
+<p>Enter the folder holding the measurements and press <em>Scan folder</em>. Files are listed, and
+the three mounts are assigned from the drop-down menus; names containing <span class="kw">air</span>,
+<span class="kw">eg</span> or <span class="kw">glyc</span>, and <span class="kw">heat</span> are
+pre-selected where recognised. Press <em>Load</em>.</p>
+
+<p>The point count, angular range and step are reported for each mount. Check that all three cover
+the same range: the diagnostics compare mounts point by point after interpolation, and a mount
+measured over a different range will still work but will restrict the comparison.</p>
+
+<h3 id="s5-3">5.3 Step 2 &mdash; Zero error</h3>
+
+<p>The 2&theta; zero error is determined on the quartz 100 reflection, <var>d</var> = 4.2551 &aring;,
+2&theta; = 20.859&deg; for Cu K&alpha;<sub>1</sub>. This reflection is chosen because no clay basal
+reflection falls on it.</p>
+
+<p><em>Find peak automatically</em> locates it and sets the slider; the slider itself steps in
+0.01&deg;, half the usual measurement step, and the merit curve beneath shows the figure of merit
+against candidate offsets so the chosen value can be seen to be the optimum. Each mount carries its
+own zero error, because each is a separately prepared slide with its own displacement; set all
+three.</p>
+
+<div class="warn"><strong>Quartz 100 is only 0.4&deg; from the kaolinite 020 band at 4.36 &aring;.</strong>
+In a clay separate quartz is often weak while kaolinite is strong, and a wide search window will
+find kaolinite and return a zero error of about &minus;0.4&deg;, displacing the whole pattern. The
+search window is therefore deliberately narrow (&plusmn;0.30&deg; by default) and a signal-to-noise
+test is applied. Where quartz is genuinely absent the program reports that it found no calibration
+peak and leaves the shift at zero rather than returning a meaningless number; set the value by hand
+or calibrate on another reflection. See &sect;<a href="#a-5">A.5</a>.</div>
+
+<h3 id="s5-4">5.4 Step 3 &mdash; Background</h3>
+
+<p>Choose a model and adjust it until it follows the background without cutting into the peaks. The
+components are described in &sect;<a href="#s6">6</a>; the <span class="kw">1/x</span> term, which
+describes the low-angle rise from air scatter and the direct beam, can be added to any of the others.
+A non-parametric peak-stripped background is also available for backgrounds no low-order function
+follows.</p>
+
+<p>Models are fitted not to the raw counts but to a peak-stripped estimate of the background, then
+refined asymmetrically. This matters: a clay pattern has no peak-free points below about 8&deg;, so
+fitting the raw intensities there drags the background up into the basal reflections and removes the
+very signal being quantified. Peak stripping errs the other way, underestimating the background
+beneath a broad strong low-angle reflection, which is the safe direction but means the low-angle
+background should always be checked by eye.</p>
+
+<p><em>Apply to all mounts</em> uses the same model for the three mounts, which is appropriate when
+they were measured under identical conditions.</p>
+
+<h3 id="s5-5">5.5 Step 4 &mdash; Main minerals</h3>
+
+<p>Load the phase database of &sect;<a href="#s4-3">4.3</a> and press <em>Search for main
+minerals</em>. If a reference library has been loaded, every candidate is calculated and fitted in
+competition with the clay patterns and with each other in a single non-negative least-squares solve,
+and each is ranked by the share of the pattern it takes. Without a library, the program falls back
+to matching predicted peak positions, which is a much weaker test (&sect;<a href="#a-6">A.6</a>).</p>
+
+<p>A dialog lists what was found:</p>
+
+<blockquote><em>Evidence for the following main minerals has been found in the data:</em></blockquote>
+
+<p>with, for each, its share of the pattern, how many of its expected lines were found, and the best
+signal-to-noise among them. Phases with a clear share are ticked; the tail at one or two per cent is
+listed but left unticked, being largely least-squares slack rather than mineralogy.</p>
+
+<div class="warn"><strong>This is a shortlist for judgement, not an identification.</strong> Phases
+with similar cells &mdash; the feldspars, the spinels, dolomite against ankerite &mdash; cannot be
+separated on diffraction evidence alone at these levels, and a database assembled for general
+laboratory use contains many phases that cannot occur in a sediment. Tick what the sample can
+plausibly contain. Selected phases are fitted with the clays and reported separately, then removed
+when the clay percentages are normalised.</div>
+
+<h3 id="s5-6">5.6 Step 5 &mdash; Kaolinite</h3>
+
+<p>Kaolinite is identified by the loss of its 7.15 &aring; reflection on heating. Because the two
+mounts are separate slides with different amounts of material, the comparison is meaningless until
+they are put on a common scale; the program does this on a reflection that survives heating,
+by default the illite 10 &aring; reflection, and reports the scale factor used.</p>
+
+<p>The result is the percentage of the 7.15 &aring; area lost. What survives is chlorite 002, which
+occupies the same position and does not collapse. A sample with both minerals therefore shows
+partial collapse, and the surviving fraction is an estimate of the chlorite contribution to that
+peak.</p>
+
+<h3 id="s5-7">5.7 Step 6 &mdash; Expandable clay</h3>
+
+<p>Expandable layers are identified by the shift of the low-angle reflection on glycol solvation:
+a smectite interlayer takes up a two-layer glycol complex and expands to about 16.9 &aring;. The
+program locates the reflection in a window of the air-dried and glycolated mounts, reports both
+positions in &aring;ngstr&ouml;m and the shift between them, and the ratio of the areas.</p>
+
+<p>A shift towards larger <var>d</var> is the diagnostic. A shift of 13.8 &rarr; 16.1 &aring;, for
+example, is unambiguous evidence of expandable layers. No shift means either that there are none, or
+that the expandable component is a minor interstratified fraction whose effect is spread through
+the illite/smectite series rather than concentrated in a discrete peak &mdash; which the
+quantitative fit will still detect.</p>
+
+<h3 id="s5-8">5.8 Step 7 &mdash; Fit and results</h3>
+
+<p>Load a reference library, choose the mount to fit &mdash; normally the glycol-solvated one &mdash;
+set the angular range, and press <em>Run NNLS fit</em>.</p>
+
+<p>Choose the fitting range deliberately. The lower limit should exclude the direct-beam tail, and
+4&deg; is a reasonable default; setting it lower rarely adds information and can let the fit chase
+background. The upper limit should include the region where the main minerals have their strong
+lines, so that they are properly determined, but there is little clay information above about
+35&deg;.</p>
+
+<p><em>Restrict orientation parameters</em> limits the fit to library patterns of particular
+March&ndash;Dollase values. Since a well-prepared oriented mount is strongly textured, restricting
+to the low values (0.1&ndash;0.3) both speeds the fit and prevents it from using near-random patterns
+to model what is really a texture effect.</p>
+
+<p>The results appear as four plots and two tables, described in &sect;<a href="#s8">8</a>.
+<em>Export tables and plots</em> writes them to disk.</p>
+
+<div class="note"><strong>Read the plots, not only the table.</strong> The fit will always return
+numbers. Whether they mean anything is visible in the difference curve of the <em>Fit</em> plot and
+in whether the per-phase curves of the <em>All phases</em> plot sit under real features of the
+measurement. A large systematic residual at one strong peak usually means a layer spacing or
+crystallite thickness outside the range the library spans (&sect;<a href="#s9">9</a>).</div>
+
+<h3 id="s5-9">5.9 The simulator</h3>
+
+<p>The simulator drives the calculation directly, independently of any measurement, for teaching, for
+exploring what a given composition looks like, and for checking the effect of a parameter. It
+computes a single interstratified or discrete pattern from the controls of
+&sect;<a href="#s6">6</a> and displays it immediately.</p>
+
+<h2 id="s6">6 Reference: interface controls</h2>
+
+<p>Every control is listed below by the tab on which it appears, with the identifier used internally,
+its default, and its meaning. Sliders show their current value; range sliders have two handles.</p>
+
+<h3>6.1 Tab 1 &mdash; Load</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Data folder</td><td class="kw">directory</td><td>&mdash;</td>
+<td>Folder searched for measurement files. Sub-folders are not searched.</td></tr>
+<tr><td>Scan folder</td><td class="kw">scan</td><td>&mdash;</td>
+<td>Lists readable files and offers them in the three drop-downs. Names containing
+<em>air</em>, <em>eg</em>/<em>glyc</em> and <em>heat</em> are pre-selected where recognised.</td></tr>
+<tr><td>Air-dried / Ethylene glycol / Heated</td><td><span class="kw">file-air</span>, <span class="kw">file-glycol</span>, <span class="kw">file-heated</span></td><td>&mdash;</td>
+<td>Assignment of a file to each mount. The glycol mount is the one normally fitted; the other two drive the diagnostics.</td></tr>
+<tr><td>Load</td><td class="kw">load</td><td>&mdash;</td>
+<td>Reads the selected files and reports points, range and step for each.</td></tr>
+</table></div>
+
+<h3>6.2 Tab 2 &mdash; Zero error</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Mount</td><td class="kw">zero-mount</td><td>Air-dried</td>
+<td>Which mount the slider and the automatic search act on. Each mount has its own zero error.</td></tr>
+<tr><td>Calibration reflection</td><td class="kw">zero-reference</td><td>Quartz 100, 4.2551 &aring;</td>
+<td>The reflection whose known position defines the zero. Quartz 100 clears all clay basal reflections. Quartz 101 (3.3435 &aring;) is stronger but overlaps illite 003.</td></tr>
+<tr><td>Zero error (&deg;2&theta;, steps of 0.01)</td><td class="kw">zero-slider</td><td>0.00</td>
+<td>The offset <em>subtracted</em> from the measured angles. The step is 0.01&deg;, half the usual 0.02&deg; measurement step.</td></tr>
+<tr><td>Find peak automatically</td><td class="kw">zero-auto</td><td>&mdash;</td>
+<td>Locates the calibration peak within a narrow window and sets the slider. Reports the signal-to-noise, or states that no calibration peak was found.</td></tr>
+</table></div>
+
+<h3>6.3 Tab 3 &mdash; Background</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Mount</td><td class="kw">bg-mount</td><td>Air-dried</td><td>Mount displayed and fitted.</td></tr>
+<tr><td>Main component</td><td class="kw">bg-kind</td><td>Chebyshev</td>
+<td><em>Polynomial</em>: &Sigma;<var>c<sub>k</sub>u<sup>k</sup></var> in the angle scaled to [&minus;1,1].
+<em>Chebyshev</em>: &Sigma;<var>c<sub>k</sub>T<sub>k</sub></var>(<var>u</var>), better conditioned at high degree and the usual Rietveld choice.
+<em>Exponential</em>: a single decaying term.
+<em>Peak-stripped</em>: non-parametric; the stripped estimate is used directly and follows any shape, at the cost of having no parameters.</td></tr>
+<tr><td>Degree</td><td class="kw">bg-degree</td><td>5</td>
+<td>Degree of the polynomial or Chebyshev component; degree <var>n</var> contributes <var>n</var>+1 terms. Raise it only as far as the background demands: an over-flexible background follows peaks.</td></tr>
+<tr><td>Exponential decay (1/&deg;)</td><td class="kw">bg-decay</td><td>0.15</td>
+<td>Decay constant of the exponential component, in reciprocal degrees.</td></tr>
+<tr><td>Add 1/x term</td><td class="kw">bg-inverse</td><td>on</td>
+<td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
+<tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
+<td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
+<tr><td>Peak-stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
+<td>Width of the widest feature the stripping treats as a peak. Too small and broad reflections are treated as background; too large and the background itself is followed poorly.</td></tr>
+<tr><td>Apply to this mount / Apply to all mounts</td><td><span class="kw">bg-apply</span>, <span class="kw">bg-apply-all</span></td><td>&mdash;</td>
+<td>Stores the fitted background. <em>All</em> uses the same model for the three mounts, appropriate when they were measured under identical conditions.</td></tr>
+</table></div>
+
+<h3>6.4 Tab 4 &mdash; Main minerals</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Phase database (.json)</td><td class="kw">db-path</td><td class="kw">structures/phases.json</td>
+<td>The database produced by <span class="kw">clayquant-import-structures</span>.</td></tr>
+<tr><td>Load database</td><td class="kw">db-load</td><td>&mdash;</td>
+<td>Reads it and reports how many phases it holds. Phyllosilicates in the database are left to the clay library and are not offered here.</td></tr>
+<tr><td>Mount to search</td><td class="kw">detect-mount</td><td>Air-dried</td>
+<td>Which mount is searched. The air-dried mount is usually the best choice: glycol dilutes the accompanying minerals and heating alters some of them.</td></tr>
+<tr><td>Unit cell allowance (%)</td><td class="kw">detect-allowance</td><td>2</td>
+<td>Relative cell deviation allowed when matching positions, applied as one <em>coherent</em> scaling of all of a phase's d-spacings. Most accompanying minerals are solid solutions whose cells differ from the database entry. Applied per peak instead of coherently, a 2 % allowance is a window up to 1.6&deg; wide and matches almost anything (&sect;<a href="#a-6">A.6</a>).</td></tr>
+<tr><td>Minimum share (&permil;) or score (%)</td><td class="kw">detect-score</td><td>10</td>
+<td>Reporting threshold. With a library loaded it is read as parts per thousand of the pattern (10 = 1 %); without one, as a percentage score of the peak-matching test.</td></tr>
+<tr><td>Minimum peak S/N</td><td class="kw">detect-snr</td><td>5</td>
+<td>Height above the local noise a predicted line must reach to count as found. Used by the peak-matching fallback and by the per-line evidence shown in the dialog.</td></tr>
+<tr><td>Search range (&deg;2&theta;)</td><td class="kw">detect-range</td><td>4 to 40</td>
+<td>Angular range considered. It should cover the strong lines of the expected accompanying minerals.</td></tr>
+<tr><td>Search for main minerals</td><td class="kw">detect-run</td><td>&mdash;</td>
+<td>Runs the search and opens the confirmation dialog.</td></tr>
+<tr><td>Include selected in the fit / Dismiss</td><td><span class="kw">detect-accept</span>, <span class="kw">detect-dismiss</span></td><td>&mdash;</td>
+<td>Confirms the tick list, or discards it. Nothing is added to the fit until confirmed.</td></tr>
+</table></div>
+
+<h3>6.5 Tab 5 &mdash; Kaolinite</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>7.15 &aring; window (&deg;2&theta;)</td><td class="kw">kao-window</td><td>11.6 to 13.2</td>
+<td>Integration window for the kaolinite 001 / chlorite 002 reflection.</td></tr>
+<tr><td>Scaling reference</td><td class="kw">kao-reference</td><td>Illite 10 &aring;</td>
+<td>The reflection used to put the air-dried and heated mounts on a common scale. It must survive heating. <em>Manual</em> uses the factor below instead.</td></tr>
+<tr><td>Manual scale factor</td><td class="kw">kao-scale</td><td>1.00</td>
+<td>Used when the scaling reference is set to manual.</td></tr>
+<tr><td>Compare air and heated</td><td class="kw">kao-run</td><td>&mdash;</td>
+<td>Reports the percentage of the 7.15 &aring; area lost, the surviving fraction attributable to chlorite 002, both areas, and the scale factor used.</td></tr>
+</table></div>
+
+<h3>6.6 Tab 6 &mdash; Expandable</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Search window (&deg;2&theta;)</td><td class="kw">sme-window</td><td>4.0 to 10.0</td>
+<td>Window searched for the low-angle reflection in both mounts. It must be wide enough to hold the air-dried position and the glycolated position, which may differ by several degrees.</td></tr>
+<tr><td>Scaling reference</td><td class="kw">sme-reference</td><td>Illite 10 &aring;</td>
+<td>As for kaolinite: puts the two mounts on a common scale so that the area ratio is meaningful.</td></tr>
+<tr><td>Manual scale factor</td><td class="kw">sme-scale</td><td>1.00</td><td>Used when scaling is manual.</td></tr>
+<tr><td>Compare air and glycol</td><td class="kw">sme-run</td><td>&mdash;</td>
+<td>Reports both positions in &aring;ngstr&ouml;m, the shift, and the area ratio.</td></tr>
+</table></div>
+
+<h3>6.7 Tab 7 &mdash; Fit and results</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Library file (.npz)</td><td class="kw">lib-path</td><td class="kw">library/clays.npz</td><td>The stored reference library.</td></tr>
+<tr><td>Load library / Build library now</td><td><span class="kw">lib-load</span>, <span class="kw">lib-build</span></td><td>&mdash;</td>
+<td>Loads a stored library, or builds one with the current instrument settings. Building takes a few minutes.</td></tr>
+<tr><td>Mount to fit</td><td class="kw">fit-mount</td><td>Ethylene glycol</td>
+<td>Which mount is quantified. The glycolated mount is the standard choice because glycolation resolves the illite/smectite series.</td></tr>
+<tr><td>Fit range (&deg;2&theta;)</td><td class="kw">fit-range</td><td>4 to 34</td>
+<td>Range fitted. Exclude the direct-beam tail at the low end; there is little clay information above about 35&deg;.</td></tr>
+<tr><td>Restrict orientation parameters</td><td class="kw">fit-orientations</td><td>all</td>
+<td>Limits the fit to library patterns of the chosen March&ndash;Dollase values. Restricting to low values is appropriate for a well-oriented mount and prevents the fit using near-random patterns to model a texture effect.</td></tr>
+<tr><td>Subtract the fitted background</td><td class="kw">fit-subtract</td><td>on</td>
+<td>Subtracts the background stored in step 3. Turn it off only if the measurement is already background-corrected.</td></tr>
+<tr><td>Run NNLS fit</td><td class="kw">fit-run</td><td>&mdash;</td>
+<td>Performs the weighted non-negative least-squares fit and produces the plots and tables.</td></tr>
+<tr><td>Export folder / Export tables and plots</td><td><span class="kw">export-path</span>, <span class="kw">export-run</span></td><td class="kw">results</td>
+<td>Writes the outputs of &sect;<a href="#s8">8</a>.</td></tr>
+</table></div>
+
+<h3>6.8 Simulator</h3>
+<div class="tablewrap"><table>
+<tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Model</td><td class="kw">sim-model</td><td>Interstratified</td>
+<td><em>Interstratified</em> computes a two-component stack; <em>Discrete phase</em> computes the pure phase from its structure.</td></tr>
+<tr><td>Phase / host</td><td class="kw">sim-phase</td><td>illite</td>
+<td>The discrete phase, or the host layer type A of the interstratification (the other component being glycol&ndash;smectite).</td></tr>
+<tr><td>Host layer fraction</td><td class="kw">sim-fraction</td><td>0.80</td>
+<td><var>W</var><sub>A</sub>, the proportion of host layers. 1.0 is the pure host; 0.0 the pure smectite.</td></tr>
+<tr><td>Junction probability P(host&rarr;smectite)</td><td class="kw">sim-pab</td><td>0 (random)</td>
+<td><var>P</var><sub>AB</sub> of &sect;<a href="#s2-7">2.7</a>. Zero selects random stacking (<var>R</var> = 0); values above <var>W</var><sub>B</sub> give ordering, below it segregation.</td></tr>
+<tr><td>Mean crystallite thickness (layers)</td><td class="kw">sim-csds</td><td>10</td>
+<td>&lang;<var>N</var>&rang; of the lognormal CSDS. This is the principal control on basal peak width.</td></tr>
+<tr><td>CSDS width &beta; (in ln N)</td><td class="kw">sim-beta</td><td>0.35</td>
+<td>Width of the distribution in ln <var>N</var>. Larger values give a broader spread of thicknesses and smoother peak profiles.</td></tr>
+<tr><td>March&ndash;Dollase orientation r</td><td class="kw">sim-po</td><td>0.3</td>
+<td>Texture parameter. Recall that it does not change the shape of a purely basal series, only the basal-to-non-basal ratio.</td></tr>
+<tr><td>Glycolated smectite d(001) (&aring;)</td><td class="kw">sim-dsmectite</td><td>16.86</td>
+<td>Repeat distance of the glycol&ndash;smectite layer. 16.86 &aring; is the value measured by Reynolds (1965); 16.9&ndash;17.1 &aring; is also used.</td></tr>
+<tr><td>2&theta; range (degrees)</td><td class="kw">sim-range</td><td>2 to 40</td><td>Calculated range.</td></tr>
+<tr><td>Options</td><td class="kw">sim-options</td><td>&mdash;</td>
+<td>Toggles for including the non-basal contribution and for showing the component curves separately.</td></tr>
+</table></div>
+
+<h2 id="s7">7 Reference: command line</h2>
+
+<h3>7.1 clayquant-build-library</h3>
+<div class="tablewrap"><table>
+<tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
+<tr><td class="kw">-o, --out</td><td class="kw">library/clays.npz</td><td>Output file.</td></tr>
+<tr><td class="kw">--two-theta-min, --two-theta-max</td><td>2, 40</td><td>Angular range of the calculated grid, in degrees.</td></tr>
+<tr><td class="kw">--step</td><td>0.02</td><td>Step of the calculated grid. Match the measurement.</td></tr>
+<tr><td class="kw">--csds-means</td><td>5 15 50</td><td>Mean crystallite thicknesses, in layers; one set of patterns per value.</td></tr>
+<tr><td class="kw">--csds-beta</td><td>0.35</td><td>Width of each lognormal distribution in ln <var>N</var>.</td></tr>
+<tr><td class="kw">--orientations</td><td>0.1 &hellip; 1.0</td><td>March&ndash;Dollase parameters to span.</td></tr>
+<tr><td class="kw">--quiet</td><td>off</td><td>Suppress progress reporting.</td></tr>
+</table></div>
+
+<h3>7.2 clayquant-import-structures</h3>
+<div class="tablewrap"><table>
+<tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
+<tr><td class="kw">xml</td><td>&mdash;</td><td>The jEdit macro-menu XML file to import (positional).</td></tr>
+<tr><td class="kw">-o, --out</td><td class="kw">structures/phases.json</td><td>Output phase database.</td></tr>
+<tr><td class="kw">--quiet</td><td>off</td><td>Suppress the per-phase notes and the failure list.</td></tr>
+</table></div>
+
+<h3>7.3 clayquant-gui</h3>
+<div class="tablewrap"><table>
+<tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
+<tr><td class="kw">--port</td><td>8050</td><td>Port to serve on.</td></tr>
+<tr><td class="kw">--host</td><td class="kw">127.0.0.1</td><td>Interface to bind. The default is the loopback, so the interface is not reachable from the network.</td></tr>
+<tr><td class="kw">--debug</td><td>off</td><td>Enable the development server's reloader and error pages.</td></tr>
+</table></div>
+
+<h2 id="s8">8 Output files</h2>
+
+<p><em>Export tables and plots</em> writes seven files into the chosen folder.</p>
+
+<div class="tablewrap"><table>
+<tr><th>File</th><th>Contents</th></tr>
+<tr><td class="kw">clayquant_mounts.html</td><td>The three mounts overlaid: air-dried, glycol-solvated, heated. The plot in which the kaolinite collapse and the glycol expansion are seen directly.</td></tr>
+<tr><td class="kw">clayquant_fit.html</td><td>The measurement, the fitted curve and the difference, with <var>R</var><sub>wp</sub> in the title.</td></tr>
+<tr><td class="kw">clayquant_phases.html</td><td>The measurement with every fitted phase drawn separately, and their sum.</td></tr>
+<tr><td class="kw">clayquant_clay_phases.html</td><td>The same for the clay minerals alone, annotated with the clay share of the whole pattern.</td></tr>
+<tr><td class="kw">clayquant_all_phases.csv</td><td>Quantification over all fitted phases.</td></tr>
+<tr><td class="kw">clayquant_clays_only.csv</td><td>Quantification over the clay minerals alone, renormalised to 100 %.</td></tr>
+<tr><td class="kw">clayquant_curves.csv</td><td>The numerical curves: 2&theta;, measured, fit, and one column per phase, so the figures can be redrawn in any other program.</td></tr>
+</table></div>
+
+<p>The figures are self-contained HTML: they need no plotting software to open and keep the zoom and
+hover of the interactive versions.</p>
+
+<h3>8.1 Columns of the quantification tables</h3>
+<div class="tablewrap"><table>
+<tr><th>Column</th><th>Meaning</th></tr>
+<tr><td class="kw">phase</td><td>Phase name. Interstratified series appear as <span class="kw">I/S</span> and <span class="kw">C/S</span>, summed over the individual library patterns that contributed.</td></tr>
+<tr><td class="kw">group</td><td><span class="kw">clay</span> or <span class="kw">main</span>. Determines which phases the clay-basis normalisation keeps.</td></tr>
+<tr><td class="kw">coefficient</td><td>Sum of the fitted scale factors <var>c<sub>p</sub></var> of that phase's patterns. Depends on the arbitrary normalisation of the library and is meaningful only in comparison within one fit.</td></tr>
+<tr><td class="kw">scattering_percent</td><td>The phase's share of the calculated integrated intensity. <strong>The primary number.</strong></td></tr>
+<tr><td class="kw">amplitude_percent</td><td>The phase's share of the summed scale factors.</td></tr>
+<tr><td class="kw">entries</td><td>The individual library patterns that took non-zero coefficients, naming the composition, orientation parameter, crystallite thickness and layer spacing selected. This is where the fit reports what it found: an <span class="kw">I/S</span> share carried by 0.90/0.10 patterns at <var>d</var> = 9.95 &aring; and <var>N</var> = 50 is a specific mineralogical statement.</td></tr>
+</table></div>
+
+<p>Each file carries a header recording the measurement, <var>R</var><sub>wp</sub> and
+<var>R</var><sub>p</sub>, the basis of normalisation, the clay share of the whole pattern where
+applicable, and a statement that the percentages are shares of diffracted intensity and not weight
+percent, so that a file cannot later be mistaken for a mass analysis.</p>
+
+<h2 id="s9">9 Limitations</h2>
+
+<p>These are properties of the method, not defects to be worked around. Each is stated with its
+practical consequence.</p>
+
+<ol>
+<li><strong>A fixed library cannot refine.</strong> Peak positions, widths and orientation are
+sampled at the values the library was built with. A specimen whose layer spacing or crystallite
+thickness falls outside the spanned range will fit badly, and the misfit appears as a systematic
+residual at a strong peak rather than as an obviously wrong answer. Widen the spanned ranges and
+rebuild if this is seen.</li>
+
+<li><strong>Percentages are shares of intensity, not of mass</strong> (&sect;<a href="#s2-13">2.13</a>).</li>
+
+<li><strong>Kaolinite polytypes are not distinguishable from basal reflections</strong>
+(&sect;<a href="#s2-3">2.3</a>). A division of intensity between 1<var>M</var> and 2<var>M</var> is
+not a polytype determination.</li>
+
+<li><strong>The non-basal contribution of an interstratified phase is approximated</strong> by that
+of its host (&sect;<a href="#s2-12">2.12</a>). Turbostratic <var>hk</var> bands are not modelled with
+their true sawtooth profile. The approximation is good for a strongly oriented mount and degrades as
+<var>r</var> &rarr; 1.</li>
+
+<li><strong>Only two-component interstratifications are treated.</strong> Three-component systems,
+and mixed-layer chlorite/smectite/illite, are outside the model.</li>
+
+<li><strong>Accompanying minerals of similar cell cannot be separated.</strong> The screen ranks
+candidates by explained intensity, which is far sharper than position matching, but the feldspars,
+the spinels and the rhombohedral carbonates remain close enough that the ranking should be read as a
+shortlist for judgement (&sect;<a href="#s5-5">5.5</a>).</li>
+
+<li><strong>The zero error requires quartz.</strong> Where quartz is absent the program declines to
+report a value; it must then be set by hand, and an error there displaces the whole pattern and
+corrupts the fit.</li>
+
+<li><strong>The low-angle background is the weakest part of the reduction.</strong> There are no
+peak-free points below about 8&deg;, so the background there is an extrapolation. It should always
+be inspected by eye, particularly when a smectite 001 near 5.2&deg; is at issue.</li>
+
+<li><strong>The ordered case is implemented but not spanned by the default library</strong>
+(&sect;<a href="#s2-7">2.7</a>). Regularly interstratified minerals such as rectorite and corrensite
+will not be fitted correctly by a library built with the default settings.</li>
+
+<li><strong>No absorption or microabsorption correction is applied.</strong> For an infinitely thick
+specimen in Bragg&ndash;Brentano geometry the absorption factor is independent of angle and cancels
+in relative intensities; a thin mount violates this, as does a specimen of strongly contrasting
+absorption between phases.</li>
+</ol>
+
+<h2 id="s10">10 References</h2>
+
+<ol class="refs">
+<li>Bish, D. L. &amp; Von Dreele, R. B. (1989) Rietveld refinement of non-hydrogen atomic positions
+in kaolinite. <em>Clays and Clay Minerals</em> <strong>37</strong>, 289&ndash;296.</li>
+<li>Bradley, W. F. (1945) Molecular associations between montmorillonite and some polyfunctional
+organic liquids. <em>Journal of the American Chemical Society</em> <strong>67</strong>, 975&ndash;981.</li>
+<li>Bradley, W. F. (1954) X-ray diffraction criteria of chloritic material. <em>Proceedings of the
+Second National Conference on Clays and Clay Minerals</em>, NAS&ndash;NRC Publication 327, 324&ndash;334.</li>
+<li>Caglioti, G., Paoletti, A. &amp; Ricci, F. P. (1958) Choice of collimators for a crystal
+spectrometer for neutron diffraction. <em>Nuclear Instruments</em> <strong>3</strong>, 223&ndash;228.</li>
+<li>Dollase, W. A. (1986) Correction of intensities for preferred orientation in powder
+diffractometry: application of the March model. <em>Journal of Applied Crystallography</em>
+<strong>19</strong>, 267&ndash;272.</li>
+<li>Drits, V. A. &amp; Tchoubar, C. (1990) <em>X-ray Diffraction by Disordered Lamellar Structures</em>.
+Springer, Berlin.</li>
+<li>Drits, V. A., Eberl, D. D. &amp; &#346;rodo&#324;, J. (1998) XRD measurement of mean thickness,
+thickness distribution and strain for illite and illite&ndash;smectite crystallites by the
+Bertaut&ndash;Warren&ndash;Averbach technique. <em>Clays and Clay Minerals</em> <strong>46</strong>,
+38&ndash;50.</li>
+<li>Gruner, J. W. (1932) The crystal structure of kaolinite. <em>Zeitschrift f&uuml;r
+Kristallographie</em> <strong>83</strong>, 75&ndash;88.</li>
+<li>Gualtieri, A. F. (2000) Accuracy of XRPD QPA using the combined Rietveld&ndash;RIR method.
+<em>Journal of Applied Crystallography</em> <strong>33</strong>, 267&ndash;278.</li>
+<li>Hendricks, S. &amp; Teller, E. (1942) X-ray interference in partially ordered layer lattices.
+<em>Journal of Chemical Physics</em> <strong>10</strong>, 147&ndash;167.</li>
+<li>Kakinoki, J. &amp; Komura, Y. (1952) Intensity of X-ray diffraction by a one-dimensionally
+disordered crystal. <em>Journal of the Physical Society of Japan</em> <strong>7</strong>, 30&ndash;35.</li>
+<li>Klug, H. P. &amp; Alexander, L. E. (1954) <em>X-ray Diffraction Procedures</em>. Wiley, New York.</li>
+<li>Lawson, C. L. &amp; Hanson, R. J. (1974) <em>Solving Least Squares Problems</em>. Prentice-Hall,
+Englewood Cliffs.</li>
+<li>MacEwan, D. M. C. (1948) Complexes of clays with organic compounds I. <em>Transactions of the
+Faraday Society</em> <strong>44</strong>, 349&ndash;367.</li>
+<li>MacEwan, D. M. C., Amil, A. R. &amp; Brown, G. (1961) Interstratified clay minerals. In
+G. Brown (ed.) <em>The X-ray Identification and Crystal Structures of Clay Minerals</em>,
+Mineralogical Society, London, 393&ndash;445.</li>
+<li>March, A. (1932) Mathematische Theorie der Regelung nach der Korngestalt bei affiner Deformation.
+<em>Zeitschrift f&uuml;r Kristallographie</em> <strong>81</strong>, 285&ndash;297.</li>
+<li>Moore, D. M. &amp; Reynolds, R. C. Jr. (1997) <em>X-Ray Diffraction and the Identification and
+Analysis of Clay Minerals</em>, 2nd edn. Oxford University Press, Oxford.</li>
+<li>Reynolds, R. C. Jr. (1965) An X-ray study of an ethylene glycol&ndash;montmorillonite complex.
+<em>The American Mineralogist</em> <strong>50</strong>, 990&ndash;1001.</li>
+<li>Reynolds, R. C. Jr. (1980) Interstratified clay minerals. In G. W. Brindley &amp; G. Brown (eds)
+<em>Crystal Structures of Clay Minerals and their X-ray Identification</em>, Mineralogical Society,
+London, 249&ndash;303.</li>
+<li>Schoen, R. (1962) Semi-quantitative analysis of chlorites by X-ray diffraction. <em>The American
+Mineralogist</em> <strong>47</strong>, 1384&ndash;1392.</li>
+<li>Waasmaier, D. &amp; Kirfel, A. (1995) New analytical scattering-factor functions for free atoms
+and ions. <em>Acta Crystallographica</em> <strong>A51</strong>, 416&ndash;431.</li>
+<li>Zanazzi, P. F., Comodi, P., Nazzareni, S. &amp; Andreozzi, G. B. (2009) Thermal behaviour of
+chlorite: an in-situ single-crystal and powder diffraction study. <em>European Journal of
+Mineralogy</em> <strong>21</strong>, 581&ndash;589.</li>
+</ol>
+
+<h2 id="a">Appendix A &mdash; Record of verification tests</h2>
+
+<p>This appendix records the tests by which ClayQuant was verified during development: what each
+test was for, how it was done, what it returned, and what was concluded. Several tests are recorded
+that <em>failed</em> and led to a change in the program; these are the more informative ones and are
+reported in full.</p>
+
+<div class="note"><strong>On the measurements used.</strong> Development was verified against 33
+measurements of eleven clay separates from a working laboratory. Those measurements are proprietary
+and are <strong>not</strong> reproduced here, nor distributed with the program. They are referred to
+below as Specimen 1, Specimen 2 and so on, and only derived quantities &mdash; agreement factors,
+peak widths, fitted positions &mdash; are quoted, never the measured data themselves.</div>
+
+<h3 id="a-1">A.1 The interstratification model against closed-form results</h3>
+
+<p><strong>Reasoning.</strong> The matrix method of &sect;<a href="#s2-5">2.5</a> is the core of the
+program and is easy to implement subtly wrongly: the phase convention of equation (2.10) can be
+transposed, the pair counting of equation (2.11) can be off by one, and the stationary distribution
+can be inconsistent with the transition matrix. None of these produce obviously absurd output &mdash;
+they produce a plausible pattern that is wrong. The model must therefore be tested against cases
+whose answer is known independently.</p>
+
+<p><strong>Method and results.</strong> Twenty-five tests (<span class="kw">test_mixed_layer.py</span>):</p>
+
+<div class="tablewrap"><table>
+<tr><th>Test</th><th>Reasoning</th><th>Result</th></tr>
+<tr><td>Single component reproduces the Laue interference function, for <var>N</var> = 1, 2, 5, 17</td>
+<td>With one layer type the general result must collapse to the closed form (2.7). This checks the
+phase convention, the pair counting and the <var>N</var>-dependence simultaneously, against an exact
+expression.</td>
+<td>Agreement to numerical precision at all four thicknesses. <strong>Pass.</strong></td></tr>
+<tr><td>Two identical layer types behave as one</td>
+<td>Setting A and B to the same layer must give the one-component answer whatever the proportions,
+which tests that the two components are combined without double counting.</td>
+<td>Identical to the single-component calculation. <strong>Pass.</strong></td></tr>
+<tr><td>A pure end member ignores the absent layer</td>
+<td>At <var>W</var><sub>A</sub> = 1 the pattern must not depend on what B is. A failure here would
+show the absent component leaking through the transition matrix.</td>
+<td>Independent of the B layer model. <strong>Pass.</strong></td></tr>
+<tr><td>Single-layer crystallites show no interference</td>
+<td>At <var>N</var> = 1 the intensity must be the layer structure factor squared, with no
+interference term at all. This isolates the pair sum.</td>
+<td>Reduces to &Sigma;<var>W<sub>m</sub></var>|<var>F<sub>m</sub></var>|<sup>2</sup>.
+<strong>Pass.</strong></td></tr>
+<tr><td>Intensity is non-negative &mdash; 15 cases: random, ordered and segregated stacking at
+<var>W</var><sub>A</sub> = 0.05, 0.2, 0.5, 0.8, 0.95</td>
+<td>Intensity is a squared modulus and cannot be negative anywhere. A sign error in the real part of
+the matrix sum, or an inconsistent stationary distribution, shows up as small negative excursions
+between peaks. This is the most sensitive cheap test of the whole formalism.</td>
+<td>Non-negative throughout in all 15 cases. <strong>Pass.</strong></td></tr>
+<tr><td>CSDS pair weights</td>
+<td><var>G</var>(<var>n</var>) of equation (2.14) must equal 1 at <var>n</var> = 0 and decrease
+monotonically to zero, or the thickness distribution is misapplied.</td>
+<td>As specified. <strong>Pass.</strong></td></tr>
+<tr><td>The random transition matrix is the Markov special case</td>
+<td>Building a matrix with <var>P</var><sub>AB</sub> = <var>W</var><sub>B</sub> through the general
+Markov constructor must give exactly the random one. This checks the constructor against its own
+special case.</td>
+<td>Identical matrices. <strong>Pass.</strong></td></tr>
+<tr><td>Impossible ordering is rejected</td>
+<td>A <var>P</var><sub>AB</sub> implying a probability outside [0,1] is unphysical and must raise
+rather than silently produce nonsense.</td>
+<td>Raises. <strong>Pass.</strong></td></tr>
+</table></div>
+
+<p><strong>Conclusion.</strong> The interstratification model reproduces every case for which an
+independent answer exists, and satisfies the positivity constraint across the full range of
+composition and ordering.</p>
+
+<h4>Consistency of the basal and three-dimensional calculations</h4>
+
+<p><strong>Reasoning.</strong> The same phase can be computed two ways &mdash; as a
+three-dimensional structure through equation (2.3), or as a one-dimensional layer stack through
+&sect;<a href="#s2-5">2.5</a>. These are independent code paths that must agree on the basal series
+of a pure phase, otherwise the mixed-layer patterns and the discrete patterns are on different
+scales and the fit apportions intensity wrongly between them.</p>
+
+<p><strong>Results</strong> (<span class="kw">test_basal_consistency.py</span>): for illite,
+chlorite, kaolinite 1<var>M</var> and kaolinite 2<var>M</var>, the basal series computed from the
+one-dimensional layer model matches the 00<var>l</var> intensities of the full three-dimensional
+calculation; the derived layer thickness equals <var>d</var>(001) of the cell divided by the number
+of layers per cell; and the absolute spacings agree with the accepted values (10.02, 14.28, 7.15,
+7.15 &aring;). <strong>Pass.</strong></p>
+
+<p><strong>Conclusion.</strong> The polytype folding of &sect;<a href="#s2-3">2.3</a> is exact for
+the structures used, and the two code paths are on a common scale.</p>
+
+<h3 id="a-2">A.2 Validation against Reynolds (1965)</h3>
+
+<p><strong>Reasoning.</strong> Everything above is internal consistency: the program agreeing with
+itself. An external check against a published experiment is needed, and the glycol&ndash;smectite
+complex is the ideal one, because Reynolds (1965) published both his structural model (his Table 1)
+and his observed and calculated structure factors and intensities for fourteen basal orders (his
+Table 2). Reproducing his calculated quantities from his stated model tests the layer structure
+factor of equation (2.6), the scattering factors, the displacement factors and the
+Lorentz&ndash;polarization treatment together, against data that did not come from this program.</p>
+
+<p><strong>Method.</strong> The model of his Table 1 was transcribed, the basal structure factors
+computed from equation (2.6), converted to intensities with the random-powder
+Lorentz&ndash;polarization factor he states he used, normalised at 001, and compared with his Table 2.
+Agreement is measured by his own reliability factor,
+<var>R</var> = &Sigma;||<var>F</var><sub>o</sub>|&minus;|<var>F</var><sub>c</sub>|| /
+&Sigma;|<var>F</var><sub>o</sub>|.</p>
+
+<p><strong>An ambiguity, and how it was resolved.</strong> His Table 1 gives occupancies per atomic
+plane, but the octahedral plane lies on the mirror at <var>z</var> = 0 and is quoted as half its
+content; and his glycol rows are labelled as half-molecules ("H<sub>2</sub>C&ndash;HO"), which may or
+may not include their hydrogens. Four readings are possible. Rather than guess, all four were
+computed and compared with his published values:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Reading</th><th class="num">Electrons per cell</th><th class="num"><var>R</var>(|<var>F</var><sub>o</sub>|)</th><th class="num">Mean |&Delta;log<sub>10</sub><var>I</var>|</th></tr>
+<tr><td>A &mdash; octahedral plane as quoted, glycol without H</td><td class="num">452</td><td class="num">0.299</td><td class="num">0.350</td></tr>
+<tr><td>B &mdash; octahedral plane as quoted, glycol with H</td><td class="num">476</td><td class="num">0.312</td><td class="num">0.327</td></tr>
+<tr><td>C &mdash; octahedral plane doubled, glycol without H</td><td class="num">480</td><td class="num">0.077</td><td class="num">0.158</td></tr>
+<tr><td><strong>D &mdash; octahedral plane doubled, glycol with H</strong></td><td class="num"><strong>504</strong></td><td class="num"><strong>0.039</strong></td><td class="num"><strong>0.028</strong></td></tr>
+</table></div>
+
+<p><strong>Result.</strong> Reading D is correct by a wide margin. It also reproduces independently
+the electron count Reynolds states for his cell ("about 500 electrons"): 504 against his ~500, where
+the other readings give 452 to 480. Its reliability factor, <var>R</var> = 0.039, is slightly
+<em>better</em> than the <var>R</var> = 0.042 he reports for his own best model &mdash; as expected,
+since modern scattering factors are used. Four tests now assert this permanently
+(<span class="kw">test_reynolds_1965.py</span>): the electron count, the reliability factor, the
+fourteen calculated intensities, and the ordering of the strong orders.</p>
+
+<p><strong>Conclusion.</strong> The one-dimensional structure factor calculation reproduces a
+published experimental analysis to better than its original agreement. This is the strongest
+external validation in the program, and it simultaneously confirms the choice of
+Lorentz&ndash;polarization factor of &sect;<a href="#s2-8">2.8</a>, since no other choice reproduces
+these intensities.</p>
+
+<h3 id="a-3">A.3 Import of a TOPAS structure library</h3>
+
+<p><strong>Reasoning.</strong> The accompanying minerals enter the fit as calculated patterns, so an
+error in reading their structures &mdash; a misparsed cell parameter, a wrong space group setting,
+a mis-assigned occupancy &mdash; produces a wrong pattern that the fit will nevertheless use. The
+import must be verified against known diffraction data, phase by phase.</p>
+
+<p><strong>Method and results.</strong> A library of 205 phases was imported and the strongest
+calculated line of each of sixteen well-known phases compared with its accepted position.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Calculated (&deg;2&theta;)</th><th class="num">Accepted (&deg;2&theta;)</th><th class="num">&Delta;</th></tr>
+<tr><td>Quartz</td><td class="num">26.64</td><td class="num">26.64</td><td class="num">+0.00</td></tr>
+<tr><td>Calcite</td><td class="num">29.40</td><td class="num">29.40</td><td class="num">+0.00</td></tr>
+<tr><td>Rutile</td><td class="num">27.44</td><td class="num">27.44</td><td class="num">+0.00</td></tr>
+<tr><td>Magnetite</td><td class="num">35.43</td><td class="num">35.44</td><td class="num">&minus;0.01</td></tr>
+<tr><td>Halite</td><td class="num">31.69</td><td class="num">31.70</td><td class="num">&minus;0.01</td></tr>
+<tr><td>Hematite</td><td class="num">33.16</td><td class="num">33.15</td><td class="num">+0.01</td></tr>
+<tr><td>Microcline</td><td class="num">27.51</td><td class="num">27.50</td><td class="num">+0.01</td></tr>
+<tr><td>Dolomite</td><td class="num">30.94</td><td class="num">30.96</td><td class="num">&minus;0.02</td></tr>
+<tr><td>Albite</td><td class="num">27.92</td><td class="num">27.94</td><td class="num">&minus;0.02</td></tr>
+<tr><td>Anhydrite</td><td class="num">25.42</td><td class="num">25.44</td><td class="num">&minus;0.02</td></tr>
+<tr><td>Anatase</td><td class="num">25.31</td><td class="num">25.28</td><td class="num">+0.03</td></tr>
+<tr><td>Siderite</td><td class="num">32.02</td><td class="num">32.05</td><td class="num">&minus;0.03</td></tr>
+</table></div>
+
+<p>Four phases appeared at first to disagree and were examined individually:</p>
+
+<ul>
+<li><strong>Barite</strong> and <strong>fluorite</strong>: the calculation was right and the
+comparison value wrong. Barite's strongest line is 3.10 &aring; (28.74&deg;), not the 3.44 &aring;
+often quoted from memory, and the full calculated list &mdash; 3.445, 3.318, 3.104, 2.835, 2.122,
+2.107 &aring; with intensities 98, 63, 100, 53, 81, 56 &mdash; matches the powder file essentially
+exactly. Fluorite's 111 and 220 differ by only a few per cent in intensity and their order is not
+diagnostic.</li>
+<li><strong>Gypsum</strong>: the calculation gives 4.28 &aring; as strongest where powder files give
+7.63 &aring;. This is the well-known preferred-orientation artefact of gypsum powder files, caused
+by its perfect (010) cleavage; the source library carries an explicit preferred-orientation direction
+for gypsum for exactly this reason. The calculated <em>random-powder</em> pattern is correct as
+computed.</li>
+<li><strong>Pyrite</strong>: positions match exactly (3.128, 2.709, 2.423, 2.212, 1.916, 1.634
+&aring;); only the relative intensities of 220 and 311 were in question, and published values differ
+between sources.</li>
+</ul>
+
+<h4>Determining the TOPAS origin-choice convention</h4>
+
+<p><strong>Reasoning.</strong> Thirteen phases failed to import because TOPAS writes the two origin
+choices of centrosymmetric cubic and tetragonal groups with a trailing letter &mdash;
+<span class="kw">Fd-3mS</span> against <span class="kw">Fd-3mZ</span> &mdash; rather than the
+<span class="kw">:1</span>/<span class="kw">:2</span> of the International Tables. Guessing the
+mapping was unacceptable: the two origins differ by a translation of (&frac18;,&frac18;,&frac18;),
+so the wrong choice silently produces wrong intensities for spinels, magnetite, zircon and anatase.</p>
+
+<p><strong>Method and result.</strong> The convention was determined from the structures themselves
+rather than assumed. Diamond, silicon and franklinite, written <span class="kw">S</span>, place their
+8<var>a</var> site at (0,0,0), which is origin choice 1. Magnetite, spinel, chromite, hercynite and
+magnesioferrite, written <span class="kw">Z</span>, place it at (&frac18;,&frac18;,&frac18;), which
+is origin choice 2. Zircon (<span class="kw">I4<sub>1</sub>/amdZ</span>) has Zr at (0,&frac34;,&frac18;),
+the standard choice-2 setting; anatase (<span class="kw">I4<sub>1</sub>/amdS</span>) has Ti at the
+origin, choice 1. Eight independent structures agree:
+<strong><span class="kw">S</span> = origin choice 1, <span class="kw">Z</span> = origin choice 2.</strong>
+With this mapping all 205 phases import.</p>
+
+<p><strong>Conclusion.</strong> Structure import is verified: positions reproduce accepted values to
+0.03&deg; across twelve chemically diverse phases, the four apparent discrepancies are explained and
+none is an error in the program, and the origin-choice convention is established from evidence rather
+than assumption.</p>
+
+<h3 id="a-4">A.4 Workflow tests on synthetic data</h3>
+
+<p><strong>Reasoning.</strong> The reduction steps &mdash; zero error, background, diagnostics, fit
+&mdash; can only be tested for <em>correctness</em> against data whose answer is known in advance,
+which no real measurement provides. Synthetic patterns were therefore constructed from the program's
+own library with a known composition, a known zero error and a known background, and the workflow
+required to recover them.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Test</th><th>Reasoning</th><th>Result</th></tr>
+<tr><td>Zero error is recovered</td><td>A known offset is imposed on a synthetic pattern; the
+calibration must return it. Tests the peak location and the sign convention &mdash; a sign error here
+would shift every pattern the wrong way.</td><td>Recovered within the 0.01&deg; step.
+<strong>Pass.</strong></td></tr>
+<tr><td>Background with an accumulated 1/x term</td><td>The 1/x term must be combinable with any main
+component, as specified. Tests the design matrix assembly.</td><td>Recovers an imposed background of
+that form. <strong>Pass.</strong></td></tr>
+<tr><td>All background components can be combined</td><td>Polynomial, Chebyshev, exponential and 1/x
+simultaneously &mdash; the worst case for conditioning of the linear solve.</td><td>Fits without
+degeneracy. <strong>Pass.</strong></td></tr>
+<tr><td>NNLS recovers a known composition</td><td>The central claim of the method: a synthetic mixture
+of known proportions must be recovered. Tests the design matrix, the solver and the share
+computation.</td><td>Recovers the composition. <strong>Pass.</strong></td></tr>
+<tr><td>Kaolinite collapse is detected</td><td>A synthetic pair with kaolinite removed from the heated
+mount must be diagnosed as collapse.</td><td>Detected. <strong>Pass.</strong></td></tr>
+<tr><td>Chlorite survives heating</td><td>The complement: chlorite must <em>not</em> be reported as
+collapsed, or every chloritic sample would be called kaolinitic.</td><td>Survives.
+<strong>Pass.</strong></td></tr>
+<tr><td>Smectite swelling is detected</td><td>A synthetic pair with the expandable component shifted
+must be diagnosed as swelling.</td><td>Detected. <strong>Pass.</strong></td></tr>
+</table></div>
+
+<h3 id="a-5">A.5 File readers and zero-error behaviour on real mounts</h3>
+
+<h4>Readers</h4>
+
+<p><strong>Reasoning.</strong> A reader that silently misreads &mdash; an offset by one point, a
+wrong step, an intensity scaling &mdash; corrupts everything downstream while appearing to work. The
+strongest available check is that two independent encodings of the same measurement, the instrument's
+native XRDML and its own exported two-column text, must agree exactly.</p>
+
+<p><strong>Result.</strong> All 33 XRDML files read, and for every specimen where both forms exist
+the two agree <strong>bit for bit</strong>: maximum difference 0.000 counts, identical 2&theta; grids.
+The instrument configuration carried in the XRDML &mdash; wavelengths, goniometer radius, divergence
+slit, counting time &mdash; is also recovered, so a calculation can be set up to match the
+measurement. An initial version failed on all 33 files because intensities are held in a
+<span class="kw">&lt;counts&gt;</span> element rather than <span class="kw">&lt;intensities&gt;</span>;
+both are now accepted, as are measurements holding several appended scans.</p>
+
+<h4>Zero error</h4>
+
+<p><strong>Reasoning.</strong> The zero error was first determined with a wide search window
+(&plusmn;0.6&deg;). Run across all eleven specimens, this produced shifts ranging to &minus;0.40&deg;,
+with the three mounts of one specimen disagreeing by 0.33&deg;. Mounts of the same specimen are
+separate slides, so they may differ by a few hundredths of a degree &mdash; but not by a third of a
+degree. The disagreement itself was the evidence that something was wrong.</p>
+
+<p><strong>Diagnosis.</strong> Inspecting the region directly showed that in the kaolinite-rich
+specimens there is no quartz 100 peak at all, and the routine was locking onto the kaolinite 020
+band at 4.36 &aring;, 0.4&deg; away. Quartz 100 clears every clay <em>basal</em> reflection, which is
+why it is the standard choice, but it does not clear the kaolinite <var>hk</var> bands.</p>
+
+<p><strong>Result after correction</strong> (narrow window, signal-to-noise test):</p>
+
+<div class="tablewrap"><table>
+<tr><th>Specimen</th><th class="num">Air</th><th class="num">Glycol</th><th class="num">Heated</th><th class="num">Spread</th></tr>
+<tr><td>1</td><td class="num">&minus;0.06</td><td class="num">&minus;0.06</td><td class="num">&minus;0.04</td><td class="num">0.02</td></tr>
+<tr><td>2</td><td class="num">&minus;0.06</td><td class="num">&minus;0.06</td><td class="num">&minus;0.06</td><td class="num">0.00</td></tr>
+<tr><td>3</td><td class="num">&minus;0.04</td><td class="num">&minus;0.05</td><td class="num">&minus;0.05</td><td class="num">0.01</td></tr>
+<tr><td>4</td><td class="num">&minus;0.04</td><td class="num">&minus;0.06</td><td class="num">&minus;0.06</td><td class="num">0.02</td></tr>
+<tr><td>5</td><td class="num">&minus;0.04</td><td class="num">&minus;0.04</td><td class="num">&minus;0.04</td><td class="num">0.00</td></tr>
+<tr><td>6</td><td class="num">&minus;0.05</td><td class="num">&minus;0.03</td><td class="num">not found</td><td class="num">0.02</td></tr>
+<tr><td>7</td><td class="num">&minus;0.02</td><td class="num">+0.04</td><td class="num">not found</td><td class="num">0.06</td></tr>
+<tr><td>8</td><td class="num">&minus;0.06</td><td class="num">+0.00</td><td class="num">&minus;0.06</td><td class="num">0.06</td></tr>
+<tr><td>9</td><td class="num">&minus;0.05</td><td class="num">+0.06</td><td class="num">not found</td><td class="num">0.11</td></tr>
+<tr><td>10, 11</td><td class="num" colspan="3">no calibration peak in any mount</td><td class="num">&mdash;</td></tr>
+</table></div>
+
+<p><strong>Conclusion.</strong> Detected shifts now lie between &minus;0.06&deg; and +0.06&deg;, are
+consistent between the mounts of a specimen to 0.02&deg; in the majority of cases, and are of the
+magnitude expected for instrument zero and specimen displacement. The eight mounts in which quartz is
+genuinely absent now report that fact instead of a fabricated number. <em>This test is the reason the
+search window is narrow and the signal-to-noise test exists</em>; with the original settings the
+program would have silently displaced whole patterns by 0.4&deg;.</p>
+
+<h3 id="a-6">A.6 Development of the accompanying-mineral search</h3>
+
+<p><strong>Reasoning.</strong> Searching a 205-phase database for the few minerals actually present
+is a discrimination problem, and a method that reports everything is worthless. Each candidate method
+was tested on a synthetic pattern of <em>known</em> content &mdash; quartz, calcite and albite in
+known proportions &mdash; so that false positives could be counted, and then on a real specimen.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Method</th><th>Reasoning</th><th>Result</th><th>Verdict</th></tr>
+<tr><td>1. Per-peak window, 2 % cell allowance</td>
+<td>The obvious first approach: allow each expected line to be found anywhere within the tolerance
+implied by a 2 % cell deviation.</td>
+<td><strong>190 of 205 phases scored 100 %</strong> on a three-phase pattern. A 2 % allowance is a
+window up to 1.6&deg; wide at high angle; on a peak-rich pattern nearly every phase finds something
+near every expected line.</td><td><strong>Rejected.</strong></td></tr>
+<tr><td>2. One coherent cell scaling + cosine similarity</td>
+<td>A real cell deviation stretches the whole lattice together, so all of a phase's lines must move
+by the same relative amount &mdash; a far stronger constraint than independent windows. Intensity
+agreement was added as a cosine similarity.</td>
+<td>Better: the three true phases ranked 2nd, 4th and 7th. But 157 phases still passed, and graphite,
+aluminium, copper and lead ranked at the top. A cosine similarity is dominated by whichever single
+line falls on the largest peak, so any phase with one reflection near a strong peak scores
+&asymp;1.</td><td><strong>Insufficient.</strong></td></tr>
+<tr><td>3. Coherent scaling + proportionality + minimum line count</td>
+<td>Replace the cosine by a test that the implied scale is consistent <em>across</em> lines, and
+require a phase to have enough lines in range to be judged at all.</td>
+<td>Improved, but on a real specimen still ranked <strong>quartz 56th of 205</strong>, behind
+ilmenite, pyrite, cementite and faujasite &mdash; while quartz was demonstrably present, being the
+zero-error standard.</td><td><strong>Insufficient.</strong></td></tr>
+<tr><td>4. Competitive non-negative least-squares screen</td>
+<td>Ask the question that actually matters: does this phase explain intensity that nothing else can?
+Every candidate is fitted simultaneously with the clay library and with every other candidate, and
+ranked by the share of the pattern it takes.</td>
+<td>On the same real specimen: <strong>quartz 7.4 %, albite 6.3 %</strong>, then a clean gap to
+1.6 % for the next candidate. On a second specimen, albite 6.7 %, quartz 6.2 %, microcline 3.2 %.
+Adding the identified phases to the fit lowered <var>R</var><sub>wp</sub>.</td>
+<td><strong>Adopted.</strong></td></tr>
+</table></div>
+
+<p><strong>Conclusion.</strong> Position matching cannot discriminate phases in a peak-rich pattern
+at these levels; explained intensity can. Method 4 is the default whenever a reference library is
+loaded, and method 3 is retained only as a fallback for when one is not. The residual tail at 1&ndash;2 %
+is least-squares slack rather than mineralogy, which is why the confirmation dialog leaves it
+unticked.</p>
+
+<h3 id="a-7">A.7 Crystallite thickness against measured peak width</h3>
+
+<p><strong>Reasoning.</strong> The first fits to real specimens gave <var>R</var><sub>wp</sub> near
+68 % while reproducing every peak <em>position</em> correctly, with the difference curve showing
+sharp excursions at the peaks &mdash; the signature of a width or position mismatch rather than a
+wrong phase. Crystallite thickness is the principal control on basal width
+(&sect;<a href="#s2-6">2.6</a>), so it was measured.</p>
+
+<p><strong>Method and results.</strong> Full widths at half maximum were measured on a real
+glycol-solvated mount and compared with the Scherrer prediction:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Position (&deg;2&theta;)</th><th class="num">FWHM (&deg;)</th><th>Assignment</th></tr>
+<tr><td class="num">8.82</td><td class="num">0.117</td><td>illite 001</td></tr>
+<tr><td class="num">12.45</td><td class="num">0.134</td><td>kaolinite 001 / chlorite 002</td></tr>
+<tr><td class="num">17.75</td><td class="num">0.134</td><td>illite 002</td></tr>
+<tr><td class="num">26.57</td><td class="num">0.134</td><td>quartz 101 / illite 003</td></tr>
+</table></div>
+
+<p>A width of 0.117&deg; at 8.82&deg; implies a crystallite thickness of about 680 &aring;, or
+<strong>68 layers</strong>. The library in use had been built with a mean of 10 layers, which
+predicts a 001 width of <strong>0.79&deg;</strong> &mdash; nearly seven times too broad.</p>
+
+<p><strong>Consequence.</strong> Crystallite thickness became a spanned library dimension
+(&sect;<a href="#s3-3">3.3</a>). Rebuilt with means of 5, 15 and 50 layers, the fit selected the
+<var>N</var> = 50 patterns for the sharp illite, confirming the mechanism.</p>
+
+<p><strong>An instructive negative result.</strong> Spanning thickness alone did <em>not</em> improve
+the agreement: <var>R</var><sub>wp</sub> went from 70.8 % to 70.8 %. The fit now had patterns of the
+right width available and chose them, but something else was still wrong &mdash; which led directly
+to the next two tests. Had the thickness test been taken as sufficient, the real causes would have
+been missed.</p>
+
+<h3 id="a-8">A.8 Layer spacing</h3>
+
+<p><strong>Reasoning.</strong> With widths now correct, the residual remained concentrated at one
+place: the illite 001. At that point the measurement showed 7764 counts where the fit gave 1279
+&mdash; the strongest clay reflection in the pattern almost entirely unexplained. A peak that is
+present in both but not fitted is a position problem.</p>
+
+<p><strong>Method and results.</strong> The basal spacing was determined from the measurement itself,
+using two orders so that the result is self-checking:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Order</th><th class="num">Observed position (&deg;2&theta;)</th><th class="num">d (&aring;)</th><th class="num">Implied d(001) (&aring;)</th></tr>
+<tr><td>001</td><td class="num">8.884</td><td class="num">9.9459</td><td class="num">9.946</td></tr>
+<tr><td>002</td><td class="num">17.808</td><td class="num">4.9768</td><td class="num">9.954</td></tr>
+<tr><td>003 (apparent)</td><td class="num">26.631</td><td class="num">3.3445</td><td class="num">10.034 &mdash; <em>discard</em></td></tr>
+</table></div>
+
+<p>The 001 and 002 agree on <var>d</var>(001) &asymp; 9.95 &aring;. The third order appears to
+disagree, but that reflection is quartz 101 at 3.3435 &aring; overlapping illite 003, not illite
+alone &mdash; a reminder that the 3.34 &aring; peak of a clay pattern is rarely a clay peak only.</p>
+
+<p>The library value, taken from the ICSD illite structure, is <strong>10.022 &aring;</strong>,
+placing the 001 at 8.816&deg; against the observed 8.884&deg;. The discrepancy of 0.066&deg; is
+<em>half a peak width</em>. Scanning the spacing:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">d(001) assumed (&aring;)</th><th class="num">001 calculated (&deg;)</th><th class="num">Observed &minus; calculated (&deg;)</th></tr>
+<tr><td class="num">9.900</td><td class="num">8.920</td><td class="num">&minus;0.038</td></tr>
+<tr><td class="num"><strong>9.950</strong></td><td class="num"><strong>8.886</strong></td><td class="num"><strong>&minus;0.004</strong></td></tr>
+<tr><td class="num">9.980</td><td class="num">8.853</td><td class="num">+0.029</td></tr>
+<tr><td class="num">10.000</td><td class="num">8.836</td><td class="num">+0.046</td></tr>
+<tr><td class="num">10.022 (library)</td><td class="num">8.820</td><td class="num">+0.062</td></tr>
+</table></div>
+
+<p><strong>Conclusion.</strong> The specimen's illite has <var>d</var>(001) = 9.95 &aring;, not the
+10.022 &aring; of the reference structure. This is not an error in either: illite basal spacing varies
+from about 9.95 to 10.10 &aring; with interlayer potassium content and hydration, and a single
+refined structure is one point in that range. Layer spacing therefore became a second spanned library
+dimension. On rebuilding, the fit selected <var>d</var> = 9.95 &aring; of its own accord, and the
+illite 001 residual resolved.</p>
+
+<h3 id="a-9">A.9 The weighting of the fit</h3>
+
+<p><strong>Reasoning.</strong> With widths and spacings now spanned, agreement was still poor. The
+remaining suspect was the fit's own weighting, which had been taken from the background-subtracted
+intensity. That is wrong on statistical grounds: the variance of a counting measurement is set by the
+number of photons recorded, and subtracting a smooth background does not reduce it. Weighting by the
+subtracted value gives near-zero-intensity points &mdash; the flat regions between peaks, which are
+pure noise &mdash; the largest weights, and the peaks the smallest.</p>
+
+<p><strong>Result.</strong> Changing the weights to 1/max(raw counts, 1), and weighting the solve as
+well as the metric:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Weighting</th><th class="num"><var>R</var><sub>wp</sub></th><th class="num"><var>R</var><sub>p</sub></th></tr>
+<tr><td>By background-subtracted intensity (incorrect)</td><td class="num">70.8 %</td><td class="num">48.2 %</td></tr>
+<tr><td>By raw counts (counting statistics)</td><td class="num">56.0 %</td><td class="num">46.4 %</td></tr>
+</table></div>
+
+<p><strong>Conclusion.</strong> A 15-point improvement in <var>R</var><sub>wp</sub> from a change that
+alters no physics at all, only the statistical weighting. The lesson is general: when a
+background-subtracted pattern is fitted, the weights must still come from the counts that were
+actually measured.</p>
+
+<h3 id="a-10">A.10 Cumulative effect and the final state</h3>
+
+<p><strong>Reasoning.</strong> The preceding tests each addressed one cause. Their cumulative effect
+on a single real specimen records what each was worth, and whether the final state is fit for use.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Stage</th><th class="num"><var>R</var><sub>wp</sub></th><th>Change made</th></tr>
+<tr><td>Initial</td><td class="num">68.4 %</td><td>&mdash;</td></tr>
+<tr><td>+ thickness spanned</td><td class="num">70.8 %</td><td>no improvement alone (&sect;<a href="#a-7">A.7</a>)</td></tr>
+<tr><td>+ correct weighting</td><td class="num">56.0 %</td><td>&sect;<a href="#a-9">A.9</a></td></tr>
+<tr><td>+ quartz in the fit</td><td class="num">53.4 %</td><td>accompanying minerals matter</td></tr>
+<tr><td>+ quartz, albite, calcite</td><td class="num">49.1 %</td><td>&mdash;</td></tr>
+<tr><td>+ layer spacing spanned</td><td class="num">35.7 %</td><td>&sect;<a href="#a-8">A.8</a></td></tr>
+<tr><td>+ minerals from the competitive screen</td><td class="num"><strong>33.2 %</strong></td>
+<td>&sect;<a href="#a-6">A.6</a></td></tr>
+</table></div>
+
+<p><strong>Across specimens.</strong> Specimen 1, 33.2 %; Specimen 2, 34.7 %; Specimen 3,
+<strong>76.1 %</strong>. The third is a kaolinite-dominated separate that the program fits badly, and
+this is reported rather than concealed: its 7.17 and 7.37 &aring; pair is not matched by the kaolinite
+library, and the cause is not yet established. It is also one of the specimens in which quartz is
+absent, so its zero error had to be left unset.</p>
+
+<p><strong>Conclusion.</strong> Typical agreement on well-behaved specimens is
+<var>R</var><sub>wp</sub> &asymp; 33&ndash;35 %, which is reasonable for a fixed library that cannot
+refine positions or widths continuously, and poor by the standards of a Rietveld refinement, which
+can. At least one specimen type is fitted badly. The plots exist so that this is visible to the user
+in every case, and &sect;<a href="#s9">9</a> states the limitation plainly.</p>
+
+<h3 id="a-11">A.11 End-to-end tests of the interface</h3>
+
+<p><strong>Reasoning.</strong> Unit tests cannot show that the assembled program works: state may be
+lost between steps, a control may not be connected, a computation may be correct but never reach the
+screen. The complete workflow was therefore driven in a real browser, automatically, on real
+measurements, with the browser console monitored for errors.</p>
+
+<p><strong>Method.</strong> A script loaded three mounts, set the zero error on each, fitted and
+applied a background, loaded the phase database and reference library, ran the mineral search,
+confirmed the selection, ran both diagnostics, ran the fit, visited all four result plots, exported,
+and opened the simulator &mdash; capturing a screenshot at each step.</p>
+
+<p><strong>Results.</strong> The workflow completed with <strong>no JavaScript errors</strong>, all
+four plots rendering and all seven export files written. Two defects were found this way and would
+not have been found otherwise:</p>
+
+<ul>
+<li><strong>The confirmation dialog accepted itself.</strong> Dash fires callbacks once for newly
+created components, so the dialog took whatever was ticked by default at the instant it appeared
+&mdash; the analyst never saw it, and three implausible minerals were silently added to the fit. The
+screenshot showed the selection already made. Fixed by guarding against the initial invocation.</li>
+<li><strong>Stale server state.</strong> An early run reported results from before a change, because
+the development server does not reload edited code. Subsequent runs restart the server explicitly.</li>
+</ul>
+
+<p><strong>Conclusion.</strong> The assembled program works end to end on real data. The dialog defect
+in particular was invisible to unit testing, being a property of the interface framework rather than
+of any function, and was caught only by driving the interface and looking at what it displayed.</p>
+
+<h3 id="a-12">A.12 Summary</h3>
+
+<div class="tablewrap"><table>
+<tr><th>Area</th><th>Tests</th><th>Status</th></tr>
+<tr><td>Interstratification model</td><td>25 automated, against closed-form and invariant results</td><td>Pass</td></tr>
+<tr><td>Basal / three-dimensional consistency</td><td>9 automated, four phases</td><td>Pass</td></tr>
+<tr><td>External validation</td><td>4 automated, against Reynolds (1965); <var>R</var> = 0.039 vs his 0.042</td><td>Pass</td></tr>
+<tr><td>Workflow on synthetic data</td><td>7 automated</td><td>Pass</td></tr>
+<tr><td>Structure import</td><td>205 phases; 12 positions to 0.03&deg;; origin convention established</td><td>Pass</td></tr>
+<tr><td>File readers</td><td>33 files; bit-for-bit against vendor export</td><td>Pass</td></tr>
+<tr><td>Zero error</td><td>11 specimens &times; 3 mounts</td><td>Pass after correction</td></tr>
+<tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
+<tr><td>Quantitative fit</td><td>3 real specimens</td><td>2 good, 1 poor and documented</td></tr>
+<tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 2 defects found and fixed</td></tr>
+</table></div>
+
+<p>The automated suite comprises <strong>45 tests</strong> and runs in under two seconds
+(<span class="kw">pytest -q</span>). Ten of them are skipped automatically when structure data is not
+installed.</p>
+
+<h2 id="b">Appendix B &mdash; File formats read</h2>
+
+<div class="tablewrap"><table>
+<tr><th>Format</th><th>Extension</th><th>Notes</th></tr>
+<tr><td>PANalytical XRDML</td><td class="kw">.xrdml</td>
+<td>Intensities from <span class="kw">&lt;counts&gt;</span> or <span class="kw">&lt;intensities&gt;</span>;
+multiple appended scans are concatenated; positions from a start/end range or an explicit list.
+Wavelengths, goniometer radius, divergence slit, counting time and sample identifier are read as
+metadata.</td></tr>
+<tr><td>Two-column text</td><td><span class="kw">.xy</span>, <span class="kw">.txt</span>, <span class="kw">.dat</span>, <span class="kw">.asc</span></td>
+<td>2&theta; and intensity. Comment and header lines are skipped; comma, tab and space separation are
+accepted.</td></tr>
+<tr><td>Bruker RAW</td><td class="kw">.raw</td>
+<td>Binary; the common RAW1.01 and RAW4 variants. Support is best-effort &mdash; if a file is not
+read, export it as two-column text from the vendor software.</td></tr>
+<tr><td>CIF</td><td class="kw">.cif</td>
+<td>The subset produced by ICSD, COD and AMCSD exports: cell, an explicit symmetry-operation loop, and
+an atom-site loop with occupancies and <var>B</var><sub>iso</sub> or <var>U</var><sub>iso</sub>.</td></tr>
+<tr><td>TOPAS structure library</td><td class="kw">.xml</td>
+<td>jEdit macro-menu form; <span class="kw">str</span> blocks with cell, space group and
+<span class="kw">site</span> lines.</td></tr>
+<tr><td>Pattern library</td><td class="kw">.npz</td>
+<td>Compressed NumPy archive holding the grid, the pattern matrix, and per-entry and library
+metadata.</td></tr>
+</table></div>
+
+<h2 id="c">Appendix C &mdash; Symbols</h2>
+
+<div class="tablewrap"><table>
+<tr><th>Symbol</th><th>Meaning</th><th>Units</th></tr>
+<tr><td><var>s</var></td><td>scattering vector length, 2 sin<var>&theta;</var>/<var>&lambda;</var> = 1/<var>d</var></td><td>&aring;<sup>&minus;1</sup></td></tr>
+<tr><td><var>q</var></td><td>sin<var>&theta;</var>/<var>&lambda;</var> = <var>s</var>/2; argument of scattering and displacement factors</td><td>&aring;<sup>&minus;1</sup></td></tr>
+<tr><td><var>d</var></td><td>interplanar spacing; <var>d</var><sub>A</sub>, <var>d</var><sub>B</sub> layer repeat distances</td><td>&aring;</td></tr>
+<tr><td><var>F</var>(<var>s</var>)</td><td>layer structure factor, complex</td><td>electrons</td></tr>
+<tr><td><var>B</var></td><td>isotropic displacement parameter</td><td>&aring;<sup>2</sup></td></tr>
+<tr><td><var>N</var>, &lang;<var>N</var>&rang;</td><td>layers per crystallite; its mean over the CSDS</td><td>&mdash;</td></tr>
+<tr><td><var>&beta;</var></td><td>width of the lognormal CSDS in ln <var>N</var></td><td>&mdash;</td></tr>
+<tr><td><var>G</var>(<var>n</var>)</td><td>pair weight at layer separation <var>n</var></td><td>&mdash;</td></tr>
+<tr><td><b>P</b>, <var>P</var><sub><var>mn</var></sub></td><td>Markov transition matrix and its elements</td><td>&mdash;</td></tr>
+<tr><td><b>W</b>, <var>W<sub>m</sub></var></td><td>stationary layer proportions</td><td>&mdash;</td></tr>
+<tr><td><b>T</b></td><td>phase-weighted transition matrix, equation (2.10)</td><td>&mdash;</td></tr>
+<tr><td><var>R</var></td><td>Reichweite, the range of the stacking correlation</td><td>&mdash;</td></tr>
+<tr><td><var>r</var></td><td>March&ndash;Dollase preferred-orientation parameter</td><td>&mdash;</td></tr>
+<tr><td><var>&alpha;</var></td><td>angle between a scattering vector and the texture axis <var>c</var>*</td><td>rad</td></tr>
+<tr><td><var>&gamma;</var></td><td>equatorial divergence of the incident beam</td><td>rad</td></tr>
+<tr><td><var>R</var><sub>goniometer</sub></td><td>goniometer radius</td><td>mm</td></tr>
+<tr><td><var>c<sub>p</sub></var></td><td>fitted scale factor of library pattern <var>p</var></td><td>&mdash;</td></tr>
+<tr><td><var>w<sub>i</sub></var></td><td>statistical weight of point <var>i</var></td><td>counts<sup>&minus;1</sup></td></tr>
+<tr><td><var>R</var><sub>wp</sub>, <var>R</var><sub>p</sub></td><td>weighted-profile and profile agreement factors</td><td>&mdash;</td></tr>
+</table></div>
+
+<hr>
+<p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
+the MIT licence. Structure data is not distributed with it and remains subject to the licence of its
+source. This manual documents the state of the program at the revision noted on the title page;
+the test record of Appendix A refers to that revision.</p>
+
+</div>

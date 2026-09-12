@@ -16,10 +16,15 @@ dependencies = ["numpy>=1.24", "scipy>=1.10"]
 [project.optional-dependencies]
 gui = ["dash>=2.14", "plotly>=5.18"]
 plot = ["matplotlib>=3.7"]
+# gemmi expands space group symbols when importing a TOPAS structure library.
+# It is needed for that import only: the generated database stores the symmetry
+# operations explicitly and is read without it.
+import = ["gemmi>=0.6"]
 dev = ["pytest>=7.4"]
 
 [project.scripts]
 clayquant-build-library = "clayquant.library:main"
+clayquant-import-structures = "clayquant.bern:main"
 clayquant-gui = "clayquant.gui.app:main"
 
 [tool.setuptools.packages.find]
