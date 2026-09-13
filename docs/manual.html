@@ -121,6 +121,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-8">A.8 Layer spacing</a>
 <a href="#a-9">A.9 Fit weighting</a>
 <a href="#a-11">A.11 Stripping width</a>
+<a href="#a-14">A.14 Weight percent</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -703,13 +704,55 @@ more integrated area per unit peak height than a sharp discrete phase, so the tw
 factor of several.</dd>
 </dl>
 
-<div class="warn"><strong>Neither is a weight percent.</strong> Converting a scattering share to a
-mass fraction requires a reference intensity ratio per phase &mdash; the calculated intensity per
-unit mass in the same geometry &mdash; and for an oriented mount it depends additionally on how the
-mount was prepared, since texture differs between phases and between preparations. A method is
-provided to apply calibrated ratios if they are available
-(<span class="kw">Quantification.weight_percent</span>); in their absence the numbers are relative
-and should be reported as such.</div>
+<h4>Weight percent</h4>
+
+<p>A third quantity is reported, and it is a weight percent. It needs no reference intensity ratios,
+because the calculated patterns carry the mass of what they were calculated from. A stored pattern is
+the calculated one divided by a normalisation <var>s<sub>e</sub></var>; the calculated one is for a
+single unit of the phase &mdash; one unit cell for a discrete mineral, one layer for an
+interstratified stack &mdash; of mass <var>M<sub>e</sub></var>. So a fitted coefficient
+<var>c<sub>e</sub></var> counts units, and</p>
+
+<div class="eq"><var>W<sub>p</sub></var> &prop; <var>k<sub>p</sub></var>
+&Sigma;<sub><var>e</var>&isin;<var>p</var></sub>
+<var>c<sub>e</sub></var> <var>M<sub>e</sub></var> / <var>s<sub>e</sub></var>
+<span class="n">(2.25)</span></div>
+
+<p>with the constant of proportionality the same for every phase &mdash; it is the instrument, the
+irradiated volume and the counting time, which the phases of one measurement share &mdash; so the
+ratios are ratios of mass. This is the relation Rietveld analysis writes as <var>W</var> &prop;
+<var>S</var>(<var>ZMV</var>), in the form ClayQuant's normalisation calls for. Tested by building a
+specimen from known masses of library patterns and asking for the masses back, it returns them
+exactly (&sect;<a href="#a-14">A.14</a>).</p>
+
+<div class="warn"><strong><var>k<sub>p</sub></var> is 1, and that is the whole difficulty.</strong>
+Equation (2.25) assumes the calculated pattern accounts for everything the phase contributes. In an
+oriented mount it does not, because texture differs between minerals and between preparations, and
+the fit cannot tell a well-oriented phase from an abundant one. The effect is not a correction of a
+few percent. A basal series is multiplied by <var>r</var><sup>&minus;3</sup>
+(&sect;<a href="#s2-9">2.9</a>), so a clay fitted at <var>r</var> = 0.13 is calculated to scatter 455
+times more per gram than the same clay at <var>r</var> = 1, and the mass inferred for it falls by the
+same factor. On a real clay separate this put quartz &mdash; fitted at <var>r</var> = 1, since it
+does not plate onto the slide &mdash; at 61 % by weight, which a &lt;2 &micro;m separate certainly is
+not. <strong>Until <var>k<sub>p</sub></var> has been measured for a preparation, read the weight
+percent as indicative and the clay-to-non-clay split as unreliable.</strong> The fitted
+<var>r</var> is reported beside every phase so this is visible rather than hidden.</div>
+
+<p><strong>Measuring <var>k<sub>p</sub></var>.</strong> It is one factor per phase, covering texture,
+microabsorption and any error in the structural model together. To determine it, analyse specimens
+whose composition is known independently, through the same preparation routine, and solve for the
+factors that reproduce that composition &mdash; <span class="kw">Calibration.from_known_composition</span>
+does the arithmetic, and the factors are stored in a JSON file that the analysis loads. One way to
+obtain the known composition is to measure the same separate twice: once as a random mount spiked
+with an internal standard, which gives absolute weight fractions by the usual internal-standard
+method and is unaffected by texture because there is none; and once as the oriented mounts. The
+random mount fixes the composition, the oriented fit then yields <var>k<sub>p</sub></var>. An
+oriented mount cannot be spiked usefully, since the standard does not orient as the clays do and its
+share in the mount is not its share in the suspension.</p>
+
+<div class="note">The older route is still available for a laboratory that has measured reference
+intensity ratios of its own: <span class="kw">Quantification.weight_percent</span> divides each
+phase's share of diffracted intensity by its ratio.</div>
 
 <p>Results are given on two bases: over all fitted phases, and over the clay minerals alone,
 renormalised to 100 % with the accompanying minerals removed. The latter is the customary basis for
@@ -2302,6 +2345,62 @@ which sat on top of the label of the control beneath it and hid part of the text
 already shown in the box beside every slider, so the bubbles are removed &mdash; nineteen of
 them.</p>
 
+<h3 id="a-14">A.14 Weight percent from the calculated masses</h3>
+
+<p><strong>Reasoning.</strong> The chain from a fitted scale factor to a mass has four links &mdash;
+the pattern is calculated for one unit of the phase, stored divided by a normalisation, fitted with a
+coefficient, converted back with the mass of that unit &mdash; and an error in any one of them scales
+a phase without looking wrong. Nothing in a real measurement can catch that, because the true answer
+is not known. A specimen built out of the library's own patterns, from masses chosen in advance, can.</p>
+
+<p><strong>Method.</strong> Known masses of four library patterns were combined into one pattern,
+multiplied by an arbitrary constant standing for the instrument, and fitted. The fit is exact by
+construction (<var>R</var><sub>wp</sub> &lt; 10<sup>&minus;6</sup>), so anything wrong in the result
+is the conversion rather than the fit.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Mass put in</th><th class="num">Weight % returned</th></tr>
+<tr><td>Illite</td><td class="num">40.0 %</td><td class="num">40.00 %</td></tr>
+<tr><td>Kaolinite 1<var>M</var></td><td class="num">25.0 %</td><td class="num">25.00 %</td></tr>
+<tr><td>Chlorite</td><td class="num">20.0 %</td><td class="num">20.00 %</td></tr>
+<tr><td>Illite/smectite 0.80/0.20</td><td class="num">15.0 %</td><td class="num">15.00 %</td></tr>
+</table></div>
+
+<p><strong>Result.</strong> Exact to the printed precision, and unchanged when the arbitrary constant
+is doubled &mdash; counting twice as long does not change a weight percent. Equal masses of chlorite
+and kaolinite come back equal although their shares of scattered intensity differ, which is the
+point: the conversion uses the mass of the calculated unit and not the intensity. A library that does
+not record those masses reports no weight percent at all rather than a number computed from
+something else.</p>
+
+<p><strong>And what it does not test.</strong> That the calculated pattern describes what the phase
+contributes. It does not, in an oriented mount, and the same measurement makes the size of the gap
+plain. Fitting a real glycol-solvated separate:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Weight %</th><th class="num">Fitted <var>r</var></th>
+<th class="num">Share of scattering</th></tr>
+<tr><td>Quartz</td><td class="num">61.0 %</td><td class="num">1.00</td><td class="num">11.7 %</td></tr>
+<tr><td>Chlorite/smectite</td><td class="num">14.4 %</td><td class="num">0.45</td><td class="num">19.6 %</td></tr>
+<tr><td>Albite</td><td class="num">6.4 %</td><td class="num">1.00</td><td class="num">6.6 %</td></tr>
+<tr><td>Illite</td><td class="num">2.8 %</td><td class="num">0.19</td><td class="num">9.7 %</td></tr>
+<tr><td>Illite/smectite</td><td class="num">1.3 %</td><td class="num">0.13</td><td class="num">32.8 %</td></tr>
+</table></div>
+
+<p>Illite/smectite takes a third of the scattered intensity and is assigned 1.3 % of the mass,
+because it is fitted at <var>r</var> = 0.13 and is therefore calculated to scatter
+0.13<sup>&minus;3</sup> = 455 times more per gram than it would unoriented. Quartz, which does not
+plate onto the slide and is fitted at <var>r</var> = 1, takes the mass instead: 61 % of a &lt;2
+&micro;m clay separate, which is not credible. The arithmetic is right and the physical input is
+incomplete, by two orders of magnitude, in the one place
+(&sect;<a href="#s2-13">2.13</a>) where it was said to be.</p>
+
+<p><strong>Conclusion.</strong> The conversion is implemented and verified against known masses, and
+the factor it still needs is exactly the one that cannot be calculated. Reporting the fitted
+<var>r</var> beside every weight percent makes the uncertainty legible at a glance: where the
+<var>r</var> of the clays and of the accompanying minerals differ by this much, the split between
+them is not to be relied on until the preparation has been calibrated.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -2316,6 +2415,7 @@ them.</p>
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
 <td>Defect found and corrected; 12 automated</td></tr>
+<tr><td>Weight percent</td><td>9 automated, against known masses</td><td>Exact; needs a texture calibration</td></tr>
 <tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
 <td><var>R</var><sub>wp</sub> 37&ndash;68 %, median 45 %</td></tr>
 <tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
@@ -2324,7 +2424,7 @@ them.</p>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>102 tests</strong> and runs in under two seconds
+<p>The automated suite comprises <strong>153 tests</strong> and runs in under two seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

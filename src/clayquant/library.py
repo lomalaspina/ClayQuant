@@ -143,6 +143,24 @@ class LibraryEntry:
     fraction: float | None = None
     csds_mean: float | None = None
     thickness: float | None = None
+    normalization: float = 1.0
+    """What the calculated pattern was divided by before storage.
+
+    Patterns are stored at unit maximum so that the fit is well conditioned,
+    which throws the absolute scale away.  Keeping the divisor puts it back:
+    ``coefficient / normalization`` is proportional to how many scattering units
+    of the phase are in the beam, whatever the stored pattern's height.
+    """
+
+    unit_mass: float | None = None
+    """Mass in g/mol of the unit the pattern was calculated for.
+
+    One unit cell for a discrete phase, one layer for an interstratified stack -
+    whichever the structure factor was computed from.  With the normalisation
+    above, this is what turns a scale factor into a mass
+    (:mod:`clayquant.masses`).
+    """
+
     metadata: dict = field(default_factory=dict)
 
 
@@ -179,6 +197,7 @@ class PatternLibrary:
         fraction: float | None = None,
         csds_mean: float | None = None,
         thickness: float | None = None,
+        unit_mass: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
         strip_continuum: bool = True,
     ) -> None:
@@ -229,6 +248,8 @@ class PatternLibrary:
                 fraction=fraction,
                 csds_mean=csds_mean,
                 thickness=thickness,
+                normalization=scale,
+                unit_mass=unit_mass,
                 metadata=pattern.metadata,
             )
         )
@@ -295,6 +316,10 @@ class PatternLibrary:
             thickness=np.array(
                 [np.nan if entry.thickness is None else entry.thickness for entry in self.entries]
             ),
+            normalization=np.array([entry.normalization for entry in self.entries]),
+            unit_mass=np.array(
+                [np.nan if entry.unit_mass is None else entry.unit_mass for entry in self.entries]
+            ),
             entry_metadata=json.dumps([entry.metadata for entry in self.entries], default=str),
             library_metadata=json.dumps(self.metadata, default=str),
         )
@@ -311,6 +336,17 @@ class PatternLibrary:
             spacings = (
                 data["thickness"] if "thickness" in data.files else np.full(len(fractions), np.nan)
             )
+            # Libraries written before weight percent was possible carry neither
+            # column; without them a fit still runs and reports shares, and the
+            # weight percent says it cannot be computed rather than guessing.
+            scales = (
+                data["normalization"] if "normalization" in data.files
+                else np.ones(len(fractions))
+            )
+            masses = (
+                data["unit_mass"] if "unit_mass" in data.files
+                else np.full(len(fractions), np.nan)
+            )
             entries = [
                 LibraryEntry(
                     name=str(name),
@@ -320,9 +356,12 @@ class PatternLibrary:
                     fraction=None if np.isnan(fraction) else float(fraction),
                     csds_mean=None if np.isnan(size) else float(size),
                     thickness=None if np.isnan(spacing) else float(spacing),
+                    normalization=float(scale),
+                    unit_mass=None if np.isnan(mass) else float(mass),
                     metadata=metadata,
                 )
-                for name, phase, row, orientation, fraction, size, spacing, metadata in zip(
+                for (name, phase, row, orientation, fraction, size, spacing, scale, mass,
+                     metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -330,6 +369,8 @@ class PatternLibrary:
                     fractions,
                     sizes,
                     spacings,
+                    scales,
+                    masses,
                     entry_metadata,
                 )
             ]
@@ -461,7 +502,8 @@ def build_library(
                     r_march_dollase=r,
                     name=f"{key} PO={r:g}{spacing_tag}",
                 )
-                library.add(pattern, phase=key, march_dollase=r, thickness=thickness)
+                library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
+                            unit_mass=crystal.cell_mass)
 
     # Pure glycolated smectite.  All its reflections are basal, so the
     # orientation parameter only scales the pattern and one entry suffices.
@@ -480,6 +522,7 @@ def build_library(
         phase="smectite_EG",
         march_dollase=1.0,
         fraction=0.0,
+        unit_mass=smectite.mass,
     )
 
     # Interstratified series, at each layer spacing and crystallite thickness.
@@ -537,6 +580,13 @@ def build_library(
                             fraction=fraction,
                             csds_mean=csds.mean,
                             thickness=thickness,
+                            # The interstratification model computes intensity
+                            # per layer, and a layer of this stack is a host
+                            # layer with probability `fraction` and a smectite
+                            # layer otherwise, so the mass of the average layer
+                            # is what a scale factor here counts.
+                            unit_mass=(fraction * host_layer.mass
+                                       + (1.0 - fraction) * smectite.mass),
                         )
 
     return library

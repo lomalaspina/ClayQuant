@@ -195,12 +195,22 @@ fitted phase separated, and the clay phases alone.
 
 ## What the numbers are, and are not
 
-The fit returns scale factors. Each phase's share of *diffracted intensity* is
-reported; **that is not a weight percent.** Converting needs a reference
-intensity ratio per phase — the calculated intensity per unit mass in the same
-geometry — and for an oriented mount it also depends on how the mount was
-prepared. Pass calibrated ratios to `Quantification.weight_percent()` if you
-have them; otherwise read the numbers as relative.
+The fit returns scale factors. A weight percent is computed from them without
+needing reference intensity ratios, because each calculated pattern carries the
+mass of what it was calculated from: the coefficient divided by the pattern's
+stored normalisation counts scattering units, and the mass of one unit turns
+that into a mass — the relation Rietveld analysis writes as `W ∝ S(ZMV)`. Built
+from known masses of library patterns, the fit returns them exactly.
+
+**The missing factor is texture, and it is large.** A basal series is multiplied
+by `r^-3`, so a clay fitted at `r = 0.13` is calculated to scatter 455 times more
+per gram than the same clay unoriented, and the mass inferred for it falls by the
+same factor. On a real separate this put quartz — which does not plate onto the
+slide, and fits at `r = 1` — at 61 wt%, which a <2 µm fraction is not. The fitted
+`r` is reported beside every phase so this is visible. Until `k_p` has been
+calibrated against mixtures of known composition (`Calibration`), read the weight
+percent as indicative and the clay-to-non-clay split as unreliable; the share of
+diffracted intensity is what the diffractogram actually measures.
 
 Rwp is computed with counting-statistics weights from the *raw* counts, not from
 the background-subtracted intensity — weighting by the latter puts the largest

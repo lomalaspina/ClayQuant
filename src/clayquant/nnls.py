@@ -50,6 +50,20 @@ class FitResult:
     mask: np.ndarray
     components: dict[str, np.ndarray] = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
+    march_dollase: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    """The texture parameter each entry was calculated with."""
+
+    relative_mass: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    """Mass of each entry in the specimen, in arbitrary but common units.
+
+    ``coefficient / normalization`` is proportional to the number of scattering
+    units of that entry in the beam, whatever height its stored pattern was
+    normalised to; multiplying by the mass of one unit gives a mass.  The
+    constant of proportionality is the same for every entry - the instrument,
+    the irradiated volume, the counting time, all of which the phases of one
+    measurement share - so ratios of these are ratios of mass.  Zero where the
+    library does not record the mass of its units.
+    """
 
     @property
     def residual(self) -> np.ndarray:
@@ -226,6 +240,15 @@ def nnls_fit(
         [np.trapezoid(column, two_theta[selection]) for column in design.T]
     )
     contributions = coefficients * areas
+    # What each entry weighs, up to one constant shared by all of them.
+    normalizations = np.array([
+        entry.normalization if entry.normalization else 1.0 for entry in library.entries
+    ])
+    unit_masses = np.array([
+        0.0 if entry.unit_mass is None else entry.unit_mass for entry in library.entries
+    ])
+    relative_mass = coefficients / normalizations * unit_masses
+
     total = contributions.sum()
     shares = contributions / total if total > 0 else np.zeros_like(contributions)
     amplitude_total = coefficients.sum()
@@ -252,6 +275,8 @@ def nnls_fit(
         phases=[entry.phase for entry in library.entries],
         scattering_fraction=shares,
         amplitude_fraction=amplitudes,
+        relative_mass=relative_mass,
+        march_dollase=np.array([entry.march_dollase for entry in library.entries]),
         r_wp=r_wp,
         r_p=r_p,
         mask=selection,

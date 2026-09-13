@@ -266,6 +266,8 @@ def _quantification_table(quantification, result) -> html.Div:
                                 [
                                     html.Th("Phase"),
                                     html.Th("Group"),
+                                    html.Th("Weight %"),
+                                    html.Th("r (texture)"),
                                     html.Th("Scattering %"),
                                     html.Th("Amplitude %"),
                                 ]
@@ -277,6 +279,12 @@ def _quantification_table(quantification, result) -> html.Div:
                                     [
                                         html.Td(row["phase"]),
                                         html.Td(row["group"]),
+                                        html.Td(
+                                            f"{row['weight_percent']:.1f}"
+                                            if row["weight_percent"] != "" else "-",
+                                            style={"fontWeight": "600"},
+                                        ),
+                                        html.Td(f"{row['march_dollase']:.2f}"),
                                         html.Td(f"{row['scattering_percent']:.2f}"),
                                         html.Td(f"{row['amplitude_percent']:.2f}"),
                                     ]
@@ -296,8 +304,34 @@ def _quantification_table(quantification, result) -> html.Div:
         f"The clay minerals are {100.0 * quantification.clay_total_scattering:.1f}% "
         f"of the whole pattern."
     )
+    if quantification.weights_available:
+        weight_note = html.Div(
+            [
+                html.B("Weight % is calculated, not calibrated. "),
+                "It comes from the fitted scale factors and the mass of the unit each pattern "
+                "was calculated for, and assumes the calculated pattern accounts for everything "
+                "the phase contributes. In an oriented mount that includes how strongly the "
+                "phase orients, which differs between minerals and between preparations: the "
+                "fit cannot tell a well-oriented phase from an abundant one, and the effect is "
+                "large: a basal series is enhanced by r to the power -3, so a phase fitted at "
+                "r = 0.2 is calculated to scatter 125 times more per gram than the same phase at "
+                "r = 1. Read the r column beside each weight. Treat these as estimates until the "
+                "preparation has been calibrated against mixtures of known composition. "
+                f"Calibration in use: {quantification.calibration.source}.",
+            ],
+            style={"background": "#fff4e5", "border": "1px solid #ffb74d", "padding": "8px",
+                   "borderRadius": "6px", "fontSize": "0.8rem", "margin": "10px 0"},
+        )
+    else:
+        weight_note = html.Div(
+            "Weight % is not available: this library does not record the mass of the units its "
+            "patterns were calculated for. Rebuild the library to get it.",
+            style={"background": "#fff4e5", "border": "1px solid #ffb74d", "padding": "8px",
+                   "borderRadius": "6px", "fontSize": "0.8rem", "margin": "10px 0"},
+        )
     return html.Div(
         [
+            weight_note,
             html.Div(
                 [
                     build(quantification.table(clay_basis=True), "Clay minerals", clay_note),
