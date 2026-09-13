@@ -2222,6 +2222,31 @@ collapsed), expandable, library (1601 patterns), fit
 (<var>R</var><sub>wp</sub>&nbsp;=&nbsp;49.6&nbsp;%), export (7 files) and the simulator, with no
 JavaScript errors.</p>
 
+<h3 id="a-12c">A.12.2 A step that looked like it did nothing</h3>
+
+<p><strong>What happened.</strong> <em>Search for main minerals</em> was reported as doing nothing.
+It was doing exactly what it should, and finishing: the search takes seven to ten seconds, and Dash
+displays nothing at all while a callback runs. A button that shows no change for ten seconds cannot
+be told apart from a button that is broken, and was not.</p>
+
+<p><strong>What was changed.</strong> Every pane a slow step writes into is now wrapped so that a
+spinner appears over it while the step is computing, with the previous contents dimmed underneath
+rather than blanked, and a short delay before it shows so the quick steps do not flicker. That covers
+the mineral search, the quantification, the library load and build, and the export &mdash; the four
+steps measured in seconds rather than milliseconds.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Step</th><th class="num">Time on a real measurement</th></tr>
+<tr><td>Mineral search, peak matching (no library loaded)</td><td class="num">7.4 s</td></tr>
+<tr><td>Mineral search, competitive fit (library loaded)</td><td class="num">9.6 s</td></tr>
+<tr><td>Quantification over 1614 patterns</td><td class="num">tens of seconds</td></tr>
+</table></div>
+
+<p><strong>And the sliders.</strong> Each slider carried a bubble showing its value under the handle,
+which sat on top of the label of the control beneath it and hid part of the text. The value is
+already shown in the box beside every slider, so the bubbles are removed &mdash; nineteen of
+them.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -2241,7 +2266,7 @@ JavaScript errors.</p>
 <tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
-<tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 4 defects found and fixed</td></tr>
+<tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
 <p>The automated suite comprises <strong>102 tests</strong> and runs in under two seconds

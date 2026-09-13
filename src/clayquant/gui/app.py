@@ -127,6 +127,30 @@ def background_model_from_controls(
     )
 
 
+def working(*children) -> dcc.Loading:
+    """Wrap a pane so a spinner covers it while a callback is computing it.
+
+    Several steps take seconds rather than milliseconds - the mineral search
+    fits every candidate phase, the quantification solves a non-negative least
+    squares over more than a thousand patterns - and Dash shows nothing at all
+    while a callback runs.  A button that appears to do nothing for ten seconds
+    is indistinguishable from a button that does nothing, and was reported as
+    exactly that.
+    """
+    return dcc.Loading(
+        children=list(children),
+        type="circle",
+        color="#6b46c1",
+        # Shown only once the step has taken long enough to need explaining, so
+        # the quick ones do not flicker; the pane underneath is dimmed rather
+        # than blanked, which reads as "this is being recalculated" instead of
+        # "this is gone".
+        delay_show=200,
+        overlay_style={"visibility": "visible", "opacity": 0.35,
+                       "filter": "grayscale(60%)"},
+    )
+
+
 def background_report(pattern, fit, background, model) -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
@@ -362,7 +386,8 @@ def load_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="load-graph", figure=empty_figure("Load patterns to begin"))],
+            html.Div([working(dcc.Graph(id="load-graph",
+                                        figure=empty_figure("Load patterns to begin")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
@@ -401,7 +426,6 @@ def zero_tab() -> html.Div:
                                 step=0.01,
                                 value=0.0,
                                 marks={v: f"{v:g}" for v in (-0.5, -0.25, 0, 0.25, 0.5)},
-                                tooltip={"placement": "bottom", "always_visible": True},
                             ),
                         ],
                         style={"marginTop": "12px"},
@@ -411,7 +435,8 @@ def zero_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="zero-graph", figure=empty_figure("Load patterns first"))],
+            html.Div([working(dcc.Graph(id="zero-graph",
+                                        figure=empty_figure("Load patterns first")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
@@ -444,12 +469,10 @@ def background_tab() -> html.Div:
                     ),
                     label("Degree"),
                     dcc.Slider(id="bg-degree", min=0, max=12, step=1, value=4,
-                               marks={0: "0", 4: "4", 8: "8", 12: "12"},
-                               tooltip={"placement": "bottom"}),
+                               marks={0: "0", 4: "4", 8: "8", 12: "12"}),
                     label("Exponential decay (1/°)"),
                     dcc.Slider(id="bg-decay", min=0.02, max=1.0, step=0.02, value=0.2,
-                               marks={0.02: "0.02", 0.5: "0.5", 1.0: "1"},
-                               tooltip={"placement": "bottom"}),
+                               marks={0.02: "0.02", 0.5: "0.5", 1.0: "1"}),
                     html.Hr(),
                     dcc.Checklist(
                         id="bg-inverse",
@@ -458,13 +481,11 @@ def background_tab() -> html.Div:
                     ),
                     label("1/x offset (°2θ)"),
                     dcc.Slider(id="bg-offset", min=0.0, max=10.0, step=0.25, value=1.0,
-                               marks={0: "0", 5: "5", 10: "10"},
-                               tooltip={"placement": "bottom"}),
+                               marks={0: "0", 5: "5", 10: "10"}),
                     html.Hr(),
                     label("Peak-stripping width (°2θ)"),
                     dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
-                               marks={0.5: "0.5", 5: "5", 10: "10"},
-                               tooltip={"placement": "bottom"}),
+                               marks={0.5: "0.5", 5: "5", 10: "10"}),
                     html.Div(
                         "The blue dashed curve is what the model is fitted to. Set "
                         "this just above the width of the broadest reflection you "
@@ -481,7 +502,8 @@ def background_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="bg-graph", figure=empty_figure("Load patterns first"))],
+            html.Div([working(dcc.Graph(id="bg-graph",
+                                        figure=empty_figure("Load patterns first")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
@@ -501,8 +523,7 @@ def kaolinite_tab() -> html.Div:
                     ),
                     label("7.15 Å window (°2θ)"),
                     dcc.RangeSlider(id="kao-window", min=10.0, max=15.0, step=0.1,
-                                    value=list(KAOLINITE_001_WINDOW),
-                                    tooltip={"placement": "bottom", "always_visible": True}),
+                                    value=list(KAOLINITE_001_WINDOW)),
                     label("Scaling reference"),
                     dcc.Dropdown(
                         id="kao-reference",
@@ -522,7 +543,9 @@ def kaolinite_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="kao-graph", figure=empty_figure("Load the air-dried and heated mounts"))],
+            html.Div([working(dcc.Graph(
+                id="kao-graph",
+                figure=empty_figure("Load the air-dried and heated mounts")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
@@ -542,8 +565,7 @@ def smectite_tab() -> html.Div:
                     ),
                     label("Search window (°2θ)"),
                     dcc.RangeSlider(id="sme-window", min=2.0, max=14.0, step=0.1,
-                                    value=list(EXPANDABLE_001_WINDOW),
-                                    tooltip={"placement": "bottom", "always_visible": True}),
+                                    value=list(EXPANDABLE_001_WINDOW)),
                     label("Scaling reference"),
                     dcc.Dropdown(
                         id="sme-reference",
@@ -562,7 +584,9 @@ def smectite_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="sme-graph", figure=empty_figure("Load the air-dried and glycolated mounts"))],
+            html.Div([working(dcc.Graph(
+                id="sme-graph",
+                figure=empty_figure("Load the air-dried and glycolated mounts")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
@@ -596,31 +620,29 @@ def main_minerals_tab() -> html.Div:
                     ),
                     label("Unit cell allowance (%)"),
                     dcc.Slider(id="detect-allowance", min=0.0, max=5.0, step=0.25, value=2.0,
-                               marks={0: "0", 2: "2", 5: "5"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={0: "0", 2: "2", 5: "5"}),
                     label("Minimum share (‰) or score (%)"),
                     dcc.Slider(id="detect-score", min=5, max=95, step=5, value=10,
-                               marks={5: "5", 50: "50", 95: "95"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={5: "5", 50: "50", 95: "95"}),
                     label("Minimum peak S/N"),
                     dcc.Slider(id="detect-snr", min=2, max=20, step=1, value=5,
-                               marks={2: "2", 10: "10", 20: "20"},
-                               tooltip={"placement": "bottom"}),
+                               marks={2: "2", 10: "10", 20: "20"}),
                     label("Search range (°2θ)"),
                     dcc.RangeSlider(id="detect-range", min=2.0, max=70.0, step=0.5,
-                                    value=[4.0, 40.0],
-                                    tooltip={"placement": "bottom", "always_visible": True}),
+                                    value=[4.0, 40.0]),
                     html.Button("Search for main minerals", id="detect-run", n_clicks=0,
                                 style={"marginTop": "10px"}),
-                    html.Div(id="detect-status", style={"marginTop": "10px"}),
+                    working(html.Div(id="detect-status", style={"marginTop": "10px"})),
                 ],
                 style=CONTROL_PANEL,
             ),
             html.Div(
                 [
-                    html.Div(id="detect-dialog"),
-                    dcc.Graph(id="detect-graph",
-                              figure=empty_figure("Load a phase database and search")),
+                    working(
+                        html.Div(id="detect-dialog"),
+                        dcc.Graph(id="detect-graph",
+                                  figure=empty_figure("Load a phase database and search")),
+                    ),
                     html.Div(id="detect-selection", style={"marginTop": "8px"}),
                 ],
                 style=GRAPH_BOX,
@@ -642,7 +664,8 @@ def fit_tab() -> html.Div:
                                 style={"marginTop": "6px"}),
                     html.Button("Build library now", id="lib-build", n_clicks=0,
                                 style={"marginTop": "6px"}),
-                    html.Div(id="lib-status", style={"marginTop": "8px", "fontSize": "0.82rem"}),
+                    working(html.Div(id="lib-status",
+                                     style={"marginTop": "8px", "fontSize": "0.82rem"})),
                     html.Hr(),
                     label("Mount to fit"),
                     dcc.RadioItems(
@@ -651,8 +674,7 @@ def fit_tab() -> html.Div:
                         value="glycol",
                     ),
                     label("Fit range (°2θ)"),
-                    dcc.RangeSlider(id="fit-range", min=2.0, max=45.0, step=0.5, value=[4.0, 34.0],
-                                    tooltip={"placement": "bottom", "always_visible": True}),
+                    dcc.RangeSlider(id="fit-range", min=2.0, max=45.0, step=0.5, value=[4.0, 34.0]),
                     label("Restrict orientation parameters"),
                     dcc.Dropdown(
                         id="fit-orientations",
@@ -674,7 +696,7 @@ def fit_tab() -> html.Div:
             ),
             html.Div(
                 [
-                    dcc.Tabs(
+                    working(dcc.Tabs(
                         id="result-tabs",
                         value="fit",
                         children=[
@@ -707,8 +729,8 @@ def fit_tab() -> html.Div:
                                                     figure=empty_figure("Load the mounts"))],
                             ),
                         ],
-                    ),
-                    html.Div(
+                    )),
+                    working(html.Div(
                         [
                             label("Export folder"),
                             dcc.Input(id="export-path", type="text", value="results",
@@ -719,7 +741,7 @@ def fit_tab() -> html.Div:
                                                                 "fontSize": "0.82rem"}),
                         ],
                         style={"marginTop": "10px"},
-                    ),
+                    )),
                     html.Div(id="fit-table"),
                 ],
                 style=GRAPH_BOX,
@@ -752,32 +774,25 @@ def simulator_tab() -> html.Div:
                                  clearable=False),
                     label("Host layer fraction"),
                     dcc.Slider(id="sim-fraction", min=0.0, max=1.0, step=0.01, value=0.8,
-                               marks={0: "0", 0.5: "0.5", 1: "1"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={0: "0", 0.5: "0.5", 1: "1"}),
                     label("Junction probability P(host→smectite)  — 0 uses random stacking"),
                     dcc.Slider(id="sim-pab", min=0.0, max=1.0, step=0.01, value=0.0,
-                               marks={0: "random", 1: "1"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={0: "random", 1: "1"}),
                     html.Hr(),
                     label("Mean crystallite thickness (layers)"),
                     dcc.Slider(id="sim-csds", min=2, max=60, step=1, value=10,
-                               marks={2: "2", 20: "20", 40: "40", 60: "60"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={2: "2", 20: "20", 40: "40", 60: "60"}),
                     label("CSDS width β (in ln N)"),
                     dcc.Slider(id="sim-beta", min=0.0, max=1.0, step=0.05, value=0.35,
-                               marks={0: "0", 0.5: "0.5", 1: "1"},
-                               tooltip={"placement": "bottom"}),
+                               marks={0: "0", 0.5: "0.5", 1: "1"}),
                     label("March-Dollase orientation r"),
                     dcc.Slider(id="sim-po", min=0.1, max=1.0, step=0.05, value=0.2,
-                               marks={0.1: "0.1", 0.5: "0.5", 1.0: "1 (random)"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={0.1: "0.1", 0.5: "0.5", 1.0: "1 (random)"}),
                     label("Glycolated smectite d(001) (Å)"),
                     dcc.Slider(id="sim-dsmectite", min=15.0, max=18.0, step=0.02, value=16.86,
-                               marks={15: "15", 16.86: "16.86", 18: "18"},
-                               tooltip={"placement": "bottom", "always_visible": True}),
+                               marks={15: "15", 16.86: "16.86", 18: "18"}),
                     label("2θ range (degrees)"),
-                    dcc.RangeSlider(id="sim-range", min=2.0, max=70.0, step=1.0, value=[2.0, 40.0],
-                                    tooltip={"placement": "bottom"}),
+                    dcc.RangeSlider(id="sim-range", min=2.0, max=70.0, step=1.0, value=[2.0, 40.0]),
                     dcc.Checklist(
                         id="sim-options",
                         options=[
@@ -790,7 +805,8 @@ def simulator_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([dcc.Graph(id="sim-graph", figure=empty_figure("Adjust the controls"))],
+            html.Div([working(dcc.Graph(id="sim-graph",
+                                        figure=empty_figure("Adjust the controls")))],
                      style=GRAPH_BOX),
         ],
         style=ROW,
