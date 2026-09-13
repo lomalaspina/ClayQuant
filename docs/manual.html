@@ -2413,6 +2413,50 @@ enhanced and the <var>hkl</var> reflections are all but absent. Sekaninaite, a p
 whose lines sit under quartz and feldspar, is three times the refined value; the competitive screen
 also admitted several minerals the refinement did not use, and they take intensity from each other.</p>
 
+<h4>What the reference refinement does and does not cover</h4>
+
+<p>It is a refinement of the <em>air-dried</em> mount, and it contains no expandable phase at all:
+there is no smectite, montmorillonite or illite/smectite in it, which is not an omission but a
+consequence of the mount. In an air-dried specimen an expandable clay sits near 14&ndash;15 &aring;,
+on top of chlorite 001 and vermiculite, and cannot be separated from them; that is what the
+glycol-solvated mount is for (&sect;<a href="#s2-1">2.1</a>). Kaolinite <em>is</em> in it &mdash; an
+active <span class="kw">str</span> block, ICSD 30285, the 2<var>M</var> polytype, orientation fixed
+at <var>r</var> = 1, 28.0 % &mdash; and ClayQuant's own heat test agrees independently, finding 81 %
+of the 7.11 &aring; area lost on heating. Illite and chlorite appear as
+<span class="kw">hkl_Is</span> phases, fitted for intensity and given no weight.</p>
+
+<p>So the four weights are a partial reference: they are normalised over the four phases that were
+weighed, with two clays present but unweighed and the expandable clay outside the experiment
+altogether. They constrain the ratios of quartz, albite, kaolinite and sekaninaite, and say nothing
+about how much clay the mount holds.</p>
+
+<h4>How well the fit determines the texture parameter</h4>
+
+<p>Kaolinite is a third of its refined weight even though the fit chose <var>r</var> = 1 for it,
+which is the setting that gives it the most mass, so the difference is not the texture parameter.
+Measuring how much the parameter is worth is worth doing anyway, because it is alarming. For the
+kaolinite entries of the library, from <var>r</var> = 0.1 to <var>r</var> = 1:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num"><var>r</var></th><th class="num">Similarity of the stored pattern to <var>r</var> = 1</th>
+<th class="num">Mass per unit coefficient</th></tr>
+<tr><td class="num">0.1</td><td class="num">0.842</td><td class="num">3.8 &times; 10<sup>&minus;5</sup></td></tr>
+<tr><td class="num">0.5</td><td class="num">0.861</td><td class="num">4.8 &times; 10<sup>&minus;3</sup></td></tr>
+<tr><td class="num">1.0</td><td class="num">1.000</td><td class="num">3.8 &times; 10<sup>&minus;2</sup></td></tr>
+</table></div>
+
+<p>A tenfold change in <var>r</var> changes the shape of the pattern by 16 % and the mass it implies
+by a factor of a thousand. The shape it changes is the ratio of <var>hkl</var> to 00<var>l</var>
+intensity, which in a strongly oriented mount is the weakest thing in the pattern. The weight percent
+of a basal-dominated phase is therefore not merely uncalibrated: it rests on a quantity the
+measurement barely determines.</p>
+
+<p>That has a consequence for the calibration of &sect;<a href="#s2-13">2.13</a>. A factor
+<var>k<sub>p</sub></var> fitted while <var>r</var> is also free would be absorbing a parameter the
+data cannot fix. The calibration should instead <em>fix</em> <var>r</var> per phase, determined from
+the specimens of known composition, so that afterwards the fit chooses only how much of each phase is
+present.</p>
+
 <p><strong>Conclusion.</strong> A test built by inverting the code it tests will agree with the code
 and not with nature. The check that mattered was against an independent analysis of the same
 measurement, and it is the reason the two masses that ClayQuant computes for each phase &mdash; the
