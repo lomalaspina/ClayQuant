@@ -161,9 +161,9 @@ def background_report(pattern, fit, background, model) -> str:
     )
     if share > 25.0:
         text += (
-            " Most of the low-angle counts are therefore kept as signal; a narrower "
-            "stripping width keeps less, at the cost of a higher background under "
-            "the peaks."
+            " That is a large share to carry into the fit. Unless a real reflection "
+            "lies at the start of the scan, the background should be following the "
+            "direct-beam tail there: check the blue curve against the measurement."
         )
     above = float(np.mean(background > pattern.intensity))
     if above > 0.02:
@@ -468,11 +468,11 @@ def background_tab() -> html.Div:
                                marks={0.5: "0.5", 5: "5", 10: "10"},
                                tooltip={"placement": "bottom"}),
                     html.Div(
-                        "The blue dashed curve is what the model is fitted to. "
-                        "Narrow settings leave peak wings in the background and eat "
-                        "into the reflections; wide ones strip the direct-beam tail "
-                        "as well. On the test measurements the fit improves up to "
-                        "about 4\u00b0 and is flat beyond it, which is the default.",
+                        "The blue dashed curve is what the model is fitted to. Set "
+                        "this just above the width of the broadest reflection you "
+                        "want kept: narrower leaves peak wings standing in the "
+                        "background. It does not control the low-angle tail, which "
+                        "is background at any width and is kept as such.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     html.Button("Apply to this mount", id="bg-apply", n_clicks=0,

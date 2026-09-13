@@ -16,6 +16,7 @@ Two kinds of entry are provided:
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
@@ -27,6 +28,9 @@ __all__ = [
     "CIF_SOURCES",
     "CifSource",
     "structure_directory",
+    "structure_directories",
+    "find_structure_file",
+    "describe_structure_search",
     "load_crystal",
     "load_layer",
     "eg_smectite_layer",
@@ -85,26 +89,102 @@ CIF_SOURCES: dict[str, CifSource] = {
 }
 
 
-def structure_directory() -> Path:
-    """Directory searched for CIF files.
+def structure_directories() -> list[Path]:
+    """Every directory searched for CIF files, in order of precedence.
 
-    ``$CLAYQUANT_STRUCTURE_DIR`` takes precedence, then a ``structures``
-    directory in the current working directory, then the package data
-    directory.
+    ``$CLAYQUANT_STRUCTURE_DIR`` first, then a ``structures`` directory beside
+    the working directory, the working directory itself, the ``structures``
+    directory of a source checkout, and finally the package data directory.
+    Several are searched rather than one because the program is as likely to be
+    started from the home directory as from the project, and a file that is
+    plainly there should not be reported missing over a detail of where the
+    shell happened to be.
     """
+    candidates: list[Path] = []
     override = os.environ.get("CLAYQUANT_STRUCTURE_DIR")
     if override:
-        return Path(override)
-    local = Path.cwd() / "structures"
-    if local.is_dir():
-        return local
-    return Path(str(resources.files("clayquant.data").joinpath("structures")))
+        candidates.append(Path(override).expanduser())
+    cwd = Path.cwd()
+    candidates.extend([cwd / "structures", cwd])
+    # models.py -> clayquant -> src -> the checkout root, when run from source.
+    candidates.append(Path(__file__).resolve().parents[2] / "structures")
+    candidates.append(Path(str(resources.files("clayquant.data").joinpath("structures"))))
+
+    seen: set[Path] = set()
+    ordered: list[Path] = []
+    for directory in candidates:
+        try:
+            resolved = directory.resolve()
+        except OSError:  # a path that cannot be resolved is simply not searched
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ordered.append(directory)
+    return ordered
+
+
+def structure_directory() -> Path:
+    """The first searched directory that exists, for messages and for writing."""
+    for directory in structure_directories():
+        if directory.is_dir():
+            return directory
+    return Path.cwd() / "structures"
+
+
+def _normalised(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def find_structure_file(source: "CifSource") -> Path | None:
+    """Locate the CIF of ``source``, or ``None`` if no file matches it.
+
+    The expected file name is matched first, but it is not required.  An export
+    is named by whoever made it - ``Kaolinite_1M_63192.cif`` rather than
+    ``kaolinite_1M_ICSD_63192.cif``, or the same name in different case on a
+    case-sensitive file system - and a structure that is plainly present should
+    be used rather than reported missing over its spelling.  So a file is
+    accepted when its name carries the ICSD code, or when it carries the phase
+    name (``kaolinite_2M`` and ``kaolinite_1M`` being distinguished by the
+    polytype, which is part of the key).
+    """
+    canonical = source.filename.lower()
+    code = str(source.icsd)
+    key = _normalised(source.key)
+
+    for directory in structure_directories():
+        if not directory.is_dir():
+            continue
+        try:
+            files = sorted(entry for entry in directory.iterdir()
+                           if entry.is_file() and entry.suffix.lower() == ".cif")
+        except OSError:
+            continue
+        for entry in files:
+            if entry.name.lower() == canonical:
+                return entry
+        for entry in files:
+            if code in _normalised(entry.stem):
+                return entry
+        for entry in files:
+            if key in _normalised(entry.stem):
+                return entry
+    return None
 
 
 def available_phases() -> dict[str, bool]:
-    """Map each expected CIF phase key to whether its file is present."""
-    directory = structure_directory()
-    return {key: (directory / source.filename).is_file() for key, source in CIF_SOURCES.items()}
+    """Map each expected CIF phase key to whether a matching file was found."""
+    return {key: find_structure_file(source) is not None for key, source in CIF_SOURCES.items()}
+
+
+def describe_structure_search() -> str:
+    """What was looked for and where, for an error or a status message."""
+    lines = []
+    for key, source in CIF_SOURCES.items():
+        found = find_structure_file(source)
+        lines.append(f"  {key}: {found if found else 'not found'} (ICSD {source.icsd})")
+    searched = "\n".join(f"  {directory}" for directory in structure_directories())
+    return "Searched:\n" + searched + "\nStructures:\n" + "\n".join(lines)
 
 
 @lru_cache(maxsize=None)
@@ -116,13 +196,15 @@ def load_crystal(key: str) -> Crystal:
         raise KeyError(
             f"unknown phase {key!r}; expected one of {sorted(CIF_SOURCES)}"
         ) from None
-    path = structure_directory() / source.filename
-    if not path.is_file():
+    path = find_structure_file(source)
+    if path is None:
         raise FileNotFoundError(
-            f"{path} not found.\n"
+            f"No CIF for {key} was found.\n"
             f"ClayQuant does not redistribute ICSD data. Export ICSD {source.icsd} "
-            f"({source.description}) as CIF, save it as {source.filename}, and put it in "
-            f"{structure_directory()} or set $CLAYQUANT_STRUCTURE_DIR."
+            f"({source.description}) as CIF and put it in {structure_directory()}, or set "
+            f"$CLAYQUANT_STRUCTURE_DIR. The name need only carry the ICSD code or the phase "
+            f"name; {source.filename} is the expected spelling.\n"
+            + describe_structure_search()
         )
     return read_cif(path)
 

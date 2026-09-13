@@ -90,9 +90,16 @@ def test_zero_error_is_recovered(synthetic):
 
 def test_background_with_accumulated_inverse_term(synthetic):
     corrected = apply_zero_error(synthetic, estimate_zero_error(synthetic, window=0.8).shift)
-    window = (corrected.two_theta >= FIT_RANGE[0]) & (corrected.two_theta <= FIT_RANGE[1])
-    two_theta = corrected.two_theta[window]
-    intensity = corrected.intensity[window]
+    # Fitted over the whole scan, as the program does, and judged over the range
+    # that is actually quantified.  Peak stripping needs data on both sides of a
+    # point, so within one stripping window of either end its estimate is not a
+    # stripped background; fitting a sub-range instead of the scan would put
+    # that zone in the middle of the pattern, where the model then follows
+    # whatever the sub-range opens on.
+    fit_two_theta, fit_intensity = corrected.two_theta, corrected.intensity
+    window = (fit_two_theta >= FIT_RANGE[0]) & (fit_two_theta <= FIT_RANGE[1])
+    two_theta = fit_two_theta[window]
+    intensity = fit_intensity[window]
     truth = true_background(two_theta)
 
     plain = BackgroundModel(polynomial_degree=3)
@@ -100,22 +107,31 @@ def test_background_with_accumulated_inverse_term(synthetic):
     assert with_inverse.n_terms == plain.n_terms + 1
     assert with_inverse.components == ["polynomial", "inverse"]
 
-    fit_plain = plain.fit(two_theta, intensity)
-    fit_inverse = with_inverse.fit(two_theta, intensity)
+    fit_plain = plain.fit(fit_two_theta, fit_intensity)
+    fit_inverse = with_inverse.fit(fit_two_theta, fit_intensity)
 
     # The synthetic background contains a genuine 1/x term, so accumulating that
     # component on top of the polynomial must describe the stripped background
     # better.
-    assert fit_inverse.r_squared(two_theta) > fit_plain.r_squared(two_theta)
-    assert fit_inverse.r_squared(two_theta) > 0.99
+    assert fit_inverse.r_squared(fit_two_theta) > fit_plain.r_squared(fit_two_theta)
+    # Not 0.99: the stripped estimate keeps the low-angle tail it is entitled to
+    # keep (tests/test_background.py), and a cubic plus one 1/x term follows that
+    # shape only approximately.  A background that reached 0.99 here would be one
+    # that had cut the tail away.
+    assert fit_inverse.r_squared(fit_two_theta) > 0.985
 
-    # Whatever the components, a background must stay under the data and must
-    # not rise above the true background into the peaks.
+    # A correct background is not systematically under the data: between the
+    # peaks the measurement is the background plus counting noise, so a model
+    # that tracks it crosses it about half the time.  What it must not do is
+    # exceed the data by more than that noise, or depart from the background
+    # that was put in.
     for fit in (fit_plain, fit_inverse):
         values = fit(two_theta)
-        assert np.mean(values <= intensity) > 0.99
-        assert np.all(values <= truth + 0.05 * truth.max())
+        noise = np.sqrt(np.maximum(intensity, 1.0))
+        assert np.all(values <= intensity + 3.0 * noise)
         assert np.all(values >= 0.0)
+        assert np.mean(np.abs(values - truth)) < 0.2 * truth.mean()
+    assert np.mean(np.abs(fit_inverse(two_theta) - truth)) < 0.1 * truth.mean()
 
 
 def test_background_components_can_all_be_combined(synthetic):
@@ -196,19 +212,39 @@ def test_chlorite_survives_heating(library):
 
 
 def test_smectite_swelling_is_detected(library):
+    """The expandable reflection moves from 15 A air-dried to 16.9 A glycolated.
+
+    Both reflections are put in explicitly.  An earlier version of this test read
+    the glycol peak off a calculated I/S pattern, which in this window has no
+    resolved reflection at all - only the smooth low-angle rise of the
+    interstratification - and it passed only because the background estimator of
+    the day cut that rise away and left the edge of the window standing as the
+    highest point.
+    """
     two_theta = library.two_theta
     illite = library.entries[library.names.index("illite PO=0.2")].intensity
-    glycolated = library.entries[library.names.index("I/S 0.80/0.20 PO=0.2")].intensity
     quartz = add_quartz(two_theta)
 
-    # Air-dried: a 15 A reflection from two water layers; glycolated: the
-    # calculated I/S pattern, whose low-angle reflection sits at higher d.
-    air_peak = 3000.0 * pseudo_voigt(two_theta - 5.89, 0.5, 0.5) * 0.5
+    air_peak = 3000.0 * pseudo_voigt(two_theta - 5.89, 0.5, 0.5) * 0.5      # 15.00 A
+    glycol_peak = 3000.0 * pseudo_voigt(two_theta - 5.24, 0.5, 0.5) * 0.5   # 16.86 A
     air = Pattern(two_theta, 4000.0 * illite + air_peak + quartz, name="air")
-    glycol = Pattern(two_theta, 4000.0 * glycolated + quartz, name="glycol")
+    glycol = Pattern(two_theta, 4000.0 * illite + glycol_peak + quartz, name="glycol")
 
     result = smectite_swelling(air, glycol, window=(4.2, 8.0))
     assert result.expandable_detected
     assert result.shift_d > 0.5
     assert result.air.d_spacing == pytest.approx(15.0, abs=0.3)
-    assert result.glycol.d_spacing > 12.5
+    assert result.glycol.d_spacing == pytest.approx(16.9, abs=0.4)
+
+
+def test_a_non_expandable_sample_is_not_flagged(library):
+    """The same reflection in both mounts is not a swelling."""
+    two_theta = library.two_theta
+    illite = library.entries[library.names.index("illite PO=0.2")].intensity
+    quartz = add_quartz(two_theta)
+    peak = 3000.0 * pseudo_voigt(two_theta - 5.89, 0.5, 0.5) * 0.5
+    air = Pattern(two_theta, 4000.0 * illite + peak + quartz, name="air")
+    glycol = Pattern(two_theta, 4000.0 * illite + peak + quartz, name="glycol")
+
+    result = smectite_swelling(air, glycol, window=(4.2, 8.0))
+    assert not result.expandable_detected

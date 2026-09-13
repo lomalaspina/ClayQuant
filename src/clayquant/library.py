@@ -52,10 +52,17 @@ __all__ = [
     "CHLORITE_SMECTITE_FRACTIONS",
     "CSDS_MEANS",
     "HOST_THICKNESSES",
+    "CONTINUUM_WINDOW",
     "scaled_to_d001",
     "NORMALIZATION_FLOOR",
     "main",
 ]
+
+CONTINUUM_WINDOW = 6.0
+"""Peak-stripping width in degrees used to take the continuum off a calculated pattern."""
+
+CONTINUUM_MIN_ANGLE = 1.0
+"""Lowest angle a pattern is calculated at; below it the Lorentz factor is useless."""
 
 PREFERRED_ORIENTATIONS: tuple[float, ...] = tuple(round(0.1 * k, 1) for k in range(1, 11))
 """March-Dollase parameters 0.1 to 1.0 in steps of 0.1."""
@@ -195,9 +202,21 @@ class PatternLibrary:
         intensity = pattern.intensity
         if strip_continuum:
             intensity = np.clip(
-                intensity - snip_baseline(pattern.two_theta, intensity, window=6.0), 0.0, None
+                intensity
+                - snip_baseline(pattern.two_theta, intensity, window=CONTINUUM_WINDOW),
+                0.0,
+                None,
             )
-        usable = pattern.two_theta >= normalization_floor
+        if pattern.two_theta.shape != self.two_theta.shape or not np.allclose(
+            pattern.two_theta, self.two_theta
+        ):
+            # Patterns are calculated on a grid reaching beyond the stored one so
+            # that the continuum can be stripped without the end effect; the
+            # margin is dropped here.  The grids share a step, so this is a
+            # trim rather than a resampling.
+            intensity = np.interp(self.two_theta, pattern.two_theta, intensity,
+                                  left=0.0, right=0.0)
+        usable = self.two_theta >= normalization_floor
         scale = float(np.max(intensity[usable])) if usable.any() else 0.0
         if scale <= 0.0:
             scale = float(np.max(intensity)) or 1.0
@@ -367,6 +386,23 @@ def build_library(
         measured by Reynolds (1965).
     """
     grid = two_theta_grid(2.0, 40.0, 0.02) if grid is None else np.asarray(grid, dtype=float)
+    # Every pattern is calculated on a grid reaching below the one it is stored
+    # on.  The continuum is stripped before storage, and peak stripping needs
+    # data on both sides of a point, so its estimate is unreliable within one
+    # window of either end (see clayquant.background.snip_baseline) - which for
+    # a calculated clay pattern is exactly where the diffuse continuum is
+    # largest.  Calculating a margin beyond both ends and trimming afterwards
+    # puts that zone outside the stored range: on an I/S 0.80/0.20 pattern it
+    # takes the continuum left behind at 3.5 deg from 21% of the strongest peak
+    # down to 5%, with the peaks themselves unchanged.
+    step = float(np.mean(np.diff(grid))) if len(grid) > 1 else 0.02
+    margin = np.arange(1, int(round(CONTINUUM_WINDOW / step)) + 1) * step
+    extended = np.concatenate([
+        grid[0] - margin[::-1],
+        grid,
+        grid[-1] + margin,
+    ])
+    extended = extended[extended >= CONTINUUM_MIN_ANGLE]
     instrument = instrument or Instrument(
         emission=CU_KA_5LINE,
         peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0),
@@ -420,7 +456,7 @@ def build_library(
             for r in orientations:
                 pattern = powder_pattern(
                     crystal,
-                    grid,
+                    extended,
                     instrument,
                     r_march_dollase=r,
                     name=f"{key} PO={r:g}{spacing_tag}",
@@ -436,7 +472,7 @@ def build_library(
     library.add(
         basal_pattern(
             MixedLayerStack(smectite, smectite, 1.0, csds=csds, name="smectite_EG"),
-            grid,
+            extended,
             instrument,
             r_march_dollase=1.0,
             name="smectite_EG",
@@ -455,7 +491,7 @@ def build_library(
         base_layer = load_layer(host_key)
         layers_per_cell = CIF_SOURCES[host_key].layers_per_cell
         wavelengths, _ = instrument.sample_emission()
-        d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
+        d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(extended[-1] / 2.0)))
         spacings = host_thicknesses.get(host_key) or (base_layer.thickness,)
         announce(
             f"{label}: {len(fractions)} compositions x {len(orientations)} orientations "
@@ -468,7 +504,7 @@ def build_library(
             host_reflections = reflections(host, d_min)
             spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
             for csds in distributions:
-                scale = basal_scale_factor(host, layers_per_cell, grid, instrument, csds)
+                scale = basal_scale_factor(host, layers_per_cell, extended, instrument, csds)
                 for fraction in fractions:
                     composition = f"{fraction:.2f}/{1.0 - fraction:.2f}"
                     stack = MixedLayerStack(
@@ -483,7 +519,7 @@ def build_library(
                             stack,
                             host,
                             layers_per_cell,
-                            grid,
+                            extended,
                             instrument,
                             r_march_dollase=r,
                             name=(

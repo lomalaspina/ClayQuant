@@ -6,15 +6,20 @@ redistributed, so export it from your own subscription and drop it in this
 folder. The `.gitignore` keeps `*.cif` and `phases.json` out of git so that a
 local copy is never committed by accident.
 
-ClayQuant looks for this folder in the following order:
+ClayQuant searches all of these, in this order:
 
 1. `$CLAYQUANT_STRUCTURE_DIR`, if set;
 2. a `structures` folder in the directory you run from — this one;
-3. the package data directory.
+3. that directory itself;
+4. the `structures` folder of a source checkout;
+5. the package data directory.
 
 ## The four clay structures
 
-Export each from ICSD as CIF and save it here under exactly this name:
+Export each from ICSD as CIF and put it here. The name below is what ClayQuant
+looks for first, but it is not required: a file is also accepted if its name
+carries the ICSD code, or the phase name with its polytype, in any letter case.
+`Kaolinite_1M_63192.cif` and `Illite_ICSD_90144.cif` are both found.
 
 | Phase | ICSD | File name | Reference |
 | --- | --- | --- | --- |
@@ -26,9 +31,12 @@ Export each from ICSD as CIF and save it here under exactly this name:
 Check what is found with:
 
 ```python
-from clayquant.models import available_phases, structure_directory
-print(structure_directory(), available_phases())
+from clayquant.models import describe_structure_search
+print(describe_structure_search())
 ```
+
+It prints every directory searched and the file matched to each phase, and the
+same report appears in the error when a structure cannot be loaded.
 
 The ethylene glycol smectite layer needs no file: it is the published
 one-dimensional model of Reynolds (1965), transcribed in `clayquant/models.py`.

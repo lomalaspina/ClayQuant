@@ -802,6 +802,15 @@ measurement that continuum is inseparable from air scatter and the direct beam a
 as background. Leaving it in the basis patterns would let a phase absorb the measured background and
 inflate its apparent share.</p>
 
+<p>For that reason every pattern is <em>calculated</em> over a wider range than it is stored on: one
+stripping window beyond each end, trimmed away afterwards. Peak stripping needs data on both sides of
+a point, so its estimate is unreliable within one window of either end
+(&sect;<a href="#a-11">A.11</a>), and for a calculated clay pattern that is exactly where the diffuse
+continuum is largest. Moving the ends outside the stored range takes the continuum left standing at
+3.5&deg; on an I/S 0.80/0.20 pattern from 21 % of its strongest peak down to 5 %, with the peaks
+themselves unchanged. The lower limit of the calculation is 1&deg; 2&theta;, below which the Lorentz
+factor is of no use.</p>
+
 <h3 id="s3-4">3.4 Numerical notes</h3>
 
 <ul>
@@ -931,7 +940,10 @@ structures it uses are ICSD entries, which are licensed by FIZ Karlsruhe and may
 redistributed. They must be exported from your own subscription. The repository's ignore rules are
 written so that a local copy cannot be committed by accident.</div>
 
-<p>Export each of the following as CIF and save it under exactly the name given:</p>
+<p>Export each of the following as CIF and put it in the structure directory. The name given is the
+one ClayQuant looks for first, but it is not required: a file is also accepted if its name carries
+the ICSD code, or the phase name with its polytype. <span class="kw">Kaolinite_1M_63192.cif</span> and
+<span class="kw">Illite_ICSD_90144.cif</span> are both found, in any letter case.</p>
 
 <div class="tablewrap"><table>
 <tr><th>Phase</th><th class="num">ICSD</th><th>File name</th><th>Structure reference</th></tr>
@@ -945,17 +957,24 @@ written so that a local copy cannot be committed by accident.</div>
 <td>Gruner (1932)</td></tr>
 </table></div>
 
-<p>The directory is searched in this order:</p>
+<p>These directories are searched, in this order, and all of them are searched rather than only the
+first that exists &mdash; the program is as likely to be started from the home directory as from the
+project, and a file that is plainly there should not be reported missing over where the shell
+happened to be:</p>
 <ol>
 <li>the path in the environment variable <span class="kw">CLAYQUANT_STRUCTURE_DIR</span>, if set;</li>
 <li>a <span class="kw">structures</span> folder in the current working directory;</li>
+<li>the current working directory itself;</li>
+<li>the <span class="kw">structures</span> folder of a source checkout;</li>
 <li>the package data directory.</li>
 </ol>
 
-<p>To check what has been found:</p>
+<p>To see what was looked for, where, and what was found:</p>
 
-<pre><code>python -c "from clayquant.models import available_phases, structure_directory; \
-print(structure_directory()); print(available_phases())"</code></pre>
+<pre><code>python -c "from clayquant.models import describe_structure_search as d; print(d())"</code></pre>
+
+<p>The same report is printed when a structure cannot be loaded, so an error names the directories
+that were searched rather than one expected file name.</p>
 
 <p>The glycol&ndash;smectite layer requires no file. It is the published one-dimensional model of
 Reynolds (1965), transcribed into the source with its provenance, and is reproduced under
@@ -1213,12 +1232,13 @@ is present in the folder.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
 <tr><td>Peak-stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
-<td>Width of the widest feature the stripping treats as a peak. This control, not the choice of
-component, is what decides where the background lies: the components are fitted to the stripped
-estimate, and they follow it to a few counts. A narrow setting leaves peak wings in the estimate and
-so raises the background under the reflections; a wide one strips the direct-beam tail along with the
-peaks. Measured over eleven mounts the fit improves steeply up to about 4&deg; and is flat beyond it
-(&sect;<a href="#a-11">A.11</a>), which is why 4&deg; is the default.</td></tr>
+<td>Width of the widest feature the stripping treats as a peak. The components are fitted to the
+stripped estimate and follow it to a few counts, so this control, not the choice of component, is
+what decides where the background lies. Set it just above the width of the broadest reflection to be
+kept: narrower leaves peak wings standing in the background and eats into the reflections. It does
+<em>not</em> control the low-angle tail, which is convex and is therefore preserved at any width
+(&sect;<a href="#a-11">A.11</a>). Measured over eleven mounts the fit flattens by about 4&deg;, which
+is the default.</td></tr>
 <tr><td>Apply to this mount / Apply to all mounts</td><td><span class="kw">bg-apply</span>, <span class="kw">bg-apply-all</span></td><td>&mdash;</td>
 <td>Stores the fitted background. <em>All</em> uses the same model for the three mounts, appropriate when they were measured under identical conditions.</td></tr>
 </table></div>
@@ -1234,7 +1254,8 @@ controls, and the one the model is fitted to.</p>
 estimate, in counts, overall and over the lowest degree separately, and then what the model leaves at
 the low-angle end: the background value at the first measured point, the measurement there, and the
 difference as a percentage. That difference is the intensity the fit will be asked to explain as
-diffraction. A goodness-of-fit figure is deliberately <em>not</em> reported for the background: it is
+diffraction, and on a scan that opens on the direct-beam tail it should be small - a few percent.
+A large share there means the background is not following the tail. A goodness-of-fit figure is deliberately <em>not</em> reported for the background: it is
 close to unity for almost any choice, because the estimate is smooth and the model has several free
 terms, and it would read as success while the background sat a thousand counts below the measurement
 at 3&deg;.</p>
@@ -1974,70 +1995,120 @@ on a single real specimen records what each was worth, and whether the final sta
 <td>&sect;<a href="#a-6">A.6</a></td></tr>
 </table></div>
 
-<p><strong>Across specimens.</strong> Specimen 1, 33.2 %; Specimen 2, 34.7 %; Specimen 3,
-<strong>76.1 %</strong>. The third is a kaolinite-dominated separate that the program fits badly, and
-this is reported rather than concealed: its 7.17 and 7.37 &aring; pair is not matched by the kaolinite
-library, and the cause is not yet established. It is also one of the specimens in which quartz is
-absent, so its zero error had to be left unset.</p>
+<div class="note"><strong>These figures predate the background correction of
+&sect;<a href="#a-11">A.11</a>.</strong> They are kept because each row records what one change was
+worth, and the ordering of the rows is unaffected; the absolute values are not comparable with the
+measurements below, which were made after it. A background that cut under the data inflated the
+observed intensity, and <var>R</var><sub>wp</sub> is measured against that intensity, so the earlier
+figures were flattered by it.</div>
 
-<p><strong>Conclusion.</strong> Typical agreement on well-behaved specimens is
-<var>R</var><sub>wp</sub> &asymp; 33&ndash;35 %, which is reasonable for a fixed library that cannot
-refine positions or widths continuously, and poor by the standards of a Rietveld refinement, which
-can. At least one specimen type is fitted badly. The plots exist so that this is visible to the user
-in every case, and &sect;<a href="#s9">9</a> states the limitation plainly.</p>
+<p><strong>Across all eleven specimens, after the correction.</strong> Fitting each glycol mount with
+the clay library, the accompanying minerals from the competitive screen and the zero error applied,
+<var>R</var><sub>wp</sub> runs from <strong>37.4 %</strong> to <strong>67.5 %</strong> with a median
+of 44.8 %. Eight of the eleven fall between 37 % and 50 %. Two kaolinite-dominated separates fit at
+65 % and 68 %; their 7.17 and 7.37 &aring; pair is not matched by the kaolinite library and the cause
+is not established. Both are specimens in which quartz is absent, so their zero error had to be left
+unset.</p>
 
-<h3 id="a-11">A.11 The peak-stripping width, and what it costs</h3>
+<p><strong>Conclusion.</strong> Typical agreement is <var>R</var><sub>wp</sub> &asymp; 40&ndash;48 %,
+which is modest for a whole-pattern fit and is what a fixed library that cannot refine positions or
+widths continuously can be expected to give; it is poor by the standards of a Rietveld refinement,
+which can refine them. Two specimens of eleven are fitted badly. The plots exist so that this is
+visible to the user in every case, and &sect;<a href="#s9">9</a> states the limitation plainly.</p>
 
-<p><strong>Reasoning.</strong> Because the background components are fitted to a peak-stripped
-estimate rather than to the counts, the stripping width decides the background and the model merely
-follows it &mdash; on real mounts to within 2 to 5 counts RMS. The width therefore needed a default
-chosen by measurement rather than by habit. It is a genuine trade: at the low-angle end of an
-oriented mount the direct-beam tail is broad, so a stripping width wide enough to remove it also
-removes any real reflection of similar breadth, while a narrow width preserves the tail as apparent
-signal and at the same time lifts the background into the peaks.</p>
+<h3 id="a-11">A.11 The peak stripping, and what it must not remove</h3>
 
-<p><strong>Method.</strong> The eleven glycol-solvated mounts were fitted against the clay library
-alone (1601 patterns) with a Chebyshev background of degree 4 plus the 1/x term, at six stripping
-widths. No accompanying minerals were included and no zero error was applied, so the absolute values
-are higher than those of &sect;<a href="#a-10">A.10</a> and only the trend is meaningful. Three
-quantities were recorded: the overall <var>R</var><sub>wp</sub>; the fraction of the measured counts
-between 3 and 4.5&deg; that survives subtraction; and <var>R</var><sub>wp</sub> restricted to
-8&ndash;40&deg;, the region that contains the sharp reflections and none of the tail.</p>
+<p><strong>Reasoning.</strong> The background components are fitted to a peak-stripped estimate
+rather than to the counts, and on real mounts they follow it to a few counts. The estimate therefore
+<em>is</em> the background, and the question is what the stripping should leave alone. The answer is
+not a matter of taste. Where a background is convex, the mean of two symmetric neighbours is never
+below the point itself, so the SNIP operation - replace each point by the smaller of itself and that
+mean - leaves a convex background exactly unchanged. The low-angle tail of an oriented mount, air
+scatter and the shoulder of the direct beam, is such a background. A correct implementation returns
+it untouched; an implementation that removes it leaves thousands of counts of direct beam behind as
+signal, to be explained as diffraction by whatever pattern in the library rises at low angle.</p>
+
+<p><strong>Method.</strong> A background of the measured shape (1820 counts at 3&deg; falling to 339
+at 30&deg;) was constructed and stripped <em>with no peaks present at all</em>, at five widths. There
+is nothing to strip, so the estimate must return the input. Ten peaks of 400 to 7000 counts were then
+added and the test repeated.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Implementation</th><th class="num">Estimate at 3&deg;, background alone</th>
+<th class="num">Worst error, background alone</th><th class="num">Worst error, with peaks</th></tr>
+<tr><td>As released (invented neighbours at the ends)</td><td class="num">546</td>
+<td class="num">1274 counts</td><td class="num">1270 counts</td></tr>
+<tr><td>Corrected (comparison narrowed at the ends)</td><td class="num"><strong>1820</strong></td>
+<td class="num"><strong>0 counts</strong></td><td class="num">30 counts</td></tr>
+</table></div>
+
+<p><strong>Result.</strong> The released implementation removed 70 % of a background that contained
+no peaks whatever. The cause was at the ends of the scan, where the comparison has no neighbour on
+one side: the missing neighbour was replaced by the point itself, which on a falling edge puts the
+mean below the point, so every one of the roughly 120 passes lowered it further and the damage
+propagated inwards over several degrees. Padding the ends with an extrapolated trend, tried next, was
+no better - the padding is itself stripped and carries the data down with it - and padding by
+reflection inverts any peak that lies near the end. Narrowing the comparison to what the data allows,
+so that the window shrinks towards the ends instead of being filled in, restores the property exactly:
+with no peaks the estimate is the input to within a count, at every width tested.</p>
+
+<p><strong>What it changes.</strong> On a real air-dried mount measured from 3.01&deg;, with a
+Chebyshev background of degree 4 plus the 1/x term:</p>
+
+<div class="tablewrap"><table>
+<tr><th>2&theta;</th><th class="num">3.01&deg;</th><th class="num">4.0&deg;</th><th class="num">5.0&deg;</th>
+<th class="num">8.85&deg;</th><th class="num">20.85&deg;</th><th class="num">34.0&deg;</th></tr>
+<tr><td>Measured</td><td class="num">3505</td><td class="num">2673</td><td class="num">2369</td>
+<td class="num">3670</td><td class="num">983</td><td class="num">493</td></tr>
+<tr><td>Background, as released</td><td class="num">998</td><td class="num">973</td><td class="num">933</td>
+<td class="num">831</td><td class="num">484</td><td class="num">319</td></tr>
+<tr><td>Background, corrected</td><td class="num">3294</td><td class="num">2650</td><td class="num">2174</td>
+<td class="num">1151</td><td class="num">558</td><td class="num">381</td></tr>
+</table></div>
+
+<p>The released background was a nearly flat line 200 counts above the high-angle floor across the
+whole pattern - which is how it was reported, as a background that appeared not to respond to any
+control. It could not respond: the estimate it was fitted to had been flattened before the model ever
+saw it. Averaged over the quantified range the corrected background is 210 counts higher.</p>
+
+<p><strong>The stripping width now means peak width.</strong> With the tail preserved by the
+convexity property rather than by the choice of width, the control no longer trades the tail against
+the peaks. Measured over the eleven glycol mounts against the clay library alone, without
+accompanying minerals or zero-error correction, so the values are higher than those of
+&sect;<a href="#a-10">A.10</a> and only the trend is meaningful:</p>
 
 <div class="tablewrap"><table>
 <tr><th class="num">Width (&deg;2&theta;)</th><th class="num">Overall <var>R</var><sub>wp</sub></th>
 <th class="num">3&ndash;4.5&deg; surviving</th><th class="num">8&ndash;40&deg; <var>R</var><sub>wp</sub></th></tr>
-<tr><td class="num">1</td><td class="num">66.1 %</td><td class="num">8 %</td><td class="num">64.5 %</td></tr>
-<tr><td class="num">2</td><td class="num">58.5 %</td><td class="num">32 %</td><td class="num">60.7 %</td></tr>
-<tr><td class="num">3</td><td class="num">54.2 %</td><td class="num">55 %</td><td class="num">60.1 %</td></tr>
-<tr><td class="num"><strong>4</strong></td><td class="num"><strong>53.0 %</strong></td><td class="num">66 %</td><td class="num">60.1 %</td></tr>
-<tr><td class="num">6</td><td class="num">52.3 %</td><td class="num">77 %</td><td class="num">59.9 %</td></tr>
-<tr><td class="num">8</td><td class="num">52.1 %</td><td class="num">83 %</td><td class="num">60.1 %</td></tr>
+<tr><td class="num">1</td><td class="num">65.3 %</td><td class="num">2.2 %</td><td class="num">64.0 %</td></tr>
+<tr><td class="num">2</td><td class="num">60.9 %</td><td class="num">4.5 %</td><td class="num">61.1 %</td></tr>
+<tr><td class="num">3</td><td class="num">59.6 %</td><td class="num">5.1 %</td><td class="num">60.1 %</td></tr>
+<tr><td class="num"><strong>4</strong></td><td class="num"><strong>59.0 %</strong></td><td class="num">5.1 %</td><td class="num">59.5 %</td></tr>
+<tr><td class="num">6</td><td class="num">58.7 %</td><td class="num">5.1 %</td><td class="num">59.2 %</td></tr>
+<tr><td class="num">8</td><td class="num">58.6 %</td><td class="num">5.2 %</td><td class="num">59.1 %</td></tr>
 </table></div>
 
-<p><strong>Result.</strong> Both metrics improve steeply to about 3&ndash;4&deg; and are flat beyond:
-from 4 to 8&deg; the overall <var>R</var><sub>wp</sub> gains 0.9 points and the 8&ndash;40&deg; value
-none at all, while the share of low-angle counts left as signal rises from 66 % to 83 %. At 1&deg; the
-background is dragged up into the reflections &mdash; the 8&ndash;40&deg; figure is 4.4 points worse
-than at 4&deg;, in a region containing no tail at all &mdash; and only 8 % of the low-angle counts
-survive, so little that the fitted library overshoots what remains there by 160 %.</p>
+<p>The share of low-angle counts surviving subtraction is now 5 % at every width from 3&deg; upwards:
+the tail is background whatever is asked for, which is the property above. What the width still
+changes is how much of a broad reflection is treated as background, and both metrics flatten by about
+4&deg;, which is the default. Below 2&deg; the background is lifted into the peaks and the
+8&ndash;40&deg; figure, a region containing no tail at all, is 4.5 points worse.</p>
 
-<p><strong>Conclusion.</strong> 4&deg; is the knee of both curves and is the default. The choice is
-exposed, drawn and quantified rather than hidden, because it is specimen-dependent: for a specimen
-with a genuine reflection below 5&deg; &mdash; an ordered illite/smectite superlattice, for instance
-&mdash; the wide setting will remove real intensity, and the analyst has to see the estimate to
-notice.</p>
+<p><strong>The same defect in the library.</strong> Each calculated pattern has its own diffuse
+continuum stripped before storage (&sect;<a href="#s3-3">3.3</a>), by the same routine, and the same
+end effect left that continuum standing over the first degrees - 21 % of the strongest peak at
+3.5&deg; on an I/S 0.80/0.20 pattern. Since it is a calculated pattern, the end can be moved: each is
+now computed on a grid reaching one stripping window beyond both ends of the stored range and trimmed
+afterwards, which puts the unreliable zone outside the library entirely. The residual continuum at
+3.5&deg; falls to 5 %, with the peaks unchanged to three decimal places. This matters because the
+measured background and the calculated continuum have to be removed consistently: if one side keeps
+its low-angle rise and the other does not, the fit is asked to reconcile an intensity that only one
+of them has.</p>
 
-<p><strong>A related defect, found on the way.</strong> The stripping had a fault at the ends of the
-scan: the classic SNIP algorithm averages the two points a distance <var>p</var> away, and the
-implementation substituted the point itself when that reached past the end of the data. On a falling
-left edge the average is then always below the point, so every one of the ~120 passes lowered it
-further and the first degrees of the scan were stripped to a fraction of their true value. It was
-replaced by padding the ends with the local trend before stripping and removing the padding
-afterwards. On measured data at the 4&deg; default the effect is negligible &mdash; the full workflow
-on three specimens gives 33.3 / 42.0 / 38.1 % after the change against 33.3 / 41.7 / 37.8 % before
-&mdash; but at narrow widths, where the padding matters most, the old behaviour removed intensity
-that was really there.</p>
+<p><strong>Conclusion.</strong> The property to test for a background estimator is not how smooth its
+output looks but what it does to a background that contains no peaks. That test is now in the suite
+(<span class="kw">tests/test_background.py</span>), at five widths, along with the requirement that
+peaks are still removed and that the estimate never exceeds the measurement.</p>
 
 <h3 id="a-12">A.12 End-to-end tests of the interface</h3>
 
@@ -2090,14 +2161,18 @@ of any function, and was caught only by driving the interface and looking at wha
 <tr><td>File readers</td><td>33 files; bit-for-bit against vendor export</td><td>Pass</td></tr>
 <tr><td>Zero error</td><td>11 specimens &times; 3 mounts</td><td>Pass after correction</td></tr>
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
-<tr><td>Quantitative fit</td><td>3 real specimens</td><td>2 good, 1 poor and documented</td></tr>
-<tr><td>Background stripping width</td><td>11 mounts &times; 6 widths</td><td>4&deg; adopted; edge defect fixed</td></tr>
+<tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
+<td>Defect found and corrected; 12 automated</td></tr>
+<tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
+<td><var>R</var><sub>wp</sub> 37&ndash;68 %, median 45 %</td></tr>
+<tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 4 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>45 tests</strong> and runs in under two seconds
-(<span class="kw">pytest -q</span>). Ten of them are skipped automatically when structure data is not
-installed.</p>
+<p>The automated suite comprises <strong>70 tests</strong> and runs in under two seconds
+(<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
+when they are not installed; the rest, including the whole of
+<span class="kw">tests/test_background.py</span>, run without them.</p>
 
 
 <h2 id="d">Appendix D &mdash; Provenance of the accompanying-mineral structures</h2>

@@ -153,12 +153,13 @@ pattern has no peak-free points below about 8°, and fitting the raw intensities
 there drags the background up into the basal reflections, removing the very
 signal being quantified.
 
-That makes the stripping width, not the choice of component, the control that
-decides where the background lies — the components then follow the estimate to a
-few counts. Narrow settings lift the background into the peaks; wide ones strip
-the direct-beam tail as well. Across eleven mounts the fit improves steeply up to
-about 4° and is flat beyond, so 4° is the default, and the estimate is drawn on
-the plot so the choice is visible rather than implicit.
+The stripping has one property that matters more than any setting: where the
+background is convex — which the direct-beam tail is — the mean of two symmetric
+neighbours is never below the point itself, so the estimate leaves it *exactly*
+unchanged. A tail of 1820 counts falling to 339 comes back to within a count with
+no peaks present, and to within 30 counts with ten peaks up to 7000 counts high
+standing on it. The stripping width then means peak width and nothing else; 4° is
+the default, and the estimate is drawn on the plot so the choice is visible.
 
 **Kaolinite** is identified by the collapse of the 7.15 Å reflection on heating,
 scaled on a survivor reflection so the two mounts are comparable; what survives
@@ -193,11 +194,12 @@ weight on the flat regions between peaks, where only noise remains.
 ## Status
 
 Verified against 33 real PANalytical measurements of eleven clay separates (all
-read, and agreeing bit-for-bit with the vendor's own `.xy` exports). Typical
-Rwp on those is 33–36%. One kaolinite-dominated sample fits poorly (76%) and is
-not yet understood — a fixed library cannot adjust peak positions or widths
-continuously, so a sample whose spacings fall outside the spanned range will fit
-badly. Read the plots, not just the table.
+read, and agreeing bit-for-bit with the vendor's own `.xy` exports). Fitting the
+eleven glycol mounts gives Rwp from 37% to 68%, median 45%: eight fall between
+37% and 50%, two kaolinite-dominated separates fit at 65–68% and are not yet
+understood. A fixed library cannot adjust peak positions or widths continuously,
+so a sample whose spacings fall outside the spanned range will fit badly. Read
+the plots, not just the table.
 
 ## Layout
 
