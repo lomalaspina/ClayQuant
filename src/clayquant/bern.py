@@ -122,6 +122,20 @@ _PO_RE = re.compile(r"PO\([^)]*?,,\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*\)")
 _ICSD_RE = re.compile(r"No:\s*(\d+)")
 
 
+def _strip_marks(token: str) -> str:
+    """Remove the marks TOPAS puts on a refined value.
+
+    A parameter that has been refined comes back from TOPAS carrying a backtick,
+    and sometimes an error or a limit welded onto it with no space:
+    ``16.875164```, ``9.663417`_LIMIT_MIN_9.5``, ``6.5e-08```.  A library written
+    by hand has none of these; one saved out of a completed refinement has them
+    on every value, which is the difference between a phase that imports and a
+    phase that vanishes.  ``!`` and ``@`` mark a fixed or free parameter and are
+    equally uninteresting here.
+    """
+    return token.lstrip("!@").split("`", 1)[0].strip().rstrip(",;")
+
+
 def _value(text: str) -> float | None:
     """Read a TOPAS parameter value, which may be a number, a fraction or an expression.
 
@@ -133,7 +147,7 @@ def _value(text: str) -> float | None:
     if not token:
         return None
 
-    evaluated = re.search(r":\s*([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)\s*$", token)
+    evaluated = re.search(r":\s*([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)`?\s*$", token)
     if evaluated:
         return float(evaluated.group(1))
 
@@ -149,7 +163,7 @@ def _value(text: str) -> float | None:
     token = token.lstrip("!@")
     parts = token.split()
     for index, part in enumerate(parts):
-        cleaned = part.lstrip("!@")
+        cleaned = _strip_marks(part)
         if cleaned in {"min", "max"}:
             break
         if _NUMBER_RE.match(cleaned):
@@ -221,16 +235,41 @@ class PhaseDefinition:
         }
 
 
-def parse_topas_structures(text: str, source_item: str = "") -> list[PhaseDefinition]:
-    """Parse every ``str`` block in a piece of TOPAS input."""
+def _note_skipped(skipped: list[str] | None, name: str, reason: str) -> None:
+    if skipped is not None:
+        skipped.append(f"{name}: {reason}")
+
+
+def parse_topas_structures(
+    text: str, source_item: str = "", skipped: list[str] | None = None
+) -> list[PhaseDefinition]:
+    """Parse every ``str`` block in a piece of TOPAS input.
+
+    A block that cannot be read is left out, and the reason is appended to
+    ``skipped`` when one is given.  It is worth passing: an item that is dropped
+    here never becomes a phase at all, so it is invisible to every count taken
+    afterwards, and a structure library that silently imports the same number of
+    phases as before is a hard thing to argue with.
+    """
     lines = text.splitlines()
-    starts = [index for index, line in enumerate(lines) if line.strip() == "str"]
+    # A structure block opens with "str", sometimes with a comment after it:
+    # TOPAS takes everything from an apostrophe to the end of the line as one,
+    # and the NIST LaB6 entry uses that to note that its cell is certified.
+    starts = [index for index, line in enumerate(lines)
+              if re.match(r"^str\s*(?:'.*)?$", line.strip())]
     if not starts:
         return []
     bounds = list(zip(starts, starts[1:] + [len(lines)]))
 
     icsd_match = _ICSD_RE.search(text)
     icsd = int(icsd_match.group(1)) if icsd_match else None
+
+    # Parameter values seen so far, so that a block can refer to one defined in
+    # an earlier block of the same item.  A two-component phase - the same
+    # mineral at two crystallinities, which TOPAS models as two "str" blocks
+    # sharing one cell - writes the second cell as "a =a_Calcite;" and cannot be
+    # read without it.
+    parameters: dict[str, float] = {}
 
     phases: list[PhaseDefinition] = []
     for start, stop in bounds:
@@ -251,9 +290,12 @@ def parse_topas_structures(text: str, source_item: str = "") -> list[PhaseDefini
             if named:
                 name = named.group(1).strip()
                 continue
-            group = re.match(r'^space_group\s+"?([^"\'\s]+)"?', stripped)
+            group = re.match(r"""^space_group\s+(?:"([^"]+)"|'([^']+)'|(\S+))""", stripped)
             if group:
-                space_group = group.group(1).strip()
+                # Quoted symbols may contain spaces - "C c c m" and "Cccm" are
+                # the same group, and TOPAS writes either - so the quotes decide
+                # where the symbol ends, not the first space inside them.
+                space_group = next(part for part in group.groups() if part).strip()
                 continue
 
             site = _SITE_RE.match(stripped)
@@ -300,11 +342,25 @@ def parse_topas_structures(text: str, source_item: str = "") -> list[PhaseDefini
                     else:
                         warnings.append(f"{name}: {key} refers to {source_key}, which is not set")
                     continue
+                named_reference = re.match(r"^=\s*([A-Za-z_]\w*)\s*;", rest)
+                if named_reference:
+                    source = named_reference.group(1)
+                    if source in parameters:
+                        cell[key] = parameters[source]
+                    else:
+                        warnings.append(
+                            f"{name}: {key} refers to the parameter {source}, which is not set"
+                        )
+                    continue
                 value = _value(rest)
                 if value is None:
                     warnings.append(f"{name}: could not read cell parameter {key} from {rest!r}")
                 else:
                     cell[key] = value
+                    # Remember it under its TOPAS name, for a later block.
+                    first = _strip_marks(rest.split()[0]) if rest.split() else ""
+                    if first and not _NUMBER_RE.match(first):
+                        parameters[first] = value
 
         cell.setdefault("alpha", 90.0)
         cell.setdefault("beta", 90.0)
@@ -317,11 +373,12 @@ def parse_topas_structures(text: str, source_item: str = "") -> list[PhaseDefini
                     cell[key] = cell["a"]
                 warnings.append(f"{name}: {missing} not given, assumed equal to a")
             else:
-                warnings.append(f"{name}: no cell parameters found, phase skipped")
+                _note_skipped(skipped, name, "no cell parameters could be read")
                 continue
         if not space_group or not sites:
-            warnings.append(
-                f"{name}: {'no space group' if not space_group else 'no sites'}, phase skipped"
+            _note_skipped(
+                skipped, name,
+                "no space group" if not space_group else "no atom sites could be read",
             )
             continue
 
@@ -347,18 +404,49 @@ def parse_topas_structures(text: str, source_item: str = "") -> list[PhaseDefini
     return phases
 
 
-def parse_macro_library(path: str | Path) -> list[PhaseDefinition]:
-    """Parse every phase in a jEdit macro menu of TOPAS structures."""
+def parse_macro_library(
+    path: str | Path, skipped: list[str] | None = None
+) -> list[PhaseDefinition]:
+    """Parse every phase in a jEdit macro menu of TOPAS structures.
+
+    Items that hold no ``str`` block at all - a heading, a comment, a macro that
+    does something else - are passed over in silence, since a menu is full of
+    them.  An item that looks like a structure and cannot be read is reported
+    through ``skipped``.
+    """
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     phases: list[PhaseDefinition] = []
     for block in _ITEM_SPLIT_RE.split(text)[1:]:
         name_match = _ITEM_NAME_RE.match(block)
         if name_match is None:
             continue
-        phases.extend(
-            parse_topas_structures(decode_macro_item(block), source_item=name_match.group(1))
-        )
+        decoded = decode_macro_item(block)
+        before = len(skipped) if skipped is not None else 0
+        found = parse_topas_structures(decoded, source_item=name_match.group(1), skipped=skipped)
+        if (not found and skipped is not None and len(skipped) == before
+                and _looks_like_a_structure(decoded)):
+            # Only when nothing inside the item has already explained itself:
+            # a block that was read and rejected has said why, and saying it
+            # again in other words helps no one.
+            skipped.append(f"{name_match.group(1)}: {_why_no_structure(decoded)}")
+        phases.extend(found)
     return phases
+
+
+def _looks_like_a_structure(text: str) -> bool:
+    """Does this item try to define a phase, whether or not it succeeds?"""
+    return any(marker in text for marker in ("phase_name", "space_group", "\tsite", " site "))
+
+
+def _why_no_structure(text: str) -> str:
+    """Why an item that mentions a phase yields no structure."""
+    if re.search(r"^\s*hkl_Is\b", text, re.M):
+        return ("a peaks phase (hkl_Is), which lists reflections instead of atoms; "
+                "ClayQuant calculates from structures and cannot use it")
+    if re.search(r"^\s*xo_Is\b", text, re.M):
+        return ("a peaks phase (xo_Is), which lists peak positions instead of atoms; "
+                "ClayQuant calculates from structures and cannot use it")
+    return "no 'str' block was found in the item"
 
 
 # --------------------------------------------------------------------------- #
@@ -422,9 +510,10 @@ def write_phase_database(
     Returns counts of what happened, and prints per-phase problems when
     ``verbose``.
     """
-    phases = parse_macro_library(xml_path)
+    skipped: list[str] = []
+    phases = parse_macro_library(xml_path, skipped=skipped)
     records = []
-    failures: list[str] = []
+    failures: list[str] = list(skipped)
     for phase in phases:
         try:
             symops = symmetry_operations(phase.space_group)
@@ -453,7 +542,7 @@ def write_phase_database(
         for failure in failures:
             print(f"  {failure}")
     return {
-        "parsed": len(phases),
+        "parsed": len(phases) + len(skipped),
         "written": len(records),
         "failed": len(failures),
         "clay": sum(1 for record in records if record["is_clay"]),

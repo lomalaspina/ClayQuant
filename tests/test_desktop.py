@@ -57,10 +57,14 @@ def test_the_icon_is_named_when_there_is_one(tmp_path):
 
 
 def sample_png(path: Path, size: int = 64) -> Path:
+    """A small image at ``path``; JPEG gets RGB, since it has no alpha channel."""
     pytest.importorskip("PIL", reason="Pillow is not installed")
     from PIL import Image
 
-    Image.new("RGBA", (size, size), (150, 105, 66, 255)).save(path)
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        Image.new("RGB", (size, size), (150, 105, 66)).save(path)
+    else:
+        Image.new("RGBA", (size, size), (150, 105, 66, 255)).save(path)
     return path
 
 
@@ -134,3 +138,45 @@ def test_the_desktop_folder_can_be_named_in_another_language(tmp_path, monkeypat
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.delenv("XDG_DESKTOP_DIR", raising=False)
     assert desktop._desktop_directory() == home / "Schreibtisch"
+
+
+def test_the_icon_is_found_whatever_it_is_called(tmp_path, monkeypatch):
+    """Linux is case-sensitive: ClayQuant.PNG must not be mistaken for absent."""
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    monkeypatch.setattr(desktop, "project_root", lambda: tmp_path)
+
+    assert desktop.icon_source() is None
+
+    placeholder = sample_png(assets / "clayquant-placeholder.png")
+    assert desktop.icon_source() == placeholder
+
+    supplied = sample_png(assets / "ClayQuant.PNG")
+    assert desktop.icon_source() == supplied, "a supplied icon beats the placeholder"
+
+    supplied.unlink()
+    sample_png(assets / "clayquant.jpg")
+    assert desktop.icon_source().suffix == ".jpg"
+    exact = sample_png(assets / "clayquant.png")
+    assert desktop.icon_source() == exact, "a PNG is preferred to a JPEG"
+
+
+def test_something_else_in_assets_is_not_taken_for_the_icon(tmp_path, monkeypatch):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    monkeypatch.setattr(desktop, "project_root", lambda: tmp_path)
+    sample_png(assets / "screenshot.png")
+    sample_png(assets / "clayquant_old.png")
+    assert desktop.icon_source() is None
+
+
+def test_a_jpeg_is_converted_for_the_desktop(tmp_path, monkeypatch):
+    pytest.importorskip("PIL", reason="Pillow is not installed")
+    from PIL import Image
+
+    source = tmp_path / "clayquant.jpg"
+    Image.new("RGB", (64, 64), (150, 105, 66)).save(source)
+    target = desktop.as_png(source, tmp_path / "out" / "clayquant.png")
+    assert target.is_file()
+    with Image.open(target) as image:
+        assert image.format == "PNG"

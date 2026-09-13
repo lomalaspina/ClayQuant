@@ -59,14 +59,41 @@ def launch_command() -> list[str]:
     return [str(interpreter), "-m", "clayquant.gui.app"]
 
 
+ICON_SUFFIXES = (".png", ".jpg", ".jpeg", ".ico", ".icns", ".bmp", ".gif", ".webp")
+PLACEHOLDER_STEM = "clayquant-placeholder"
+
+
 def icon_source() -> Path | None:
     """The icon to use, or ``None`` if there is not one.
 
-    ``assets/clayquant.png`` is the single place to put it: replacing that file
-    and running this again changes the icon everywhere.
+    Drop an image called ``clayquant`` into ``assets/`` and it is used - any
+    common raster format, and any spelling of the name.  That last part matters
+    more than it sounds: Linux filesystems are case-sensitive, so a file saved
+    as ``ClayQuant.PNG`` is a different file from ``clayquant.png`` and an exact
+    match would ignore it and go on using the placeholder without saying so.
+
+    The placeholder shipped with ClayQuant is named apart, so a supplied icon
+    always wins and is never overwritten by an update.
     """
-    candidate = project_root() / "assets" / "clayquant.png"
-    return candidate if candidate.is_file() else None
+    assets = project_root() / "assets"
+    if not assets.is_dir():
+        return None
+    supplied, placeholder = [], []
+    for entry in sorted(assets.iterdir()):
+        if not entry.is_file() or entry.suffix.lower() not in ICON_SUFFIXES:
+            continue
+        stem = entry.stem.lower()
+        if stem == PLACEHOLDER_STEM:
+            placeholder.append(entry)
+        elif stem == "clayquant":
+            supplied.append(entry)
+    for group in (supplied, placeholder):
+        # A real raster format first, whatever order the directory listed them.
+        for suffix in ICON_SUFFIXES:
+            for entry in group:
+                if entry.suffix.lower() == suffix:
+                    return entry
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -179,15 +206,35 @@ def _desktop_directory() -> Path | None:
     return fallback if fallback.is_dir() else None
 
 
+def as_png(icon: Path, target: Path) -> Path:
+    """Copy or convert ``icon`` to a PNG at ``target``.
+
+    A supplied icon may be a JPEG or a BMP; the desktops want a PNG.  Without
+    Pillow it can only be copied, which is right when it is already a PNG and
+    the best that can be done when it is not.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if icon.suffix.lower() == ".png":
+        shutil.copyfile(icon, target)
+        return target
+    try:
+        from PIL import Image
+    except ImportError:
+        shutil.copyfile(icon, target)
+        return target
+    with Image.open(icon) as image:
+        image.convert("RGBA").save(target, format="PNG")
+    return target
+
+
 def _install_linux(desktop: bool, menu: bool) -> list[Path]:
     command = launch_command()
     icon = icon_source()
     installed_icon = None
     if icon is not None:
-        target = Path.home() / ".local/share/icons/hicolor/512x512/apps/clayquant.png"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(icon, target)
-        installed_icon = target
+        installed_icon = as_png(
+            icon, Path.home() / ".local/share/icons/hicolor/512x512/apps/clayquant.png"
+        )
 
     written: list[Path] = []
     text = desktop_entry(command, installed_icon)
@@ -382,9 +429,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {path}")
         return 0
 
-    if icon_source() is None:
-        print(f"note: no icon at {project_root() / 'assets' / 'clayquant.png'}; "
-              f"the shortcut will use the desktop's default.")
+    icon = icon_source()
+    if icon is None:
+        print(f"note: no icon found in {project_root() / 'assets'}; "
+              f"the shortcut will use the desktop's default. Put one there named "
+              f"clayquant.png and run this again.")
+    elif icon.stem.lower() == PLACEHOLDER_STEM:
+        print(f"using the placeholder icon ({icon.name}). To use your own, put it in "
+              f"{icon.parent} named clayquant.png and run this again.")
+    else:
+        print(f"icon: {icon}")
     written = install_shortcuts(desktop=arguments.desktop, menu=arguments.menu)
     print(f"created {len(written)} shortcut(s)")
     for path in written:

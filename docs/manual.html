@@ -879,9 +879,15 @@ starts the program and opens it in the default browser.</p>
 ./clayquant shortcut --where    # say where they would go
 ./clayquant shortcut --remove   # take them away</code></pre>
 
-<p>The icon is the single file <span class="kw">assets/clayquant.png</span>. Replacing it and running
-the command again changes it everywhere; it is converted to the format each platform needs
-(<span class="kw">.ico</span> on Windows, <span class="kw">.icns</span> on macOS) as part of that.</p>
+<p>For the icon, put an image called <span class="kw">clayquant</span> into
+<span class="kw">assets/</span> and run the command again. Any common raster format will do and the
+spelling of the name does not matter &mdash; <span class="kw">ClayQuant.PNG</span> is found as
+readily as <span class="kw">clayquant.png</span>, which on a case-sensitive filesystem it otherwise
+would not be &mdash; and it is converted to the format each platform needs
+(<span class="kw">.ico</span> on Windows, <span class="kw">.icns</span> on macOS). The placeholder
+that ships with ClayQuant is called <span class="kw">clayquant-placeholder.png</span> so that a
+supplied icon always takes precedence over it and is never overwritten by an update. The command
+prints which file it used.</p>
 
 <div class="note"><strong>Run it again after every update.</strong> The commands
 (<span class="kw">clayquant-gui</span> and the rest) are written into the environment when the
@@ -1026,6 +1032,28 @@ not needed afterwards.</p>
 
 <p>The generated database is derived from licensed structure data and is likewise kept out of version
 control.</p>
+
+<h4>What it reads, and what it reports</h4>
+
+<p>A structure library kept in a laboratory is written partly by hand and partly by TOPAS, and the
+two differ. The import reads both: a value carrying the backtick TOPAS puts on a refined parameter
+(<span class="kw">16.875164`</span>, or with a limit welded on as
+<span class="kw">9.663417`_LIMIT_MIN_9.5</span>); an occupancy given as an expression with the value
+TOPAS last evaluated after a colon (<span class="kw">occ Fe+2 =FeMgOCC;:0.99996`</span>), which keeps
+a split site split instead of putting a full atom on each half; a space group written with spaces
+(<span class="kw">"C c c m"</span>); a comment after <span class="kw">str</span>; and a second
+structure block that takes its cell from the first by name
+(<span class="kw">a =a_Calcite;</span>), which is how a two-component phase for a crystallinity
+distribution is written.</p>
+
+<div class="note"><strong>Anything not imported is named.</strong> A phase that cannot be read is
+listed with the reason &mdash; no cell, no space group, no sites &mdash; and a phase that lists
+reflections rather than atoms (<span class="kw">hkl_Is</span>, a Pawley or amorphous entry) is named
+as such, since ClayQuant calculates from structures and has nothing to calculate from. Items that are
+headings or helper macros are passed over silently, as a menu is full of them. Before this, an item
+that could not be read was dropped before it became a record, so it was absent from every count
+afterwards: adding a phase to the library and re-importing gave the same number of phases as before,
+with nothing to say why.</div>
 
 <h3 id="s4-4">4.4 Building the reference library</h3>
 
