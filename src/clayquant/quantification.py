@@ -214,17 +214,47 @@ class Quantification:
     """
 
     unaccounted: float = 0.0
-    """Weight percent of the specimen that the fitted phases do not account for.
+    """Weight percent of the *spiked* specimen the fitted phases do not account for.
 
     Amorphous material, and any crystalline phase missing from the fit, together:
     the measurement separates them from the phases that were fitted but not from
-    each other.
+    each other.  See :meth:`original_basis` for the same quantity as a fraction
+    of the material that was actually sampled, which is what is normally quoted.
     """
 
     @property
     def absolute(self) -> bool:
         """Whether weights are of the specimen rather than of what was fitted."""
         return self.absolute_scale > 0.0
+
+    def original_basis(self) -> dict[str, float]:
+        """Weight percent of the specimen as it was before the standard was added.
+
+        :attr:`PhaseShare.absolute_weight` and :attr:`unaccounted` are fractions
+        of the *spiked* powder, which is the mixture the diffractometer saw.
+        What a result refers to, though, is the material that was sampled, and
+        the standard is not part of it: every phase is larger by
+        1/(1 - W_std) once the standard is taken back out, a factor of 1.25 for
+        the usual 20 % spike.  That is the basis an amorphous content is
+        conventionally quoted on, and the difference is too large to leave to
+        the reader.
+
+        The standard itself is not in the returned mapping, since it is not part
+        of the specimen; the key ``"unaccounted"`` carries the amorphous and
+        unfitted remainder.  Empty when there was no usable standard.
+        """
+        if not self.absolute:
+            return {}
+        keep = 1.0 - self.standard_weight / 100.0
+        if keep <= 0.0:
+            return {}
+        basis = {
+            share.phase: share.absolute_weight / keep
+            for share in self.shares
+            if share.phase != self.internal_standard
+        }
+        basis["unaccounted"] = self.unaccounted / keep
+        return basis
 
     @property
     def clays(self) -> list[PhaseShare]:

@@ -141,3 +141,39 @@ def test_without_a_standard_nothing_changes(library):
     assert not plain.absolute
     assert [s.weight for s in plain.shares] == pytest.approx([s.weight for s in asked.shares])
     assert all(row["absolute_weight_percent"] == "" for row in plain.table())
+
+
+def test_the_original_basis_takes_the_standard_back_out(library):
+    """What a result refers to is the material sampled, not the spiked powder.
+
+    The diffractometer sees 20 g of standard in 100 g of powder, so every phase
+    is 80 % of what it is in the rock that was sampled.  A factor of 1.25 on an
+    amorphous content is not a detail, and it is the basis such a number is
+    conventionally quoted on.
+    """
+    masses = {STANDARD: 20.0, "illite PO=0.3": 40.0, "chlorite PO=0.3": 20.0}
+    q = fit(library, masses, internal_standard=("kaolinite_1M", 20.0))
+    # 80 g of the 100 g spiked powder is specimen, and a quarter of that is not fitted.
+    assert q.unaccounted == pytest.approx(20.0, abs=0.3)
+
+    basis = q.original_basis()
+    assert "kaolinite_1M" not in basis, "the standard is not part of the specimen"
+    assert basis["illite"] == pytest.approx(50.0, abs=0.4)
+    assert basis["chlorite"] == pytest.approx(25.0, abs=0.4)
+    assert basis["unaccounted"] == pytest.approx(25.0, abs=0.4)
+    assert sum(basis.values()) == pytest.approx(100.0, abs=0.01)
+
+
+def test_the_original_basis_is_empty_without_a_standard(library):
+    masses = {"illite PO=0.3": 60.0, "chlorite PO=0.3": 40.0}
+    assert fit(library, masses).original_basis() == {}
+    assert fit(library, masses, internal_standard=("Corundum", 20.0)).original_basis() == {}
+
+
+def test_a_fully_fitted_specimen_has_nothing_unaccounted_on_either_basis(library):
+    masses = {STANDARD: 20.0, "illite PO=0.3": 50.0, "chlorite PO=0.3": 30.0}
+    q = fit(library, masses, internal_standard=("kaolinite_1M", 20.0))
+    assert q.unaccounted == pytest.approx(0.0, abs=0.2)
+    basis = q.original_basis()
+    assert basis["unaccounted"] == pytest.approx(0.0, abs=0.3)
+    assert basis["illite"] == pytest.approx(62.5, abs=0.4), "50 of 80, not of 100"
