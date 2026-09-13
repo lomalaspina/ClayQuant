@@ -206,24 +206,28 @@ def _desktop_directory() -> Path | None:
     return fallback if fallback.is_dir() else None
 
 
-def as_png(icon: Path, target: Path) -> Path:
-    """Copy or convert ``icon`` to a PNG at ``target``.
+def as_png(icon: Path, target: Path, size: int | None = None) -> Path:
+    """Copy or convert ``icon`` to a PNG at ``target``, optionally resized.
 
-    A supplied icon may be a JPEG or a BMP; the desktops want a PNG.  Without
-    Pillow it can only be copied, which is right when it is already a PNG and
-    the best that can be done when it is not.
+    A supplied icon may be a JPEG, or square but any number of pixels across.
+    The freedesktop icon directories state their size in their name, so an image
+    put in ``512x512`` that is not 512 pixels is a claim the desktop is entitled
+    to believe and then draw badly.  Without Pillow the file can only be copied,
+    which is right when it is already a PNG of the right size and the best that
+    can be done when it is not.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    if icon.suffix.lower() == ".png":
-        shutil.copyfile(icon, target)
-        return target
     try:
         from PIL import Image
     except ImportError:
         shutil.copyfile(icon, target)
         return target
+
     with Image.open(icon) as image:
-        image.convert("RGBA").save(target, format="PNG")
+        square = image.convert("RGBA")
+        if size is not None and square.size != (size, size):
+            square = square.resize((size, size), Image.LANCZOS)
+        square.save(target, format="PNG")
     return target
 
 
@@ -233,7 +237,9 @@ def _install_linux(desktop: bool, menu: bool) -> list[Path]:
     installed_icon = None
     if icon is not None:
         installed_icon = as_png(
-            icon, Path.home() / ".local/share/icons/hicolor/512x512/apps/clayquant.png"
+            icon,
+            Path.home() / ".local/share/icons/hicolor/512x512/apps/clayquant.png",
+            size=512,
         )
 
     written: list[Path] = []
@@ -307,7 +313,7 @@ def _install_macos(desktop: bool, menu: bool) -> list[Path]:
         if icns is not None:
             info["CFBundleIconFile"] = icns.name
         else:
-            shutil.copyfile(icon, resources / "ClayQuant.png")
+            as_png(icon, resources / "ClayQuant.png", size=512)
     (bundle / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
 
     written = [bundle]

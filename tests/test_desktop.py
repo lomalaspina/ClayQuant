@@ -180,3 +180,15 @@ def test_a_jpeg_is_converted_for_the_desktop(tmp_path, monkeypatch):
     assert target.is_file()
     with Image.open(target) as image:
         assert image.format == "PNG"
+
+
+def test_the_icon_is_resized_to_the_directory_it_goes_in(tmp_path):
+    """A freedesktop icon directory states its size in its name."""
+    pytest.importorskip("PIL", reason="Pillow is not installed")
+    from PIL import Image
+
+    source = tmp_path / "clayquant.png"
+    Image.new("RGBA", (1254, 1254), (150, 105, 66, 255)).save(source)
+    target = desktop.as_png(source, tmp_path / "out" / "clayquant.png", size=512)
+    with Image.open(target) as image:
+        assert image.size == (512, 512)
