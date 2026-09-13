@@ -146,6 +146,13 @@ pattern has no peak-free points below about 8°, and fitting the raw intensities
 there drags the background up into the basal reflections, removing the very
 signal being quantified.
 
+That makes the stripping width, not the choice of component, the control that
+decides where the background lies — the components then follow the estimate to a
+few counts. Narrow settings lift the background into the peaks; wide ones strip
+the direct-beam tail as well. Across eleven mounts the fit improves steeply up to
+about 4° and is flat beyond, so 4° is the default, and the estimate is drawn on
+the plot so the choice is visible rather than implicit.
+
 **Kaolinite** is identified by the collapse of the 7.15 Å reflection on heating,
 scaled on a survivor reflection so the two mounts are comparable; what survives
 is chlorite 002. **Expandable clay** is identified by the shift of the low-angle

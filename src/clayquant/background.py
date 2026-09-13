@@ -390,14 +390,50 @@ def snip_baseline(
     # Work on a log-log-ish scale so that strong peaks do not dominate.
     offset = float(np.min(values))
     transformed = np.log(np.log(np.sqrt(np.clip(values - offset, 0.0, None) + 1.0) + 1.0) + 1.0)
+
+    # Every comparison must be genuinely two-sided, which at the ends of the scan
+    # means inventing the missing neighbour. How it is invented decides what
+    # happens to a sloping edge, and both of the easy answers are wrong:
+    #
+    #   * substituting the point itself makes the average sit below the point
+    #     whenever the edge falls, so every pass drags it further down. The
+    #     direct-beam tail of an oriented clay mount is exactly such an edge, and
+    #     it was stripped away as though it were a peak - the background came out
+    #     near 500 counts where the measurement was 1900, and the difference was
+    #     left behind as false signal;
+    #   * narrowing the window to fit pins the first point to the measurement,
+    #     which is right on a tail but wrong when the scan opens on a reflection,
+    #     and the error then propagates into the fitted model.
+    #
+    # Extending the trend instead is neutral: a falling edge is continued upwards
+    # and survives, while an edge that rises into a peak is continued downwards
+    # and is stripped.
+    pad = min(iterations, max(len(transformed) // 4, 1))
+    if pad > 0:
+        span = min(len(transformed) - 1, max(3, pad))
+        steps = np.arange(1, pad + 1, dtype=float)
+        left_slope = (transformed[span] - transformed[0]) / span
+        right_slope = (transformed[-1] - transformed[-1 - span]) / span
+        transformed = np.concatenate(
+            [
+                transformed[0] - left_slope * steps[::-1],
+                transformed,
+                transformed[-1] + right_slope * steps,
+            ]
+        )
+
     for p in range(iterations, 0, -1):
         shifted_left = np.roll(transformed, p)
         shifted_right = np.roll(transformed, -p)
-        shifted_left[:p] = transformed[:p]
-        shifted_right[-p:] = transformed[-p:]
+        shifted_left[:p] = transformed[0]
+        shifted_right[-p:] = transformed[-1]
         transformed = np.minimum(transformed, 0.5 * (shifted_left + shifted_right))
+
+    if pad > 0:
+        transformed = transformed[pad:-pad]
     restored = (np.exp(np.exp(transformed) - 1.0) - 1.0) ** 2 - 1.0
-    return np.clip(restored, 0.0, None) + offset
+    # A background is never above the measurement it came from.
+    return np.minimum(np.clip(restored, 0.0, None) + offset, values)
 
 
 def select_background_points(

@@ -120,7 +120,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-7">A.7 Crystallite thickness</a>
 <a href="#a-8">A.8 Layer spacing</a>
 <a href="#a-9">A.9 Fit weighting</a>
-<a href="#a-12">A.12 Summary</a>
+<a href="#a-11">A.11 Stripping width</a>
+<a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
 <a class="top" href="#c">C Symbols</a>
@@ -1178,19 +1179,40 @@ its default, and its meaning. Sliders show their current value; range sliders ha
 <em>Chebyshev</em>: &Sigma;<var>c<sub>k</sub>T<sub>k</sub></var>(<var>u</var>), better conditioned at high degree and the usual Rietveld choice.
 <em>Exponential</em>: a single decaying term.
 <em>Peak-stripped</em>: non-parametric; the stripped estimate is used directly and follows any shape, at the cost of having no parameters.</td></tr>
-<tr><td>Degree</td><td class="kw">bg-degree</td><td>5</td>
+<tr><td>Degree</td><td class="kw">bg-degree</td><td>4</td>
 <td>Degree of the polynomial or Chebyshev component; degree <var>n</var> contributes <var>n</var>+1 terms. Raise it only as far as the background demands: an over-flexible background follows peaks.</td></tr>
-<tr><td>Exponential decay (1/&deg;)</td><td class="kw">bg-decay</td><td>0.15</td>
+<tr><td>Exponential decay (1/&deg;)</td><td class="kw">bg-decay</td><td>0.20</td>
 <td>Decay constant of the exponential component, in reciprocal degrees.</td></tr>
 <tr><td>Add 1/x term</td><td class="kw">bg-inverse</td><td>on</td>
 <td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
 <tr><td>Peak-stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
-<td>Width of the widest feature the stripping treats as a peak. Too small and broad reflections are treated as background; too large and the background itself is followed poorly.</td></tr>
+<td>Width of the widest feature the stripping treats as a peak. This control, not the choice of
+component, is what decides where the background lies: the components are fitted to the stripped
+estimate, and they follow it to a few counts. A narrow setting leaves peak wings in the estimate and
+so raises the background under the reflections; a wide one strips the direct-beam tail along with the
+peaks. Measured over eleven mounts the fit improves steeply up to about 4&deg; and is flat beyond it
+(&sect;<a href="#a-11">A.11</a>), which is why 4&deg; is the default.</td></tr>
 <tr><td>Apply to this mount / Apply to all mounts</td><td><span class="kw">bg-apply</span>, <span class="kw">bg-apply-all</span></td><td>&mdash;</td>
 <td>Stores the fitted background. <em>All</em> uses the same model for the three mounts, appropriate when they were measured under identical conditions.</td></tr>
 </table></div>
+
+<p><strong>Reading the plot.</strong> Four curves are drawn: the <em>measured</em> pattern in grey,
+the <em>background model</em> as a thick orange line, the <em>peak-stripped estimate</em> as a blue
+dashed line drawn over it, and the <em>subtracted</em> result in green. The dashes should lie on the
+orange line; where they part, the chosen components cannot follow the shape of the background and the
+degree or the component should be changed. The blue curve is the quantity the stripping-width slider
+controls, and the one the model is fitted to.</p>
+
+<p><strong>Reading the status line.</strong> It reports how closely the model follows the stripped
+estimate, in counts, overall and over the lowest degree separately, and then what the model leaves at
+the low-angle end: the background value at the first measured point, the measurement there, and the
+difference as a percentage. That difference is the intensity the fit will be asked to explain as
+diffraction. A goodness-of-fit figure is deliberately <em>not</em> reported for the background: it is
+close to unity for almost any choice, because the estimate is smooth and the model has several free
+terms, and it would read as success while the background sat a thousand counts below the measurement
+at 3&deg;.</p>
 
 <h3>6.4 Tab 4 &mdash; Main minerals</h3>
 <div class="tablewrap"><table>
@@ -1939,7 +1961,60 @@ refine positions or widths continuously, and poor by the standards of a Rietveld
 can. At least one specimen type is fitted badly. The plots exist so that this is visible to the user
 in every case, and &sect;<a href="#s9">9</a> states the limitation plainly.</p>
 
-<h3 id="a-11">A.11 End-to-end tests of the interface</h3>
+<h3 id="a-11">A.11 The peak-stripping width, and what it costs</h3>
+
+<p><strong>Reasoning.</strong> Because the background components are fitted to a peak-stripped
+estimate rather than to the counts, the stripping width decides the background and the model merely
+follows it &mdash; on real mounts to within 2 to 5 counts RMS. The width therefore needed a default
+chosen by measurement rather than by habit. It is a genuine trade: at the low-angle end of an
+oriented mount the direct-beam tail is broad, so a stripping width wide enough to remove it also
+removes any real reflection of similar breadth, while a narrow width preserves the tail as apparent
+signal and at the same time lifts the background into the peaks.</p>
+
+<p><strong>Method.</strong> The eleven glycol-solvated mounts were fitted against the clay library
+alone (1601 patterns) with a Chebyshev background of degree 4 plus the 1/x term, at six stripping
+widths. No accompanying minerals were included and no zero error was applied, so the absolute values
+are higher than those of &sect;<a href="#a-10">A.10</a> and only the trend is meaningful. Three
+quantities were recorded: the overall <var>R</var><sub>wp</sub>; the fraction of the measured counts
+between 3 and 4.5&deg; that survives subtraction; and <var>R</var><sub>wp</sub> restricted to
+8&ndash;40&deg;, the region that contains the sharp reflections and none of the tail.</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Width (&deg;2&theta;)</th><th class="num">Overall <var>R</var><sub>wp</sub></th>
+<th class="num">3&ndash;4.5&deg; surviving</th><th class="num">8&ndash;40&deg; <var>R</var><sub>wp</sub></th></tr>
+<tr><td class="num">1</td><td class="num">66.1 %</td><td class="num">8 %</td><td class="num">64.5 %</td></tr>
+<tr><td class="num">2</td><td class="num">58.5 %</td><td class="num">32 %</td><td class="num">60.7 %</td></tr>
+<tr><td class="num">3</td><td class="num">54.2 %</td><td class="num">55 %</td><td class="num">60.1 %</td></tr>
+<tr><td class="num"><strong>4</strong></td><td class="num"><strong>53.0 %</strong></td><td class="num">66 %</td><td class="num">60.1 %</td></tr>
+<tr><td class="num">6</td><td class="num">52.3 %</td><td class="num">77 %</td><td class="num">59.9 %</td></tr>
+<tr><td class="num">8</td><td class="num">52.1 %</td><td class="num">83 %</td><td class="num">60.1 %</td></tr>
+</table></div>
+
+<p><strong>Result.</strong> Both metrics improve steeply to about 3&ndash;4&deg; and are flat beyond:
+from 4 to 8&deg; the overall <var>R</var><sub>wp</sub> gains 0.9 points and the 8&ndash;40&deg; value
+none at all, while the share of low-angle counts left as signal rises from 66 % to 83 %. At 1&deg; the
+background is dragged up into the reflections &mdash; the 8&ndash;40&deg; figure is 4.4 points worse
+than at 4&deg;, in a region containing no tail at all &mdash; and only 8 % of the low-angle counts
+survive, so little that the fitted library overshoots what remains there by 160 %.</p>
+
+<p><strong>Conclusion.</strong> 4&deg; is the knee of both curves and is the default. The choice is
+exposed, drawn and quantified rather than hidden, because it is specimen-dependent: for a specimen
+with a genuine reflection below 5&deg; &mdash; an ordered illite/smectite superlattice, for instance
+&mdash; the wide setting will remove real intensity, and the analyst has to see the estimate to
+notice.</p>
+
+<p><strong>A related defect, found on the way.</strong> The stripping had a fault at the ends of the
+scan: the classic SNIP algorithm averages the two points a distance <var>p</var> away, and the
+implementation substituted the point itself when that reached past the end of the data. On a falling
+left edge the average is then always below the point, so every one of the ~120 passes lowered it
+further and the first degrees of the scan were stripped to a fraction of their true value. It was
+replaced by padding the ends with the local trend before stripping and removing the padding
+afterwards. On measured data at the 4&deg; default the effect is negligible &mdash; the full workflow
+on three specimens gives 33.3 / 42.0 / 38.1 % after the change against 33.3 / 41.7 / 37.8 % before
+&mdash; but at narrow widths, where the padding matters most, the old behaviour removed intensity
+that was really there.</p>
+
+<h3 id="a-12">A.12 End-to-end tests of the interface</h3>
 
 <p><strong>Reasoning.</strong> Unit tests cannot show that the assembled program works: state may be
 lost between steps, a control may not be connected, a computation may be correct but never reach the
@@ -1962,13 +2037,23 @@ created components, so the dialog took whatever was ticked by default at the ins
 screenshot showed the selection already made. Fixed by guarding against the initial invocation.</li>
 <li><strong>Stale server state.</strong> An early run reported results from before a change, because
 the development server does not reload edited code. Subsequent runs restart the server explicitly.</li>
+<li><strong>Two curves in the same colour.</strong> The background plot drew the measured pattern in
+the colour of the mount and the subtracted result in a fixed green &mdash; which for the
+glycol-solvated mount is the same green. The two lay on top of each other, the stripped estimate was a
+faint grey dotted line beneath the model, and a correctly applied background was indistinguishable
+from none at all; it was reported as the background not being applied. The traces now have fixed,
+distinct colours and the estimate is drawn over the model rather than under it.</li>
+<li><strong>Tabs that did not refresh.</strong> The interface is built once at start-up, so the
+background and zero-error views were still showing "not loaded" after the patterns had been read, and
+kept a background fitted to uncorrected angles after the zero error was set, until some control was
+touched. Both now take the load and zero-error status as inputs.</li>
 </ul>
 
 <p><strong>Conclusion.</strong> The assembled program works end to end on real data. The dialog defect
 in particular was invisible to unit testing, being a property of the interface framework rather than
 of any function, and was caught only by driving the interface and looking at what it displayed.</p>
 
-<h3 id="a-12">A.12 Summary</h3>
+<h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
 <tr><th>Area</th><th>Tests</th><th>Status</th></tr>
@@ -1981,7 +2066,8 @@ of any function, and was caught only by driving the interface and looking at wha
 <tr><td>Zero error</td><td>11 specimens &times; 3 mounts</td><td>Pass after correction</td></tr>
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Quantitative fit</td><td>3 real specimens</td><td>2 good, 1 poor and documented</td></tr>
-<tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 2 defects found and fixed</td></tr>
+<tr><td>Background stripping width</td><td>11 mounts &times; 6 widths</td><td>4&deg; adopted; edge defect fixed</td></tr>
+<tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 4 defects found and fixed</td></tr>
 </table></div>
 
 <p>The automated suite comprises <strong>45 tests</strong> and runs in under two seconds

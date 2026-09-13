@@ -33,7 +33,7 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
-from ..background import BackgroundModel, snip_baseline
+from ..background import BackgroundModel
 from ..bern import is_clay_phase
 from ..detection import detect_phases, screen_phases
 from ..calibration import (
@@ -126,6 +126,48 @@ def background_model_from_controls(
         inverse=bool(use_inverse),
         inverse_offset=inverse_offset,
     )
+
+
+def background_report(pattern, fit, background, model) -> str:
+    """Describe the fitted background in the terms the operator has to judge it by.
+
+    A single R\u00b2 against the stripped estimate is close to 1 for almost any
+    model - the estimate is smooth and the fit has several free terms - so it
+    reads as success even when the background is a thousand counts below the
+    measurement at the low-angle end, which is where the choice actually
+    matters.  What is reported instead is the size of the disagreement in
+    counts, separately for the low-angle end, and what the model leaves behind
+    there as signal.
+    """
+    two_theta = pattern.two_theta
+    residual = fit.target - background
+    overall = float(np.sqrt(np.mean(residual ** 2)))
+    low = two_theta <= two_theta[0] + 1.0
+    low_rms = float(np.sqrt(np.mean(residual[low] ** 2))) if low.any() else float("nan")
+
+    start = float(two_theta[0])
+    measured_start = float(pattern.intensity[0])
+    model_start = float(background[0])
+    left = max(0.0, measured_start - model_start)
+    share = 100.0 * left / measured_start if measured_start > 0 else 0.0
+
+    text = (
+        f"{' + '.join(model.components)}, {model.n_terms} terms. "
+        f"Follows the peak-stripped estimate to {overall:.0f} counts RMS "
+        f"({low_rms:.0f} counts over the lowest 1\u00b0). "
+        f"At {start:.2f}\u00b0 the model reads {model_start:.0f} of {measured_start:.0f} "
+        f"measured counts, leaving {left:.0f} ({share:.0f}%) as signal."
+    )
+    if share > 25.0:
+        text += (
+            " Most of the low-angle counts are therefore kept as signal; a narrower "
+            "stripping width keeps less, at the cost of a higher background under "
+            "the peaks."
+        )
+    above = float(np.mean(background > pattern.intensity))
+    if above > 0.02:
+        text += f" Warning: the model sits above the data at {100.0 * above:.0f}% of points."
+    return text
 
 
 def gui_instrument(
@@ -422,6 +464,14 @@ def background_tab() -> html.Div:
                     dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
                                marks={0.5: "0.5", 5: "5", 10: "10"},
                                tooltip={"placement": "bottom"}),
+                    html.Div(
+                        "The blue dashed curve is what the model is fitted to. "
+                        "Narrow settings leave peak wings in the background and eat "
+                        "into the reflections; wide ones strip the direct-beam tail "
+                        "as well. On the test measurements the fit improves up to "
+                        "about 4\u00b0 and is flat beyond it, which is the default.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Button("Apply to this mount", id="bg-apply", n_clicks=0,
                                 style={"marginTop": "10px"}),
                     html.Button("Apply to all mounts", id="bg-apply-all", n_clicks=0,
@@ -888,8 +938,11 @@ def register_callbacks(app: Dash) -> None:
         Input("zero-slider", "value"),
         Input("zero-mount", "value"),
         Input("zero-reference", "value"),
+        # As for the background tab: the layout is built once, so the view has
+        # to be told that patterns have since been loaded.
+        Input("load-status", "children"),
     )
-    def update_zero(shift, mount, reference):
+    def update_zero(shift, mount, reference, _loaded):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -928,6 +981,12 @@ def register_callbacks(app: Dash) -> None:
         Output("bg-graph", "figure"),
         Output("bg-status", "children"),
         Input("bg-mount", "value"),
+        # The tab is built once at start-up, so without these the view still
+        # shows "not loaded" after the patterns are read and keeps a background
+        # fitted to the uncorrected angles after the zero error is set - which
+        # reads as the model not being applied at all.
+        Input("load-status", "children"),
+        Input("zero-status", "children"),
         Input("bg-kind", "value"),
         Input("bg-degree", "value"),
         Input("bg-decay", "value"),
@@ -937,7 +996,8 @@ def register_callbacks(app: Dash) -> None:
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
     )
-    def update_background(mount, kind, degree, decay, inverse, offset, snip, _apply, _apply_all):
+    def update_background(mount, _loaded, _zeroed, kind, degree, decay, inverse, offset,
+                          snip, _apply, _apply_all):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -972,30 +1032,26 @@ def register_callbacks(app: Dash) -> None:
 
         background = fit(pattern.two_theta)
         figure = go.Figure()
+        # Fixed colours, not the mount colour: for the glycol mount COLORS[mount]
+        # is the same green as the subtracted trace, and the two curves then lie
+        # on top of each other indistinguishably.
         figure.add_scatter(x=pattern.two_theta, y=pattern.intensity, name="measured",
-                           line={"color": COLORS[mount], "width": 1})
+                           line={"color": "#444444", "width": 1})
+        figure.add_scatter(x=pattern.two_theta, y=background, name="background model",
+                           line={"color": "#ff7f0e", "width": 3})
+        # Drawn after the model, because a good model lies on top of it: dashes
+        # over the orange line are what shows the two agree.
         figure.add_scatter(
             x=pattern.two_theta,
-            y=snip_baseline(pattern.two_theta, pattern.intensity, window=float(snip)),
-            name="peak-stripped estimate", line={"color": "#999", "width": 1, "dash": "dot"},
+            y=fit.target,
+            name=f"peak-stripped estimate (width {float(snip):g}\u00b0)",
+            line={"color": "#1f77b4", "width": 2, "dash": "dash"},
         )
-        figure.add_scatter(x=pattern.two_theta, y=background, name="background model",
-                           line={"color": "#ff7f0e", "width": 2})
         figure.add_scatter(x=pattern.two_theta, y=fit.subtract(pattern.two_theta, pattern.intensity),
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
 
-        above = float(np.mean(background > pattern.intensity))
-        warning = (
-            f" Warning: the model sits above the data at {100.0 * above:.0f}% of points."
-            if above > 0.02
-            else ""
-        )
-        return figure, html.Div(
-            f"{' + '.join(model.components)}, {model.n_terms} terms, "
-            f"R² = {fit.r_squared(pattern.two_theta):.4f} against the stripped background."
-            f"{applied}{warning}"
-        )
+        return figure, html.Div(background_report(pattern, fit, background, model) + applied)
 
     @app.callback(
         Output("kao-graph", "figure"),
