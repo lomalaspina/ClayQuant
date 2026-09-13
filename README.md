@@ -24,6 +24,11 @@ Two things in one program, because the second needs the first:
 ./clayquant import-structures your_structures.xml -o structures/phases.json
 ```
 
+`./clayquant shortcut` puts it on the desktop and in the applications menu, on
+all three platforms; the installer offers to do it for you. Double-clicking the
+icon starts the program and opens it in your default browser. Replace
+`assets/clayquant.png` to change the icon, then run `./clayquant shortcut` again.
+
 `./clayquant` is in the checkout and needs no activation: it finds `.venv` itself
 and runs the module, so it works whether or not the environment is on PATH and
 whether or not the installed command exists. Activating still works as usual —

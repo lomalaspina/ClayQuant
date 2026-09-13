@@ -25,6 +25,10 @@ Start it with ``clayquant-gui`` or ``python -m clayquant.gui.app``.
 from __future__ import annotations
 
 import argparse
+import socket
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -1670,17 +1674,81 @@ def create_app() -> Dash:
     return app
 
 
+def free_port(host: str, preferred: int) -> int:
+    """``preferred`` if it can be bound, otherwise a port that can be.
+
+    Someone who starts ClayQuant from a desktop icon has no terminal to read an
+    "address already in use" traceback from, and starting it twice is an easy
+    thing to do.  The second copy moves aside instead of failing.
+    """
+    for candidate in [preferred] + list(range(preferred + 1, preferred + 20)):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind((host, candidate))
+            except OSError:
+                continue
+            return candidate
+    return preferred
+
+
+def open_when_ready(host: str, port: int, timeout: float = 20.0) -> None:
+    """Open the interface in the default browser once the server answers.
+
+    In a background thread, because the server has not started yet: it is
+    started by the call that follows, on this thread, and does not return until
+    it is stopped.  Opening the browser before then shows a connection error, so
+    the thread waits for the port to accept a connection first.
+    """
+
+    def wait_and_open() -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.5)
+                if probe.connect_ex((host, port)) == 0:
+                    break
+            time.sleep(0.2)
+        webbrowser.open(f"http://{host}:{port}")
+
+    threading.Thread(target=wait_and_open, daemon=True).start()
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command line entry point for ``clayquant-gui``."""
     parser = argparse.ArgumentParser(prog="clayquant-gui", description="Start the ClayQuant GUI.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8050)
     parser.add_argument("--debug", action="store_true")
+    browser = parser.add_mutually_exclusive_group()
+    browser.add_argument(
+        "--browser", dest="browser", action="store_true", default=None,
+        help="open the interface in the default browser (the default when there is no terminal)",
+    )
+    browser.add_argument(
+        "--no-browser", dest="browser", action="store_false",
+        help="do not open a browser; just serve",
+    )
     arguments = parser.parse_args(argv)
 
+    port = free_port(arguments.host, arguments.port)
+    url = f"http://{arguments.host}:{port}"
+
+    # Started from a desktop icon there is no terminal to read the address from
+    # and no one to type it, so the browser is opened unless asked not to.  From
+    # a terminal it is opened too, which is what every local notebook-style tool
+    # does; --no-browser is there for a server or a script.
+    if arguments.browser is None:
+        arguments.browser = True
+    if arguments.browser:
+        open_when_ready(arguments.host, port)
+
     app = create_app()
-    print(f"ClayQuant GUI at http://{arguments.host}:{arguments.port}")
-    app.run(host=arguments.host, port=arguments.port, debug=arguments.debug)
+    print(f"ClayQuant GUI at {url}")
+    if port != arguments.port:
+        print(f"(port {arguments.port} was in use)")
+    print("Press Ctrl-C to stop it.")
+    app.run(host=arguments.host, port=port, debug=arguments.debug)
     return 0
 
 

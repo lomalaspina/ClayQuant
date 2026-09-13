@@ -864,6 +864,25 @@ environment of the right version is reused, one of the wrong version is rebuilt.
 <span class="kw">--python /path/to/python3.12</span> to force an interpreter, and
 <span class="kw">--no-dev</span> to omit the test and import extras.</p>
 
+<h4>Starting it from an icon</h4>
+
+<p>At the end of the installation you are asked whether to create a desktop icon and a menu entry.
+Answering yes writes what the desktop in question expects &mdash; a <span class="kw">.desktop</span>
+file on Linux, an application bundle in <span class="kw">~/Applications</span> on macOS, a shortcut
+on the desktop and in the Start menu on Windows &mdash; pointing at the interpreter of the
+environment ClayQuant was installed in, so nothing has to be activated or on PATH. Double-clicking it
+starts the program and opens it in the default browser.</p>
+
+<p>It can be done or undone at any time, and does not need the installer:</p>
+
+<pre><code>./clayquant shortcut            # create them
+./clayquant shortcut --where    # say where they would go
+./clayquant shortcut --remove   # take them away</code></pre>
+
+<p>The icon is the single file <span class="kw">assets/clayquant.png</span>. Replacing it and running
+the command again changes it everywhere; it is converted to the format each platform needs
+(<span class="kw">.ico</span> on Windows, <span class="kw">.icns</span> on macOS) as part of that.</p>
+
 <div class="note"><strong>Run it again after every update.</strong> The commands
 (<span class="kw">clayquant-gui</span> and the rest) are written into the environment when the
 package is installed and at no other time, so an environment built from one version keeps that
@@ -1423,9 +1442,17 @@ command.</div>
 <h3>7.3 clayquant-gui</h3>
 <div class="tablewrap"><table>
 <tr><th>Option</th><th>Default</th><th>Meaning</th></tr>
-<tr><td class="kw">--port</td><td>8050</td><td>Port to serve on.</td></tr>
+<tr><td class="kw">--port</td><td>8050</td>
+<td>Port to serve on. If it is already in use - a second copy started from the icon, most likely -
+the next free port is taken instead and reported, rather than the program failing where no one can
+see the message.</td></tr>
 <tr><td class="kw">--host</td><td class="kw">127.0.0.1</td><td>Interface to bind. The default is the loopback, so the interface is not reachable from the network.</td></tr>
 <tr><td class="kw">--debug</td><td>off</td><td>Enable the development server's reloader and error pages.</td></tr>
+<tr><td class="kw">--browser</td><td>on</td>
+<td>Open the interface in the default browser once the server is answering. This is what makes the
+desktop icon work: it is started from a double-click, with no terminal to read an address from.</td></tr>
+<tr><td class="kw">--no-browser</td><td>&mdash;</td>
+<td>Serve without opening anything, for a script or a machine being used remotely.</td></tr>
 </table></div>
 
 <h2 id="s8">8 Output files</h2>

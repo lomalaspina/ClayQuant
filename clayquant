@@ -29,6 +29,8 @@ usage: ./clayquant <command> [options]
   gui                 open the quantification workflow in a browser
   import-structures   convert a TOPAS structure library into a phase database
   build-library       calculate the reference pattern library
+  shortcut            put ClayQuant on the desktop and in the menu
+                      (--remove takes them away, --where says where they go)
   python              run the environment's interpreter (anything after this
                       is passed to it, e.g. ./clayquant python -c "..." )
 
@@ -64,6 +66,7 @@ case "$COMMAND" in
     gui)               MODULE="clayquant.gui.app" ;;
     import-structures) MODULE="clayquant.bern" ;;
     build-library)     MODULE="clayquant.library" ;;
+    shortcut)          MODULE="clayquant.desktop" ;;
     python)            exec "$PY" "$@" ;;
     -h|--help|help)    usage; exit 0 ;;
     *)

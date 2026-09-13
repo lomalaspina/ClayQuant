@@ -19,7 +19,9 @@
 [CmdletBinding()]
 param(
     [string] $Python,
-    [switch] $NoDev
+    [switch] $NoDev,
+    [switch] $NoShortcut,
+    [switch] $Yes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -199,6 +201,28 @@ if ($Extras -like '*dev*') {
     & $VenvPy -m pytest -q (Join-Path $ProjectDir 'tests') 2>&1 | Select-Object -Last 3
 }
 Write-Ok "ready"
+
+# --------------------------------------------------------------------------- #
+# Offer to put it on the desktop.
+# --------------------------------------------------------------------------- #
+Write-Step "Desktop shortcut"
+Write-Host "     ClayQuant can be started from an icon instead of a terminal. Double-"
+Write-Host "     clicking it starts the program and opens it in your default browser."
+$makeShortcut = $true
+if ($NoShortcut) {
+    $makeShortcut = $false
+    Write-Host "     Skipped (-NoShortcut)."
+} elseif (-not $Yes) {
+    $reply = Read-Host "`n     Create a desktop icon and a Start menu entry? [Y/n]"
+    if ($reply -and $reply -notmatch '^(y|yes)$') { $makeShortcut = $false }
+}
+if ($makeShortcut) {
+    & $VenvPy -m clayquant.desktop
+    if ($LASTEXITCODE -ne 0) { Write-Warn "could not create the shortcuts." }
+} else {
+    Write-Host "     Not created. .\clayquant.ps1 shortcut does it later;"
+    Write-Host "     .\clayquant.ps1 shortcut --remove takes them away again."
+}
 
 # --------------------------------------------------------------------------- #
 # 4. Say what to do next.

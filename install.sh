@@ -8,6 +8,8 @@
 #   ./install.sh --python /usr/bin/python3.12
 #                             use a particular interpreter
 #   ./install.sh --no-dev     skip the test and import extras
+#   ./install.sh --no-shortcut
+#                             do not offer to create desktop shortcuts
 #
 # It chooses an interpreter, builds the virtual environment, installs
 # ClayQuant and its dependencies into it, and checks that the result works.
@@ -21,6 +23,7 @@ MIN_MAJOR=3
 MIN_MINOR=10
 EXTRAS="gui,import,dev"
 ASSUME_YES=0
+NO_SHORTCUT=0
 CHOSEN_PYTHON=""
 
 bold=$'\033[1m'; red=$'\033[31m'; green=$'\033[32m'; yellow=$'\033[33m'; dim=$'\033[2m'; off=$'\033[0m'
@@ -35,6 +38,7 @@ while [ $# -gt 0 ]; do
     -y|--yes)      ASSUME_YES=1; shift ;;
     --python)      CHOSEN_PYTHON="${2:-}"; shift 2 ;;
     --no-dev)      EXTRAS="gui,import"; shift ;;
+    --no-shortcut) NO_SHORTCUT=1; shift ;;
     -h|--help)     sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             die "unknown option $1 (try --help)" ;;
   esac
@@ -63,6 +67,23 @@ version_ok() {
   major="${v%%.*}"; minor="${v##*.}"
   [ "$major" -gt "$MIN_MAJOR" ] && return 0
   [ "$major" -eq "$MIN_MAJOR" ] && [ "$minor" -ge "$MIN_MINOR" ]
+}
+
+# Ask a yes/no question, defaulting to yes. Prefers the terminal so the prompt
+# still works when the script's stdin is a pipe; falls back to stdin, and
+# declines if there is neither. /dev/tty can exist yet fail to open when there
+# is no controlling terminal, so the test has to be an actual open.
+confirm() {
+  local prompt="$1" reply
+  if [ "$ASSUME_YES" -eq 1 ]; then return 0; fi
+  printf '\n     %s [Y/n] ' "$prompt"
+  if { : </dev/tty; } 2>/dev/null; then
+    read -r reply </dev/tty || reply=n
+  else
+    read -r reply || reply=n
+  fi
+  printf '\n'
+  case "${reply:-y}" in [Yy]*|"") return 0 ;; *) return 1 ;; esac
 }
 
 # Can this interpreter build a venv with pip in it? Tested by building one.
@@ -123,22 +144,8 @@ if [ -z "$PYTHON" ]; then
     pkg="python${version}-venv"
     warn "Python ${version} is installed but its virtual-environment support is not."
     say  "     The package that provides it is ${bold}${pkg}${off}."
-    if [ "$ASSUME_YES" -eq 1 ]; then
-      reply=y
-    else
-      printf '\n     Install it now with sudo? [Y/n] '
-      # Prefer the terminal so the prompt still works when the script's stdin is
-      # a pipe; fall back to stdin, and decline if there is neither. /dev/tty can
-      # exist yet fail to open when there is no controlling terminal, so the test
-      # has to be an actual open rather than a permission check.
-      if { : </dev/tty; } 2>/dev/null; then
-        read -r reply </dev/tty || reply=n
-      else
-        read -r reply || reply=n
-      fi
-      printf '\n'
-    fi
-    case "${reply:-y}" in
+    if confirm "Install it now with sudo?"; then reply=y; else reply=n; fi
+    case "$reply" in
       [Yy]*|"")
         step "Installing ${pkg}"
         sudo apt-get update && sudo apt-get install -y "$pkg" python3-pip \
@@ -250,7 +257,22 @@ fi
 ok "ready"
 
 # --------------------------------------------------------------------------- #
-# 5. Say what to do next.
+# 5. Offer to put it on the desktop.
+# --------------------------------------------------------------------------- #
+step "Desktop shortcut"
+say "     ClayQuant can be started from an icon instead of a terminal. Double-"
+say "     clicking it starts the program and opens it in your default browser."
+if [ "$NO_SHORTCUT" -eq 1 ]; then
+  say "     Skipped (--no-shortcut)."
+elif confirm "Create a desktop icon and a menu entry?"; then
+  "$VENV_PY" -m clayquant.desktop || warn "could not create the shortcuts."
+else
+  say "     Not created. ${bold}./clayquant shortcut${off} does it later;"
+  say "     ${bold}./clayquant shortcut --remove${off} takes them away again."
+fi
+
+# --------------------------------------------------------------------------- #
+# 6. Say what to do next.
 # --------------------------------------------------------------------------- #
 cat <<EOF
 
