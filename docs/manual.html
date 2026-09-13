@@ -733,6 +733,7 @@ reporting a clay mineral assemblage.</p>
 <tr><td class="kw">models.py</td><td>the expected CIF sources, the structure search path, the Reynolds (1965) glycol&ndash;smectite layer</td></tr>
 <tr><td class="kw">bern.py</td><td>import of a TOPAS/jEdit structure library into a phase database; clay/non-clay classification</td></tr>
 <tr><td class="kw">io.py</td><td>readers for XRDML, <span class="kw">.xy</span>, Bruker <span class="kw">.raw</span> and two-column text</td></tr>
+<tr><td class="kw">pairing.py</td><td>recognising the three mounts of one sample from their file names</td></tr>
 <tr><td class="kw">calibration.py</td><td>2&theta; zero error on the quartz 100 reflection, merit profile for the slider</td></tr>
 <tr><td class="kw">background.py</td><td>background components, peak stripping, the non-parametric background</td></tr>
 <tr><td class="kw">diagnostics.py</td><td>kaolinite collapse and expandable-clay swelling</td></tr>
@@ -1001,10 +1002,30 @@ is useful context but is not required by the program.</p>
 
 <h3 id="s5-2">5.2 Step 1 &mdash; Load</h3>
 
-<p>Enter the folder holding the measurements and press <em>Scan folder</em>. Files are listed, and
-the three mounts are assigned from the drop-down menus; names containing <span class="kw">air</span>,
-<span class="kw">eg</span> or <span class="kw">glyc</span>, and <span class="kw">heat</span> are
-pre-selected where recognised. Press <em>Load</em>.</p>
+<p>Enter the folder holding the measurements and press <em>Scan folder</em>. The readable files are
+listed in the three drop-down menus. Choose <em>one</em> of the three mounts: the other two are then
+filled in automatically, because the three scans of a sample normally differ in a single token of the
+file name, so <span class="kw">DBB_17_PW_air.xrdml</span> identifies
+<span class="kw">DBB_17_PW_eg.xrdml</span> and <span class="kw">DBB_17_PW_heat.xrdml</span>. It works
+from whichever mount is chosen first and in whichever format the files are held; a line beneath the
+menus reports what was matched, and says so when a mount is missing from the folder. Press
+<em>Load</em>.</p>
+
+<p>The tokens recognised are <span class="kw">air</span>, <span class="kw">airdried</span>,
+<span class="kw">airdry</span>, <span class="kw">ad</span> and <span class="kw">lutro</span> for the
+air-dried mount; <span class="kw">eg</span>, <span class="kw">egl</span>, <span class="kw">gly</span>,
+<span class="kw">glyc</span>, <span class="kw">glycol</span> and
+<span class="kw">ethylenglykol</span> for the glycol-solvated one; and <span class="kw">heat</span>,
+<span class="kw">heated</span>, <span class="kw">ht</span>, <span class="kw">350</span>,
+<span class="kw">500</span> and <span class="kw">550</span> for the heated one. A token counts only
+where it stands as a word of its own, delimited by an underscore, hyphen, dot or space or ending the
+name &mdash; otherwise the <span class="kw">ad</span> of <span class="kw">Bad_Segeberg</span> would
+name an air-dried mount &mdash; and the rest of the name must agree exactly, so
+<span class="kw">DBB_17_air</span> finds <span class="kw">DBB_17_eg</span> and never
+<span class="kw">DBB_17_PW_eg</span>. Files of the format chosen are preferred, so a folder holding
+both XRDML and <span class="kw">.xy</span> exports of everything does not yield one of each. Any
+assignment can be overridden by hand, and a box already holding a mount of the same sample is left
+untouched.</p>
 
 <div class="note"><strong>Paths under WSL.</strong> If ClayQuant runs inside WSL while the
 measurements sit on the Windows side, a path copied from Explorer such as
@@ -1149,10 +1170,14 @@ its default, and its meaning. Sliders show their current value; range sliders ha
 <tr><td>Data folder</td><td class="kw">directory</td><td>&mdash;</td>
 <td>Folder searched for measurement files. Sub-folders are not searched.</td></tr>
 <tr><td>Scan folder</td><td class="kw">scan</td><td>&mdash;</td>
-<td>Lists readable files and offers them in the three drop-downs. Names containing
-<em>air</em>, <em>eg</em>/<em>glyc</em> and <em>heat</em> are pre-selected where recognised.</td></tr>
+<td>Lists the readable files and offers them in the three drop-downs. Sub-folders are not searched.</td></tr>
 <tr><td>Air-dried / Ethylene glycol / Heated</td><td><span class="kw">file-air</span>, <span class="kw">file-glycol</span>, <span class="kw">file-heated</span></td><td>&mdash;</td>
-<td>Assignment of a file to each mount. The glycol mount is the one normally fitted; the other two drive the diagnostics.</td></tr>
+<td>Assignment of a file to each mount. Choosing one fills the other two from the file names
+(&sect;<a href="#s5-2">5.2</a>); either can then be changed by hand. The glycol mount is the one
+normally fitted; the other two drive the diagnostics.</td></tr>
+<tr><td>Matched files</td><td class="kw">file-pairing</td><td>&mdash;</td>
+<td>Reports which files were assigned automatically, and names any mount for which no matching file
+is present in the folder.</td></tr>
 <tr><td>Load</td><td class="kw">load</td><td>&mdash;</td>
 <td>Reads the selected files and reports points, range and step for each.</td></tr>
 </table></div>

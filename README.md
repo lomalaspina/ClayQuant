@@ -130,6 +130,13 @@ to 34%.
 
 ## The workflow
 
+**Loading.** Choose one of the three mounts and the other two are filled in from the
+file names — `DBB_17_PW_air.xrdml` identifies `DBB_17_PW_eg.xrdml` and
+`DBB_17_PW_heat.xrdml`, from whichever mount is picked first and in whichever
+format. The token has to stand as a word of its own, so the `ad` of
+`Bad_Segeberg` is not read as an air-dried mount, and the rest of the name has
+to agree exactly, so `DBB_17_air` never matches `DBB_17_PW_eg`.
+
 **Zero error.** Quartz 100 at 4.2551 Å (20.86°) clears every clay basal
 reflection, with a slider stepping 0.01° — half the usual measurement step. The
 search window is deliberately narrow: quartz 100 sits only 0.4° from the
@@ -206,6 +213,7 @@ badly. Read the plots, not just the table.
 | `library.py` | the reference library and its builder |
 | `bern.py` | TOPAS structure library import |
 | `io.py` | XRDML, `.xy`, `.raw`, two-column text |
+| `pairing.py` | recognising the three mounts of a sample from their file names |
 | `calibration.py`, `background.py` | zero error, backgrounds |
 | `diagnostics.py` | kaolinite collapse, expandable swelling |
 | `detection.py` | finding the accompanying minerals |

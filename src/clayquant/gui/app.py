@@ -60,6 +60,7 @@ from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, ra
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
 from ..nnls import nnls_fit
 from ..optics import Divergence
+from ..pairing import find_siblings, sample_key
 from ..pattern import Instrument, mixed_layer_pattern, powder_pattern, two_theta_grid
 from ..plots import (
     plot_clay_components,
@@ -356,6 +357,8 @@ def load_tab() -> html.Div:
                         )
                         for mount in MOUNTS
                     ],
+                    html.Div(id="file-pairing",
+                             style={"fontSize": "11px", "color": "#666", "marginBottom": "8px"}),
                     html.Button("Load patterns", id="load", n_clicks=0),
                     html.Div(id="load-status", style={"marginTop": "10px"}),
                 ],
@@ -876,6 +879,68 @@ def register_callbacks(app: Dash) -> None:
             options,
             html.Div(f"Found {len(files)} files in {STATE.directory}."),
         )
+
+    @app.callback(
+        *[Output(f"file-{mount}", "value", allow_duplicate=True) for mount in MOUNTS],
+        Output("file-pairing", "children"),
+        *[Input(f"file-{mount}", "value") for mount in MOUNTS],
+        State("file-air", "options"),
+        prevent_initial_call=True,
+    )
+    def complete_triplet(*arguments):
+        """Fill the other two mounts once one file of a sample is chosen.
+
+        The three mounts of a sample differ in one token of the file name, so
+        choosing ``DBB_17_PW_air.xrdml`` is enough to identify the glycol and
+        heated scans.  Only the two boxes the analyst did not just touch are
+        written to, and a box already holding a mount of the same sample is left
+        as it is - so a deliberate choice of, say, the XRDML export where the
+        others are .xy files is not undone, while changing to a different sample
+        takes one selection rather than three.
+        """
+        *values, options = arguments
+        chosen = dict(zip(MOUNTS, values))
+        triggered = callback_context.triggered_id
+        if not triggered or not str(triggered).startswith("file-"):
+            raise PreventUpdate
+        source = str(triggered).removeprefix("file-")
+        selected = chosen.get(source)
+        if not selected:
+            raise PreventUpdate
+
+        available = [option["value"] for option in (options or [])]
+        siblings = find_siblings(selected, available)
+        if not siblings:
+            return *(no_update for _ in MOUNTS), ""
+
+        key = sample_key(selected)
+        updates: list[object] = []
+        filled: list[str] = []
+        missing: list[str] = []
+        for mount in MOUNTS:
+            if mount == source:
+                updates.append(no_update)
+                continue
+            match = siblings.get(mount)
+            current = chosen.get(mount)
+            if match is None:
+                missing.append(MOUNT_LABELS[mount])
+                updates.append(no_update)
+                continue
+            if current == match or (current and sample_key(current) == key):
+                updates.append(no_update)
+                continue
+            updates.append(match)
+            filled.append(f"{MOUNT_LABELS[mount]}: {match}")
+
+        note = []
+        if filled:
+            note.append("Matched " + "; ".join(filled) + ".")
+        if missing:
+            note.append(
+                f"No {' or '.join(missing)} scan with a matching name is in this folder."
+            )
+        return *updates, " ".join(note)
 
     @app.callback(
         Output("load-graph", "figure"),
