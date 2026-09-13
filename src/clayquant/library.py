@@ -28,7 +28,7 @@ import numpy as np
 from .background import snip_baseline
 from .crystal import Crystal
 from .emission import CU_KA_5LINE
-from .mixed_layer import CSDS, MixedLayerStack, lognormal_csds
+from .mixed_layer import MixedLayerStack, lognormal_csds
 from .optics import Divergence
 from .models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
 from .pattern import (

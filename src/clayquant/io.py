@@ -106,7 +106,7 @@ def describe_path_problem(text: str | Path, resolved: Path) -> str:
 
     if os.name != "nt" and _WINDOWS_DRIVE.match(original):
         parts.append(
-            f"That is a Windows path, and ClayQuant is running on Linux"
+            "That is a Windows path, and ClayQuant is running on Linux"
             + (" (inside WSL)" if running_under_wsl() else "")
             + f", where it would be {resolved}."
         )

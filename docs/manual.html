@@ -2195,6 +2195,33 @@ touched. Both now take the load and zero-error status as inputs.</li>
 in particular was invisible to unit testing, being a property of the interface framework rather than
 of any function, and was caught only by driving the interface and looking at what it displayed.</p>
 
+<h3 id="a-12b">A.12.1 A name that was never imported</h3>
+
+<p><strong>What happened.</strong> Pressing <em>Load database</em> on the main-minerals tab reported
+<span class="kw">name 'resolve_user_path' is not defined</span>. The function exists and is correct;
+the module that calls it never imported it. Python raises that only when the line runs, so the
+interface started, the first three tabs worked, and the fault waited on a button. The same import was
+missing for the two other calls in that file &mdash; loading the reference library and exporting the
+results &mdash; so three of the seven steps were broken in the same way and by the same omission.</p>
+
+<p><strong>Why the existing tests did not catch it.</strong> The unit tests exercise the library, not
+the interface, and the end-to-end browser run that would have caught it had last been made before
+those three calls were written. A test that only proves what it reaches cannot prove what it does
+not.</p>
+
+<p><strong>What was added.</strong> Two things, because they fail differently. A whole-source check
+for names that do not exist (<span class="kw">tests/test_no_undefined_names.py</span>, using
+pyflakes) runs over every file in a fraction of a second and finds this class of fault wherever it
+is, including on paths no test reaches; run against the unfixed source it named all three lines.
+And the browser run now covers every tab and every button through to the export, which is what
+establishes that the assembled program works rather than that its parts do.</p>
+
+<p><strong>Result of that run.</strong> Load, zero error (&minus;0.06&deg;), background, phase
+database (205 phases), mineral search, kaolinite (83.8&nbsp;% of the 7.15&nbsp;&aring; area
+collapsed), expandable, library (1601 patterns), fit
+(<var>R</var><sub>wp</sub>&nbsp;=&nbsp;49.6&nbsp;%), export (7 files) and the simulator, with no
+JavaScript errors.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -2212,10 +2239,12 @@ of any function, and was caught only by driving the interface and looking at wha
 <tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
 <td><var>R</var><sub>wp</sub> 37&ndash;68 %, median 45 %</td></tr>
 <tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
+<tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
+<td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser</td><td>Pass; 4 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>70 tests</strong> and runs in under two seconds
+<p>The automated suite comprises <strong>102 tests</strong> and runs in under two seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

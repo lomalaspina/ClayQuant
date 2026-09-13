@@ -25,7 +25,6 @@ Start it with ``clayquant-gui`` or ``python -m clayquant.gui.app``.
 from __future__ import annotations
 
 import argparse
-import traceback
 from pathlib import Path
 
 import numpy as np
@@ -49,9 +48,8 @@ from ..diagnostics import (
     smectite_swelling,
 )
 from ..emission import CU_KA_5LINE
+from ..io import resolve_user_path
 from ..library import (
-    CHLORITE_SMECTITE_FRACTIONS,
-    ILLITE_SMECTITE_FRACTIONS,
     PREFERRED_ORIENTATIONS,
     PatternLibrary,
     build_library,

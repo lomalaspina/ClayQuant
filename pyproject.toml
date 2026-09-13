@@ -20,7 +20,10 @@ plot = ["matplotlib>=3.7"]
 # It is needed for that import only: the generated database stores the symmetry
 # operations explicitly and is read without it.
 import = ["gemmi>=0.6"]
-dev = ["pytest>=7.4"]
+# pyflakes is used by tests/test_no_undefined_names.py, which checks the whole
+# source for names that do not exist - the failure mode that only shows itself
+# when a particular button is pressed.
+dev = ["pytest>=7.4", "pyflakes>=3.0"]
 
 [project.scripts]
 clayquant-build-library = "clayquant.library:main"
