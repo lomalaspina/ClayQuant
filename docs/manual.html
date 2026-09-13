@@ -857,11 +857,20 @@ directory:</p>
 .\install.ps1</code></pre>
 
 <p>It selects an interpreter, builds the virtual environment, installs ClayQuant with its
-dependencies, verifies that the package imports and reports which clay structures it can find.
-Re-running it is safe: an environment of the right version is reused, one of the wrong version is
-rebuilt. Useful options are <span class="kw">-y</span> to answer prompts automatically,
+dependencies, verifies that the package imports, checks that every command it declares has been
+created and answers, and reports which clay structures it can find. Re-running it is safe: an
+environment of the right version is reused, one of the wrong version is rebuilt. Useful options are
+<span class="kw">-y</span> to answer prompts automatically,
 <span class="kw">--python /path/to/python3.12</span> to force an interpreter, and
 <span class="kw">--no-dev</span> to omit the test and import extras.</p>
+
+<div class="note"><strong>Run it again after every update.</strong> The commands
+(<span class="kw">clayquant-gui</span> and the rest) are written into the environment when the
+package is installed and at no other time, so an environment built from one version keeps that
+version's set of commands. Updating the source with <span class="kw">git pull</span> does not add a
+command the new version introduced, and it is then reported as not found although its code is in the
+checkout. Re-running the installer writes them all; &sect;<a href="#s7">7</a> gives the module form
+to use meanwhile.</div>
 
 <div class="warn"><strong>Why an installer rather than three commands.</strong>
 <span class="kw">python -m venv</span> runs whichever interpreter the name
@@ -1353,6 +1362,27 @@ at 3&deg;.</p>
 </table></div>
 
 <h2 id="s7">7 Reference: command line</h2>
+
+<p>The three commands below are created inside the virtual environment by the
+installation, and are available once it is activated. Each is also reachable as a module, which
+needs no command at all and is the form to use if a command is not found:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Command</th><th>Equivalent</th></tr>
+<tr><td class="kw">clayquant-build-library</td><td class="kw">python -m clayquant.library</td></tr>
+<tr><td class="kw">clayquant-import-structures</td><td class="kw">python -m clayquant.bern</td></tr>
+<tr><td class="kw">clayquant-gui</td><td class="kw">python -m clayquant.gui.app</td></tr>
+</table></div>
+
+<div class="note"><strong>If a command is not found, re-run the installer.</strong> The commands are
+written into the environment when the package is installed, and at no other time. Updating the source
+&mdash; <span class="kw">git pull</span> &mdash; therefore does not create a command that the new
+version has added: the environment keeps the set it was built with, and the new command is reported
+as not found although its code is present in the checkout. Running
+<span class="kw">./install.sh</span> (or <span class="kw">install.ps1</span>) again writes them all;
+it now also lists every command it has checked, and names any that is missing rather than reporting
+success. In the meantime the module form above works, because it does not depend on the
+command having been written.</div>
 
 <h3>7.1 clayquant-build-library</h3>
 <div class="tablewrap"><table>

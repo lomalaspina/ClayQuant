@@ -170,6 +170,31 @@ else:
 $check | & $VenvPy -
 if ($LASTEXITCODE -ne 0) { Stop-WithError "ClayQuant is installed but does not import correctly." }
 
+# Each name in [project.scripts] becomes an .exe in the environment's Scripts
+# directory, written at install time and only then.  Pulling a version that adds
+# a command therefore does not create it: the environment keeps the set of
+# commands it was built with, and the new one is not recognised even though its
+# code is sitting in the checkout.  Re-installing writes them all, which has just
+# happened above, so what is left is to prove each declared command is there.
+Write-Step "Checking the commands"
+$listing = & $VenvPy (Join-Path $ProjectDir 'scripts\list_commands.py') (Join-Path $ProjectDir 'pyproject.toml')
+if ($LASTEXITCODE -ne 0) { Stop-WithError "could not read the command list from pyproject.toml." }
+$missing = @()
+foreach ($name in ($listing -split '\s+' | Where-Object { $_ })) {
+    $exe = Join-Path $VenvDir "Scripts\$name.exe"
+    if (Test-Path $exe) {
+        & $exe --help *> $null
+        if ($LASTEXITCODE -eq 0) { Write-Host "  $name" } else { $missing += $name }
+    } else {
+        $missing += $name
+    }
+}
+if ($missing.Count -gt 0) {
+    Stop-WithError ("these commands were not created or do not run: " + ($missing -join ' ') + [Environment]::NewLine +
+        "     The environment is out of step with the source, which happens when a new" + [Environment]::NewLine +
+        "     version adds a command. Run this script again, or delete $VenvDir first.")
+}
+
 if ($Extras -like '*dev*') {
     & $VenvPy -m pytest -q (Join-Path $ProjectDir 'tests') 2>&1 | Select-Object -Last 3
 }

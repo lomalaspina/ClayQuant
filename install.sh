@@ -222,6 +222,28 @@ else:
     print(f"  {n} of {len(have)} clay structures found; missing: {', '.join(missing)}")
 PY
 
+# Each name in [project.scripts] becomes a file in the environment's bin
+# directory, written at install time and only then.  Pulling a version that adds
+# a command therefore does not create it: the environment keeps the set of
+# commands it was built with, and the new one is "command not found" even though
+# its code is sitting in the checkout.  Re-installing writes them all, which has
+# just happened above, so what is left is to prove that each declared command is
+# there and answers - and to say so plainly if one is not.
+step "Checking the commands"
+SCRIPTS=$("$VENV_PY" "${PROJECT_DIR}/scripts/list_commands.py" "${PROJECT_DIR}/pyproject.toml") \
+  || die "could not read the command list from pyproject.toml."
+MISSING=""
+for name in $SCRIPTS; do
+  if [ -x "${VENV_DIR}/bin/${name}" ] && "${VENV_DIR}/bin/${name}" --help >/dev/null 2>&1; then
+    say "  ${name}"
+  else
+    MISSING="${MISSING} ${name}"
+  fi
+done
+[ -n "$MISSING" ] && die "these commands were not created or do not run:${MISSING}
+     The environment is out of step with the source, which happens when a new
+     version adds a command. Run this script again, or delete ${VENV_DIR} first."
+
 if [ "${EXTRAS#*dev}" != "$EXTRAS" ]; then
   "$VENV_PY" -m pytest -q "${PROJECT_DIR}/tests" 2>&1 | tail -3 || true
 fi

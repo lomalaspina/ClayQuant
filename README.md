@@ -24,6 +24,13 @@ clayquant-build-library -o library/clays.npz
 clayquant-import-structures your_structures.xml -o structures/phases.json
 ```
 
+Each command is also a module — `python -m clayquant.gui.app`,
+`python -m clayquant.library`, `python -m clayquant.bern` — which is the form to
+use if a command is not found. Commands are written into the environment at
+install time and at no other, so `git pull` does not create one that the new
+version added; re-run `./install.sh`, which now checks every declared command and
+names any that is missing.
+
 The installer picks an interpreter, builds the virtual environment, installs
 everything and checks the result. It exists because `python -m venv` uses
 whichever interpreter `python` happens to be — on Ubuntu and WSL usually an
