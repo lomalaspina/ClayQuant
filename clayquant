@@ -1,0 +1,83 @@
+#!/bin/sh
+#
+# ClayQuant, run from the checkout without activating anything.
+#
+#   ./clayquant gui
+#   ./clayquant import-structures structures.xml -o structures/phases.json
+#   ./clayquant build-library -o library/clays.npz
+#
+# The installed commands - clayquant-gui and the rest - live inside the virtual
+# environment and need it on PATH, which means activating it first.  Two things
+# go wrong with that often enough to be worth removing: the environment is not
+# activated, so the command is not found and a bare "python" is the system one
+# that has never heard of clayquant; or the environment was built before a
+# command existed, and updating the source does not add it.
+#
+# This script is immune to both.  It finds the environment's own interpreter and
+# runs the module directly, so nothing has to be on PATH and no command has to
+# have been written at install time.  It is in the checkout, which is also where
+# people look for it.
+
+set -eu
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+usage() {
+    cat <<'EOF'
+usage: ./clayquant <command> [options]
+
+  gui                 open the quantification workflow in a browser
+  import-structures   convert a TOPAS structure library into a phase database
+  build-library       calculate the reference pattern library
+  python              run the environment's interpreter (anything after this
+                      is passed to it, e.g. ./clayquant python -c "..." )
+
+Options after the command are passed through unchanged; --help on any of them
+describes it.  Equivalent to activating the environment and using the installed
+commands, but works whether or not it is activated.
+EOF
+}
+
+# The environment to use: an activated one first, since someone who has
+# activated a particular environment means it; then the one beside this script.
+if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "${VIRTUAL_ENV}/bin/python" ]; then
+    PY="${VIRTUAL_ENV}/bin/python"
+elif [ -x "${HERE}/.venv/bin/python" ]; then
+    PY="${HERE}/.venv/bin/python"
+elif [ -x "${HERE}/.venv/Scripts/python.exe" ]; then
+    PY="${HERE}/.venv/Scripts/python.exe"
+else
+    echo "clayquant: no virtual environment found at ${HERE}/.venv" >&2
+    echo "           Run ${HERE}/install.sh first (install.ps1 on Windows)." >&2
+    exit 1
+fi
+
+if [ $# -eq 0 ]; then
+    usage
+    exit 0
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    gui)               MODULE="clayquant.gui.app" ;;
+    import-structures) MODULE="clayquant.bern" ;;
+    build-library)     MODULE="clayquant.library" ;;
+    python)            exec "$PY" "$@" ;;
+    -h|--help|help)    usage; exit 0 ;;
+    *)
+        echo "clayquant: unknown command '${COMMAND}'" >&2
+        echo >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
+if ! "$PY" -c "import clayquant" >/dev/null 2>&1; then
+    echo "clayquant: the environment at $(dirname "$(dirname "$PY")") does not have" >&2
+    echo "           ClayQuant installed. Run ${HERE}/install.sh." >&2
+    exit 1
+fi
+
+exec "$PY" -m "$MODULE" "$@"

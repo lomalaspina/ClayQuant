@@ -215,9 +215,14 @@ then
     clayquant-build-library -o library\clays.npz
     clayquant-import-structures your_structures.xml -o structures\phases.json
 
-Without activating, the same commands work as:
+Or, without activating anything, from the project directory:
 
-    $VenvDir\Scripts\clayquant-gui.exe
+    .\clayquant.ps1 gui
+    .\clayquant.ps1 build-library -o library\clays.npz
+    .\clayquant.ps1 import-structures your_structures.xml -o structures\phases.json
+
+which finds this environment itself. The installed commands are also there as
+$VenvDir\Scripts\clayquant-gui.exe and so on.
 
 If PowerShell refuses to run the activation script, allow local scripts once:
 

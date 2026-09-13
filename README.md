@@ -18,17 +18,19 @@ Two things in one program, because the second needs the first:
 
 ```bash
 ./install.sh                     # Linux, macOS, WSL   (install.ps1 on Windows)
-source .venv/bin/activate
-clayquant-gui                    # the workflow, in a browser
-clayquant-build-library -o library/clays.npz
-clayquant-import-structures your_structures.xml -o structures/phases.json
+
+./clayquant gui                  # the workflow, in a browser
+./clayquant build-library -o library/clays.npz
+./clayquant import-structures your_structures.xml -o structures/phases.json
 ```
 
-Each command is also a module — `python -m clayquant.gui.app`,
-`python -m clayquant.library`, `python -m clayquant.bern` — which is the form to
-use if a command is not found. Commands are written into the environment at
+`./clayquant` is in the checkout and needs no activation: it finds `.venv` itself
+and runs the module, so it works whether or not the environment is on PATH and
+whether or not the installed command exists. Activating still works as usual —
+`source .venv/bin/activate`, then `clayquant-gui`, `clayquant-build-library`,
+`clayquant-import-structures`. Those commands are written into the environment at
 install time and at no other, so `git pull` does not create one that the new
-version added; re-run `./install.sh`, which now checks every declared command and
+version added; re-run `./install.sh`, which checks every declared command and
 names any that is missing.
 
 The installer picks an interpreter, builds the virtual environment, installs

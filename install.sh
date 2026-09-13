@@ -264,9 +264,14 @@ then
     clayquant-build-library -o library/clays.npz
     clayquant-import-structures your_structures.xml -o structures/phases.json
 
-Without activating, the same commands work as:
+Or, without activating anything, from the project directory:
 
-    ${VENV_DIR}/bin/clayquant-gui
+    ${bold}./clayquant gui${off}
+    ./clayquant build-library -o library/clays.npz
+    ./clayquant import-structures your_structures.xml -o structures/phases.json
+
+which finds this environment itself. The installed commands are also there as
+${VENV_DIR}/bin/clayquant-gui and so on.
 
 If any clay structures were reported missing above, put the four ICSD CIF files
 into ${PROJECT_DIR}/structures/ ; see structures/README.md for their names.

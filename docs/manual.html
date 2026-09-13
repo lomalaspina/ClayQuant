@@ -1363,26 +1363,42 @@ at 3&deg;.</p>
 
 <h2 id="s7">7 Reference: command line</h2>
 
-<p>The three commands below are created inside the virtual environment by the
-installation, and are available once it is activated. Each is also reachable as a module, which
-needs no command at all and is the form to use if a command is not found:</p>
+<p>There are three commands, and three ways to reach each of them. The
+<span class="kw">./clayquant</span> script in the project directory
+(<span class="kw">clayquant.ps1</span> on Windows) is the one that needs nothing set up: it locates
+the virtual environment itself and runs the module, so it works whether or not the environment is
+activated and whether or not the installed command was ever written.</p>
 
 <div class="tablewrap"><table>
-<tr><th>Command</th><th>Equivalent</th></tr>
-<tr><td class="kw">clayquant-build-library</td><td class="kw">python -m clayquant.library</td></tr>
-<tr><td class="kw">clayquant-import-structures</td><td class="kw">python -m clayquant.bern</td></tr>
-<tr><td class="kw">clayquant-gui</td><td class="kw">python -m clayquant.gui.app</td></tr>
+<tr><th>From the project directory</th><th>With the environment activated</th><th>As a module</th></tr>
+<tr><td class="kw">./clayquant build-library</td><td class="kw">clayquant-build-library</td>
+<td class="kw">python -m clayquant.library</td></tr>
+<tr><td class="kw">./clayquant import-structures</td><td class="kw">clayquant-import-structures</td>
+<td class="kw">python -m clayquant.bern</td></tr>
+<tr><td class="kw">./clayquant gui</td><td class="kw">clayquant-gui</td>
+<td class="kw">python -m clayquant.gui.app</td></tr>
 </table></div>
 
-<div class="note"><strong>If a command is not found, re-run the installer.</strong> The commands are
-written into the environment when the package is installed, and at no other time. Updating the source
-&mdash; <span class="kw">git pull</span> &mdash; therefore does not create a command that the new
-version has added: the environment keeps the set it was built with, and the new command is reported
-as not found although its code is present in the checkout. Running
+<p>Options are identical in all three forms; the tables below list them once.</p>
+
+<div class="warn"><strong>&ldquo;No module named clayquant&rdquo;, or a command not found.</strong>
+Both mean the shell is not using the virtual environment. A bare
+<span class="kw">python</span> is then the system interpreter, which has never heard of ClayQuant,
+and the installed commands are not on PATH. Either activate the environment
+(<span class="kw">source .venv/bin/activate</span>) or use
+<span class="kw">./clayquant</span>, which does not need it. The error names the interpreter it
+used &mdash; <span class="kw">/usr/bin/python</span> rather than something under
+<span class="kw">.venv</span> is the symptom.</div>
+
+<div class="note"><strong>A second reason a command can be missing.</strong> The installed commands
+are written into the environment when the package is installed, and at no other time. Updating the
+source &mdash; <span class="kw">git pull</span> &mdash; therefore does not create a command that the
+new version has added: the environment keeps the set it was built with, and the new command is
+reported as not found although its code is present in the checkout. Running
 <span class="kw">./install.sh</span> (or <span class="kw">install.ps1</span>) again writes them all;
-it now also lists every command it has checked, and names any that is missing rather than reporting
-success. In the meantime the module form above works, because it does not depend on the
-command having been written.</div>
+it lists every command it has checked and names any that is missing rather than reporting success.
+<span class="kw">./clayquant</span> is unaffected either way, since it runs the module rather than the
+command.</div>
 
 <h3>7.1 clayquant-build-library</h3>
 <div class="tablewrap"><table>
