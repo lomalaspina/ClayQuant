@@ -16,6 +16,7 @@ software; the error message says so.
 
 from __future__ import annotations
 
+import os
 import re
 import struct
 import xml.etree.ElementTree as ElementTree
@@ -26,7 +27,119 @@ import numpy as np
 
 from .pattern import Pattern
 
-__all__ = ["read_pattern", "read_text_pattern", "SUPPORTED_SUFFIXES"]
+__all__ = [
+    "read_pattern",
+    "read_text_pattern",
+    "resolve_user_path",
+    "describe_path_problem",
+    "running_under_wsl",
+    "SUPPORTED_SUFFIXES",
+]
+
+# --------------------------------------------------------------------------- #
+# Paths typed by a user
+#
+# ClayQuant is very often run inside WSL while the measurements sit on the
+# Windows side, and a path copied from Explorer - C:\Users\...\samples\TM -
+# means nothing to Python running under Linux, where that drive is mounted at
+# /mnt/c. Rejecting such a path with "no such directory" is technically true and
+# completely unhelpful, so it is translated instead, and where translation
+# cannot help, the reason is explained.
+# --------------------------------------------------------------------------- #
+
+_WINDOWS_DRIVE = re.compile(r"^([A-Za-z]):[\\/](.*)$", re.S)
+_WSL_UNC = re.compile(r"^\\\\wsl(?:\$|\.localhost)\\[^\\]+\\(.*)$", re.S)
+
+
+def running_under_wsl() -> bool:
+    """Whether this process is running in the Windows Subsystem for Linux."""
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        return "microsoft" in Path("/proc/version").read_text().lower()
+    except OSError:
+        return False
+
+
+def resolve_user_path(text: str | Path) -> Path:
+    r"""Interpret a path a user typed, as forgivingly as is safe.
+
+    Handles surrounding quotes (Explorer's "Copy as path" supplies them), a
+    leading ``~``, and Windows paths given to a program running on Linux: a
+    drive letter is mapped onto its mount point, so ``C:\Users\x`` becomes
+    ``/mnt/c/Users/x``, and a ``\\wsl$\Distro\home\x`` share becomes
+    ``/home/x``. On Windows the path is returned unchanged.
+    """
+    if text is None:
+        raise ValueError("no path given")
+    cleaned = str(text).strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in "\"'":
+        cleaned = cleaned[1:-1].strip()
+    if not cleaned:
+        raise ValueError("no path given")
+
+    if os.name != "nt":
+        unc = _WSL_UNC.match(cleaned)
+        if unc:
+            return Path("/" + unc.group(1).replace("\\", "/")).expanduser()
+        drive = _WINDOWS_DRIVE.match(cleaned)
+        if drive:
+            letter, rest = drive.group(1).lower(), drive.group(2).replace("\\", "/")
+            for root in (Path("/mnt"), Path("/media"), Path("/")):
+                candidate = root / letter / rest
+                if candidate.exists():
+                    return candidate
+            # Nothing matched; return the usual WSL location so that the error
+            # message names the path the user most likely meant.
+            return Path("/mnt") / letter / rest
+    return Path(cleaned).expanduser()
+
+
+def describe_path_problem(text: str | Path, resolved: Path) -> str:
+    """A sentence explaining why ``resolved`` could not be used, for a user.
+
+    Written for someone who typed a path into a box, not for a developer: it
+    names what was tried and what to type instead.
+    """
+    original = str(text).strip().strip("\"'")
+    parts = [f"{original!r} is not a folder I can open."]
+
+    if os.name != "nt" and _WINDOWS_DRIVE.match(original):
+        parts.append(
+            f"That is a Windows path, and ClayQuant is running on Linux"
+            + (" (inside WSL)" if running_under_wsl() else "")
+            + f", where it would be {resolved}."
+        )
+        mount = Path("/mnt") / _WINDOWS_DRIVE.match(original).group(1).lower()
+        if not mount.exists():
+            parts.append(
+                f"{mount} does not exist, so that drive is not mounted here. "
+                f"In WSL the Windows drives normally appear under /mnt; check with 'ls /mnt'."
+            )
+        else:
+            parts.append(
+                f"'{mount}' exists, so the drive is mounted, but the rest of the path does not - "
+                f"check the folder names."
+            )
+        parts.append(
+            "Windows paths are translated automatically, so either form may be typed; "
+            "the Linux form is the one being looked for."
+        )
+    elif not resolved.exists():
+        parent = resolved.parent
+        if parent.exists():
+            try:
+                nearby = sorted(p.name for p in parent.iterdir() if p.is_dir())[:8]
+            except OSError:
+                nearby = []
+            if nearby:
+                parts.append(f"{parent} exists and contains: {', '.join(nearby)}")
+        else:
+            parts.append(f"Neither it nor its parent {parent} exists.")
+    elif resolved.is_file():
+        parts.append("That is a file, not a folder. Give the folder that contains it.")
+    return " ".join(parts)
+
 
 SUPPORTED_SUFFIXES = (
     ".xy",

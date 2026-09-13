@@ -1005,6 +1005,16 @@ the three mounts are assigned from the drop-down menus; names containing <span c
 <span class="kw">eg</span> or <span class="kw">glyc</span>, and <span class="kw">heat</span> are
 pre-selected where recognised. Press <em>Load</em>.</p>
 
+<div class="note"><strong>Paths under WSL.</strong> If ClayQuant runs inside WSL while the
+measurements sit on the Windows side, a path copied from Explorer such as
+<span class="kw">C:\Users\you\samples\TM</span> refers to a drive Linux does not have: Windows
+drives appear under <span class="kw">/mnt</span>, so that folder is
+<span class="kw">/mnt/c/Users/you/samples/TM</span>. Either form may be typed &mdash; a drive letter
+is translated automatically, surrounding quotes are stripped, and a
+<span class="kw">\\wsl$\Distro\home\you</span> share is mapped back to
+<span class="kw">/home/you</span>. The folder that was actually opened is named in the confirmation,
+so it is visible which one was used.</div>
+
 <p>The point count, angular range and step are reported for each mount. Check that all three cover
 the same range: the diagnostics compare mounts point by point after interpolation, and a mount
 measured over a different range will still work but will restrict the comparison.</p>

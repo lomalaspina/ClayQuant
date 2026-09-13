@@ -92,17 +92,42 @@ class SessionState:
         return len(self.phase_database)
 
     def list_files(self, directory: str | Path) -> list[str]:
-        """Supported data files in ``directory``, sorted by name."""
-        path = Path(directory).expanduser()
+        """Supported data files in ``directory``, sorted by name.
+
+        The path is interpreted forgivingly - quotes are stripped and a Windows
+        path is translated when running on Linux - and a failure explains what
+        was tried rather than echoing the path back.
+        """
+        from ..io import describe_path_problem, resolve_user_path
+
+        path = resolve_user_path(directory)
         if not path.is_dir():
-            raise NotADirectoryError(path)
+            raise NotADirectoryError(describe_path_problem(directory, path))
         self.directory = path
-        files = [
-            entry.name
-            for entry in path.iterdir()
-            if entry.is_file() and entry.suffix.lower() in SUPPORTED_SUFFIXES
-        ]
-        return sorted(files)
+
+        present: list[str] = []
+        other: set[str] = set()
+        for entry in path.iterdir():
+            if not entry.is_file():
+                continue
+            if entry.suffix.lower() in SUPPORTED_SUFFIXES:
+                present.append(entry.name)
+            elif entry.suffix:
+                other.add(entry.suffix.lower())
+
+        if not present:
+            detail = (
+                f" It holds {len(other)} other kind(s) of file ({', '.join(sorted(other))})."
+                if other
+                else " It holds no files with an extension at all."
+            )
+            raise FileNotFoundError(
+                f"No readable diffraction files in {path}.{detail} "
+                f"ClayQuant reads {', '.join(SUPPORTED_SUFFIXES)}. "
+                f"If your data is in another format, export it as two-column .xy "
+                f"from the instrument software."
+            )
+        return sorted(present)
 
     def load(self, mount: str, filename: str) -> Pattern:
         """Load ``filename`` from the current directory into ``mount``."""

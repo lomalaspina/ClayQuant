@@ -819,12 +819,13 @@ def register_callbacks(app: Dash) -> None:
             files = STATE.list_files(directory)
         except Exception as exc:  # noqa: BLE001 - surfaced to the user
             return [], [], [], error_message(exc)
-        if not files:
-            return [], [], [], error_message(
-                ValueError(f"No readable diffraction files in {directory}.")
-            )
         options = [{"label": name, "value": name} for name in files]
-        return options, options, options, html.Div(f"Found {len(files)} files in {directory}.")
+        return (
+            options,
+            options,
+            options,
+            html.Div(f"Found {len(files)} files in {STATE.directory}."),
+        )
 
     @app.callback(
         Output("load-graph", "figure"),
@@ -1108,7 +1109,7 @@ def register_callbacks(app: Dash) -> None:
     )
     def load_database(_clicks, path):
         try:
-            count = STATE.load_phase_database(path)
+            count = STATE.load_phase_database(resolve_user_path(path))
         except Exception as exc:  # noqa: BLE001
             return error_message(exc)
         clays = sum(1 for name in STATE.phase_database if is_clay_phase(name))
@@ -1311,7 +1312,7 @@ def register_callbacks(app: Dash) -> None:
                 library = build_library(instrument=gui_instrument())
                 library.save(path)
             else:
-                library = PatternLibrary.load(path)
+                library = PatternLibrary.load(resolve_user_path(path))
         except Exception as exc:  # noqa: BLE001
             return error_message(exc)
         STATE.library = library
@@ -1415,7 +1416,7 @@ def register_callbacks(app: Dash) -> None:
         }
         try:
             written = save_report(
-                folder or "results",
+                resolve_user_path(folder or "results"),
                 STATE.fit_result,
                 mounts=mounts,
                 quantification=STATE.quantification,
