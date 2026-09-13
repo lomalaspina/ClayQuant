@@ -740,6 +740,8 @@ reporting a clay mineral assemblage.</p>
 <tr><td class="kw">quantification.py</td><td>grouping by phase, the two normalisation bases, CSV export</td></tr>
 <tr><td class="kw">plots.py</td><td>the four result figures and the report writer</td></tr>
 <tr><td class="kw">gui/</td><td>the browser interface and its session state</td></tr>
+<tr><td class="kw">install.sh</span>, <span class="kw">install.ps1</td>
+<td>installers for Linux/macOS/WSL and for Windows: interpreter selection, environment creation, installation and verification</td></tr>
 </table></div>
 
 <h3 id="s3-2">3.2 Data flow</h3>
@@ -834,12 +836,47 @@ row-weighted system; with 1600 columns and about 1800 points a fit takes well un
 
 <h4>Procedure</h4>
 
-<p>1. Obtain the source and create an isolated environment. A virtual environment is strongly
-recommended so that ClayQuant's dependencies do not disturb other Python installations.</p>
+<p>The supplied installer does the whole of this and checks the result. From the project
+directory:</p>
+
+<pre><code># Linux, macOS, WSL
+./install.sh
+
+# Windows PowerShell
+.\install.ps1</code></pre>
+
+<p>It selects an interpreter, builds the virtual environment, installs ClayQuant with its
+dependencies, verifies that the package imports and reports which clay structures it can find.
+Re-running it is safe: an environment of the right version is reused, one of the wrong version is
+rebuilt. Useful options are <span class="kw">-y</span> to answer prompts automatically,
+<span class="kw">--python /path/to/python3.12</span> to force an interpreter, and
+<span class="kw">--no-dev</span> to omit the test and import extras.</p>
+
+<div class="warn"><strong>Why an installer rather than three commands.</strong>
+<span class="kw">python -m venv</span> runs whichever interpreter the name
+<span class="kw">python</span> resolves to, and <em>each Python version carries its own</em>
+<span class="kw">venv</span> module and <span class="kw">ensurepip</span>, with its own bundled
+wheels. On Ubuntu and WSL, <span class="kw">python</span> and <span class="kw">python3</span> are
+frequently an older version than the one that was installed later, so the command fails with
+
+<pre><code>The virtual environment was not created successfully because ensurepip is
+not available. ... apt install python3.10-venv</code></pre>
+
+<p>even on a machine where <span class="kw">python3.12-venv</span> is installed. Nothing is failing
+to "see" the newer Python: version 3.10 was invoked, and 3.10's package is the one missing. The
+immediate fix is to name the interpreter — <span class="kw">python3.12 -m venv .venv</span> — and
+the installer does this automatically, trying every interpreter it can find, newest first, testing
+each by actually building a throwaway environment, and naming the exact distribution package if
+none succeeds.</p></div>
+
+<h4>Doing it by hand</h4>
+
+<p>1. Obtain the source and create an isolated environment. Name the interpreter explicitly rather
+than relying on <span class="kw">python</span>.</p>
 
 <pre><code>git clone https://github.com/lomalaspina/ClayQuant.git
 cd ClayQuant
-python -m venv .venv</code></pre>
+python3.12 -m venv .venv          # or whichever version 3.10+ you have</code></pre>
 
 <p>2. Activate the environment.</p>
 

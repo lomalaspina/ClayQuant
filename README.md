@@ -17,11 +17,21 @@ Two things in one program, because the second needs the first:
    squares and report the clay assemblage.
 
 ```bash
-pip install -e ".[gui,import]"
+./install.sh                     # Linux, macOS, WSL   (install.ps1 on Windows)
+source .venv/bin/activate
 clayquant-gui                    # the workflow, in a browser
 clayquant-build-library -o library/clays.npz
 clayquant-import-structures your_structures.xml -o structures/phases.json
 ```
+
+The installer picks an interpreter, builds the virtual environment, installs
+everything and checks the result. It exists because `python -m venv` uses
+whichever interpreter `python` happens to be — on Ubuntu and WSL usually an
+older one than you installed — and each Python version carries its own `venv`
+and `ensurepip`. That is why `python3.12-venv` does not satisfy a `python` that
+is really 3.10, and why the error names 3.10. The installer tries every
+interpreter it can find, newest first, actually testing each one, and if none
+can build an environment it names the exact package to install.
 
 ## The physics
 
