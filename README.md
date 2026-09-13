@@ -202,15 +202,17 @@ stored normalisation counts scattering units, and the mass of one unit turns
 that into a mass — the relation Rietveld analysis writes as `W ∝ S(ZMV)`. Built
 from known masses of library patterns, the fit returns them exactly.
 
-**The missing factor is texture, and it is large.** A basal series is multiplied
-by `r^-3`, so a clay fitted at `r = 0.13` is calculated to scatter 455 times more
-per gram than the same clay unoriented, and the mass inferred for it falls by the
-same factor. On a real separate this put quartz — which does not plate onto the
-slide, and fits at `r = 1` — at 61 wt%, which a <2 µm fraction is not. The fitted
-`r` is reported beside every phase so this is visible. Until `k_p` has been
-calibrated against mixtures of known composition (`Calibration`), read the weight
-percent as indicative and the clay-to-non-clay split as unreliable; the share of
-diffracted intensity is what the diffractogram actually measures.
+Checked against a TOPAS refinement of the same oriented mount, made
+independently: quartz 51.6% against 46.8%, albite 32.1% against 23.2%.
+
+**The missing factor is texture.** A basal series is multiplied by `r^-3`, so a
+clay fitted at `r = 0.13` is calculated to scatter 455 times more per gram than
+the same clay unoriented, and the mass inferred for it falls by the same factor
+while quartz — which does not plate onto the slide, and fits at `r = 1` — takes
+what the clays lose. The fitted `r` is reported beside every phase so this is
+visible. Until `k_p` has been calibrated against mixtures of known composition
+(`Calibration`), read the weight percent as indicative and the clay-to-non-clay
+split as the least reliable part of it.
 
 Rwp is computed with counting-statistics weights from the *raw* counts, not from
 the background-subtracted intensity — weighting by the latter puts the largest

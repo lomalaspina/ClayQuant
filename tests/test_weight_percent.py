@@ -43,7 +43,7 @@ def library():
             divergence=Divergence(),
         ),
         orientations=(0.3,),
-        illite_smectite=(0.80,),
+        illite_smectite=(0.80, 0.99),
         chlorite_smectite=(0.90,),
         csds_means=(15.0,),
         host_thicknesses={},
@@ -53,16 +53,26 @@ def library():
 def specimen(library, masses: dict[str, float], constant: float = 1e-6) -> Pattern:
     """A pattern from known masses of library entries.
 
-    A stored pattern is the calculated one divided by ``normalization``, and the
-    calculated one is for a single unit of mass ``unit_mass``.  So a mass ``m``
-    of an entry contributes ``m * normalization * stored / unit_mass``, times one
-    constant - the instrument, the irradiated volume, the counting time - that
-    every phase in a measurement shares.
+    Built from the standard powder relation rather than from ClayQuant's code:
+    the intensity a phase contributes is proportional to its mass times its
+    calculated pattern, divided by the mass *and the volume* of the unit that
+    pattern was calculated for,
+
+        I(p) = const * m(p) * y_calc(p) / (M * V)
+
+    which is the Hill-Howard ``W`` proportional to ``S(ZMV)`` read backwards.
+    The ``1/V`` factors are the ones easy to leave out - one for how many cells
+    fit in a volume of specimen, one for the density of reciprocal lattice
+    points - and leaving them out here as well as in the code under test would
+    make this test agree with a wrong answer, which is what happened until a
+    TOPAS refinement of the same mount disagreed.  ``y_calc`` is the stored
+    pattern times the normalisation it was stored with.
     """
     intensity = np.zeros_like(library.two_theta)
     for name, mass in masses.items():
         entry = library.entries[library.names.index(name)]
-        intensity += mass * entry.normalization * entry.intensity / entry.unit_mass
+        calculated = entry.normalization * entry.intensity
+        intensity += mass * calculated / (entry.unit_mass * entry.unit_volume)
     return Pattern(library.two_theta, constant * intensity, name="synthetic mixture")
 
 
@@ -181,3 +191,45 @@ def test_a_library_without_masses_reports_no_weights(library):
     assert all(share.weight == 0.0 for share in quantification.shares)
     assert all(row["weight_percent"] == "" for row in quantification.table())
     assert any(share.scattering > 0 for share in quantification.shares), "the fit still works"
+
+
+def test_the_two_calculation_routes_agree_on_one_phase(library):
+    """Illite is calculated two ways; they must weigh the same specimen alike.
+
+    As a discrete phase its pattern comes from the unit cell, which holds two
+    layers.  As the host of an interstratified stack it comes from one folded
+    layer, with half the mass, half the volume, and half the structure-factor
+    amplitude.  The mass conversion has to undo all three consistently, and a
+    volume convention that differed between the routes would show up here as a
+    factor of two or four.
+    """
+    discrete = library.entries[library.names.index("illite PO=0.3")]
+    layered = library.entries[library.names.index("I/S 0.99/0.01 PO=0.3")] \
+        if "I/S 0.99/0.01 PO=0.3" in library.names else None
+    if layered is None:
+        pytest.skip("this fixture holds no nearly-pure illite stack")
+    assert discrete.unit_mass == pytest.approx(2 * 790.37, rel=0.01)
+    # A layer is half the cell in both mass and volume.
+    assert layered.unit_mass == pytest.approx(discrete.unit_mass / 2, rel=0.05)
+    assert layered.unit_volume == pytest.approx(discrete.unit_volume / 2, rel=0.05)
+
+
+def test_a_small_cell_is_not_over_weighted(library):
+    """The failure the cell volume prevents, in the form it was found.
+
+    Without the volume, a phase with a small unit cell takes mass away from one
+    with a large cell in proportion to the ratio of the two - quartz at 113 A^3
+    against albite at 664 was six times over-weighted, which is what a TOPAS
+    refinement of the same mount showed.  Here kaolinite 1M (330 A^3) stands in
+    for the small cell and illite (944 A^3) for the large one.
+    """
+    small = library.entries[library.names.index("kaolinite_1M PO=0.3")]
+    large = library.entries[library.names.index("illite PO=0.3")]
+    assert large.unit_volume / small.unit_volume == pytest.approx(2.86, rel=0.05)
+
+    quantification = fit_specimen(
+        library, {"kaolinite_1M PO=0.3": 50.0, "illite PO=0.3": 50.0}
+    )
+    weights = {share.phase: share.weight for share in quantification.shares}
+    assert weights["kaolinite_1M"] == pytest.approx(50.0, abs=0.05)
+    assert weights["illite"] == pytest.approx(50.0, abs=0.05)

@@ -178,10 +178,15 @@ class Quantification:
     weights_available: bool = False
     """Whether a weight percent could be computed at all.
 
-    It cannot when the library predates the masses being recorded, in which case
-    the shares are still reported and the weight columns are left empty rather
-    than filled with something that looks like an answer.
+    It cannot when any phase that took a share of the pattern lacks the mass or
+    the volume of the unit it was calculated for - a library written before
+    these were recorded, or a phase added to the fit without them.  It is all or
+    nothing on purpose: weighing some of the phases and renormalising those to
+    100% would read as a complete analysis with a mineral missing from it.
     """
+
+    unweighable: list[str] = field(default_factory=list)
+    """Entries that took a share of the pattern but could not be weighed."""
 
     @property
     def clays(self) -> list[PhaseShare]:
@@ -414,4 +419,5 @@ def quantify(
         measurement=str(result.metadata.get("measurement", "")),
         calibration=calibration,
         weights_available=total_mass > 0.0,
+        unweighable=list(result.metadata.get("unweighable_entries", [])),
     )

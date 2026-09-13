@@ -732,11 +732,11 @@ the fit cannot tell a well-oriented phase from an abundant one. The effect is no
 few percent. A basal series is multiplied by <var>r</var><sup>&minus;3</sup>
 (&sect;<a href="#s2-9">2.9</a>), so a clay fitted at <var>r</var> = 0.13 is calculated to scatter 455
 times more per gram than the same clay at <var>r</var> = 1, and the mass inferred for it falls by the
-same factor. On a real clay separate this put quartz &mdash; fitted at <var>r</var> = 1, since it
-does not plate onto the slide &mdash; at 61 % by weight, which a &lt;2 &micro;m separate certainly is
-not. <strong>Until <var>k<sub>p</sub></var> has been measured for a preparation, read the weight
-percent as indicative and the clay-to-non-clay split as unreliable.</strong> The fitted
-<var>r</var> is reported beside every phase so this is visible rather than hidden.</div>
+same factor, while quartz &mdash; which does not plate onto the slide and is fitted at
+<var>r</var> = 1 &mdash; takes the mass the clays lose. <strong>Until <var>k<sub>p</sub></var> has
+been measured for a preparation, read the weight percent as indicative and the clay-to-non-clay split
+as the least reliable part of it.</strong> The fitted <var>r</var> is reported beside every phase so
+this is visible rather than hidden.</div>
 
 <p><strong>Measuring <var>k<sub>p</sub></var>.</strong> It is one factor per phase, covering texture,
 microabsorption and any error in the structural model together. To determine it, analyse specimens
@@ -2373,33 +2373,54 @@ point: the conversion uses the mass of the calculated unit and not the intensity
 not record those masses reports no weight percent at all rather than a number computed from
 something else.</p>
 
-<p><strong>And what it does not test.</strong> That the calculated pattern describes what the phase
-contributes. It does not, in an oriented mount, and the same measurement makes the size of the gap
-plain. Fitting a real glycol-solvated separate:</p>
+<p><strong>And what it did not test.</strong> That the relation was the right one. The specimen was
+built by inverting ClayQuant's own conversion, so a factor missing from both sides cancelled and the
+test passed. One was missing: equation (2.25) needs the volume of the calculated unit as well as its
+mass, and it was implemented with the mass alone.</p>
+
+<h4>What caught it</h4>
+
+<p>A TOPAS refinement of the same oriented air-dried mount, made independently in the laboratory the
+measurements come from. It quantifies four phases &mdash; quartz, albite, kaolinite 2<var>M</var> and
+sekaninaite &mdash; and fits illite and chlorite as structureless <span class="kw">hkl_Is</span>
+phases with no weight at all, which is itself worth noting: an expert refinement of an oriented mount
+does not attempt to weigh the clays either.</p>
 
 <div class="tablewrap"><table>
-<tr><th>Phase</th><th class="num">Weight %</th><th class="num">Fitted <var>r</var></th>
-<th class="num">Share of scattering</th></tr>
-<tr><td>Quartz</td><td class="num">61.0 %</td><td class="num">1.00</td><td class="num">11.7 %</td></tr>
-<tr><td>Chlorite/smectite</td><td class="num">14.4 %</td><td class="num">0.45</td><td class="num">19.6 %</td></tr>
-<tr><td>Albite</td><td class="num">6.4 %</td><td class="num">1.00</td><td class="num">6.6 %</td></tr>
-<tr><td>Illite</td><td class="num">2.8 %</td><td class="num">0.19</td><td class="num">9.7 %</td></tr>
-<tr><td>Illite/smectite</td><td class="num">1.3 %</td><td class="num">0.13</td><td class="num">32.8 %</td></tr>
+<tr><th>Phase</th><th class="num">Cell volume</th><th class="num">TOPAS</th>
+<th class="num">Without <var>V</var></th><th class="num">With <var>V</var></th></tr>
+<tr><td>Quartz</td><td class="num">113 &aring;<sup>3</sup></td><td class="num">46.8 %</td>
+<td class="num">84.7 %</td><td class="num"><strong>51.6 %</strong></td></tr>
+<tr><td>Albite</td><td class="num">664 &aring;<sup>3</sup></td><td class="num">23.2 %</td>
+<td class="num">9.0 %</td><td class="num"><strong>32.1 %</strong></td></tr>
+<tr><td>Kaolinite</td><td class="num">657 &aring;<sup>3</sup></td><td class="num">28.0 %</td>
+<td class="num">5.6 %</td><td class="num">9.9 %</td></tr>
+<tr><td>Sekaninaite</td><td class="num">1551 &aring;<sup>3</sup></td><td class="num">2.0 %</td>
+<td class="num">0.8 %</td><td class="num">6.5 %</td></tr>
 </table></div>
 
-<p>Illite/smectite takes a third of the scattered intensity and is assigned 1.3 % of the mass,
-because it is fitted at <var>r</var> = 0.13 and is therefore calculated to scatter
-0.13<sup>&minus;3</sup> = 455 times more per gram than it would unoriented. Quartz, which does not
-plate onto the slide and is fitted at <var>r</var> = 1, takes the mass instead: 61 % of a &lt;2
-&micro;m clay separate, which is not credible. The arithmetic is right and the physical input is
-incomplete, by two orders of magnitude, in the one place
-(&sect;<a href="#s2-13">2.13</a>) where it was said to be.</p>
+<p>Quartz has the smallest cell of the four and was over-weighted against albite by 4.7 times, which
+is the ratio of their cell volumes, 5.9, to within the other differences between the two analyses.
+With the volume included, quartz and albite agree with the refinement to 10 % and 38 % where they
+were out by factors of two and five. The same correction takes the glycol-solvated mount of that
+specimen from 61 % quartz to 20 %, with the clay minerals carrying 46 % of the mass, which is what a
+clay separate should look like.</p>
 
-<p><strong>Conclusion.</strong> The conversion is implemented and verified against known masses, and
-the factor it still needs is exactly the one that cannot be calculated. Reporting the fitted
-<var>r</var> beside every weight percent makes the uncertainty legible at a glance: where the
-<var>r</var> of the clays and of the accompanying minerals differ by this much, the split between
-them is not to be relied on until the preparation has been calibrated.</p>
+<p>Two differences remain and are not explained by this. Kaolinite is a third of the refined value:
+TOPAS models it as the 2<var>M</var> polytype with its orientation fixed at <var>r</var> = 1, while
+the fit here chooses 1<var>M</var>, and neither can reproduce a mount in which the 001 is enormously
+enhanced and the <var>hkl</var> reflections are all but absent. Sekaninaite, a phase of a few percent
+whose lines sit under quartz and feldspar, is three times the refined value; the competitive screen
+also admitted several minerals the refinement did not use, and they take intensity from each other.</p>
+
+<p><strong>Conclusion.</strong> A test built by inverting the code it tests will agree with the code
+and not with nature. The check that mattered was against an independent analysis of the same
+measurement, and it is the reason the two masses that ClayQuant computes for each phase &mdash; the
+cell mass and the cell volume &mdash; are now also checked against the values TOPAS states for a
+phase in the structure library: for sekaninaite, 2592.09 against 2592.043 g/mol and 1551.4 against
+1551.382 &aring;<sup>3</sup>. The synthetic test remains, rebuilt from the powder relation rather
+than from ClayQuant's conversion, alongside a check that the two calculation routes for one phase
+&mdash; as a discrete cell and as the host layer of a stack &mdash; weigh a specimen alike.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 

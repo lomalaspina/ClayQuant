@@ -245,7 +245,8 @@ def _with_main_minerals(library):
         )
         if float(np.max(pattern.intensity)) <= 0.0:
             continue
-        extended.add(pattern, phase=name, march_dollase=1.0)
+        extended.add(pattern, phase=name, march_dollase=1.0,
+                     unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
         added += 1
     return extended, added
 

@@ -247,7 +247,21 @@ def nnls_fit(
     unit_masses = np.array([
         0.0 if entry.unit_mass is None else entry.unit_mass for entry in library.entries
     ])
-    relative_mass = coefficients / normalizations * unit_masses
+    # W proportional to S(ZMV): the volume is as necessary as the mass, because a
+    # powder pattern carries 1/V**2 - one factor from how many cells fit in a
+    # given volume of specimen, one from the density of reciprocal lattice
+    # points.  An entry that does not know its volume contributes no mass rather
+    # than a mass computed without it.
+    unit_volumes = np.array([
+        0.0 if entry.unit_volume is None else entry.unit_volume for entry in library.entries
+    ])
+    relative_mass = coefficients / normalizations * unit_masses * unit_volumes
+    # A phase that cannot be weighed must not be quietly counted as weighing
+    # nothing: the others would then be renormalised to 100% between them and
+    # the answer would look complete while a mineral was missing from it.
+    unweighable = bool(
+        np.any((coefficients > 0.0) & ((unit_masses <= 0.0) | (unit_volumes <= 0.0)))
+    )
 
     total = contributions.sum()
     shares = contributions / total if total > 0 else np.zeros_like(contributions)
@@ -275,7 +289,7 @@ def nnls_fit(
         phases=[entry.phase for entry in library.entries],
         scattering_fraction=shares,
         amplitude_fraction=amplitudes,
-        relative_mass=relative_mass,
+        relative_mass=np.zeros_like(relative_mass) if unweighable else relative_mass,
         march_dollase=np.array([entry.march_dollase for entry in library.entries]),
         r_wp=r_wp,
         r_p=r_p,
@@ -286,5 +300,10 @@ def nnls_fit(
             "n_points": int(selection.sum()),
             "n_entries": len(library.entries),
             "background_subtracted": background is not None,
+            "unweighable_entries": [
+                entry.name for entry, coefficient in zip(library.entries, coefficients)
+                if coefficient > 0.0
+                and (not entry.unit_mass or not entry.unit_volume)
+            ],
         },
     )

@@ -156,9 +156,19 @@ class LibraryEntry:
     """Mass in g/mol of the unit the pattern was calculated for.
 
     One unit cell for a discrete phase, one layer for an interstratified stack -
-    whichever the structure factor was computed from.  With the normalisation
-    above, this is what turns a scale factor into a mass
-    (:mod:`clayquant.masses`).
+    whichever the structure factor was computed from.
+    """
+
+    unit_volume: float | None = None
+    """Volume in A^3 of that same unit.
+
+    Mass and volume are both needed, and the volume is the one that is easy to
+    forget: a powder pattern carries ``1/V**2``, one factor from the number of
+    cells in a given volume of specimen and one from the density of reciprocal
+    lattice points.  Together with :attr:`unit_mass` and the normalisation this
+    gives ``W`` proportional to ``S(ZMV)``, the Hill-Howard relation.  Leaving
+    the volume out over-weights phases with small cells: quartz, at 113 A^3, is
+    six times over-weighted against albite at 664.
     """
 
     metadata: dict = field(default_factory=dict)
@@ -198,6 +208,7 @@ class PatternLibrary:
         csds_mean: float | None = None,
         thickness: float | None = None,
         unit_mass: float | None = None,
+        unit_volume: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
         strip_continuum: bool = True,
     ) -> None:
@@ -250,6 +261,7 @@ class PatternLibrary:
                 thickness=thickness,
                 normalization=scale,
                 unit_mass=unit_mass,
+                unit_volume=unit_volume,
                 metadata=pattern.metadata,
             )
         )
@@ -320,6 +332,10 @@ class PatternLibrary:
             unit_mass=np.array(
                 [np.nan if entry.unit_mass is None else entry.unit_mass for entry in self.entries]
             ),
+            unit_volume=np.array(
+                [np.nan if entry.unit_volume is None else entry.unit_volume
+                 for entry in self.entries]
+            ),
             entry_metadata=json.dumps([entry.metadata for entry in self.entries], default=str),
             library_metadata=json.dumps(self.metadata, default=str),
         )
@@ -347,6 +363,10 @@ class PatternLibrary:
                 data["unit_mass"] if "unit_mass" in data.files
                 else np.full(len(fractions), np.nan)
             )
+            volumes = (
+                data["unit_volume"] if "unit_volume" in data.files
+                else np.full(len(fractions), np.nan)
+            )
             entries = [
                 LibraryEntry(
                     name=str(name),
@@ -358,10 +378,11 @@ class PatternLibrary:
                     thickness=None if np.isnan(spacing) else float(spacing),
                     normalization=float(scale),
                     unit_mass=None if np.isnan(mass) else float(mass),
+                    unit_volume=None if np.isnan(volume) else float(volume),
                     metadata=metadata,
                 )
                 for (name, phase, row, orientation, fraction, size, spacing, scale, mass,
-                     metadata) in zip(
+                     volume, metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -371,6 +392,7 @@ class PatternLibrary:
                     spacings,
                     scales,
                     masses,
+                    volumes,
                     entry_metadata,
                 )
             ]
@@ -389,6 +411,19 @@ class PatternLibrary:
             members = self.select(phase=phase)
             lines.append(f"  {phase:<16s} {len(members):4d} patterns")
         return "\n".join(lines)
+
+
+def _layer_footprint(crystal) -> float:
+    """Area of the (001) face of a cell, in A^2.
+
+    A cell is that area times its (001) interplanar spacing, so a layer of
+    thickness ``d`` cut from the same structure has volume ``footprint * d``.
+    This keeps a layer-based calculation and a cell-based one on one scale: for
+    illite, whose cell holds two layers, the layer has half the mass and half
+    the volume of the cell, and its structure factor is half the amplitude, so
+    the two routes give the same mass for the same specimen.
+    """
+    return crystal.volume / crystal.d001
 
 
 def build_library(
@@ -503,7 +538,7 @@ def build_library(
                     name=f"{key} PO={r:g}{spacing_tag}",
                 )
                 library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
-                            unit_mass=crystal.cell_mass)
+                            unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
 
     # Pure glycolated smectite.  All its reflections are basal, so the
     # orientation parameter only scales the pattern and one entry suffices.
@@ -523,6 +558,9 @@ def build_library(
         march_dollase=1.0,
         fraction=0.0,
         unit_mass=smectite.mass,
+        # A layer occupies the area of the (001) face of the host cell times its
+        # own thickness; the smectite layer is modelled on the same footprint.
+        unit_volume=_layer_footprint(load_crystal("illite")) * smectite.thickness,
     )
 
     # Interstratified series, at each layer spacing and crystallite thickness.
@@ -587,6 +625,10 @@ def build_library(
                             # is what a scale factor here counts.
                             unit_mass=(fraction * host_layer.mass
                                        + (1.0 - fraction) * smectite.mass),
+                            unit_volume=_layer_footprint(host) * (
+                                fraction * host_layer.thickness
+                                + (1.0 - fraction) * smectite.thickness
+                            ),
                         )
 
     return library
