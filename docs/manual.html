@@ -2051,9 +2051,10 @@ zero-error standard.</td><td><strong>Insufficient.</strong></td></tr>
 <td>Ask the question that actually matters: does this phase explain intensity that nothing else can?
 Every candidate is fitted simultaneously with the clay library and with every other candidate, and
 ranked by the share of the pattern it takes.</td>
-<td>On the same real specimen: <strong>quartz 7.4 %, albite 6.3 %</strong>, then a clean gap to
-1.6 % for the next candidate. On a second specimen, albite 6.7 %, quartz 6.2 %, microcline 3.2 %.
-Adding the identified phases to the fit lowered <var>R</var><sub>wp</sub>.</td>
+<td>On a real specimen, two phases take four to five times the share of the pattern that the next
+candidate down takes, and the gap between them and the rest is clean rather than graded; on a second
+specimen, three phases separate from the rest the same way. Adding the identified phases to the fit
+lowered <var>R</var><sub>wp</sub>.</td>
 <td><strong>Adopted.</strong></td></tr>
 </table></div>
 
@@ -2353,8 +2354,8 @@ And the browser run now covers every tab and every button through to the export,
 establishes that the assembled program works rather than that its parts do.</p>
 
 <p><strong>Result of that run.</strong> Load, zero error (&minus;0.06&deg;), background, phase
-database (205 phases), mineral search, kaolinite (83.8&nbsp;% of the 7.15&nbsp;&aring; area
-collapsed), expandable, library (1601 patterns), fit
+database (209 phases), mineral search, kaolinite (most of the 7.15&nbsp;&aring; area collapsed on
+heating, as it should), expandable, library (1601 patterns), fit
 (<var>R</var><sub>wp</sub>&nbsp;=&nbsp;49.6&nbsp;%), export (7 files) and the simulator, with no
 JavaScript errors.</p>
 
@@ -2419,30 +2420,36 @@ mass, and it was implemented with the mass alone.</p>
 <h4>What caught it</h4>
 
 <p>A TOPAS refinement of the same oriented air-dried mount, made independently in the laboratory the
-measurements come from. The version of it available at the time quantifies four phases &mdash; quartz, albite, kaolinite 2<var>M</var> and
-sekaninaite &mdash; and fits illite and chlorite as structureless <span class="kw">hkl_Is</span>
-phases with no weight at all, which is itself worth noting: an expert refinement of an oriented mount
-does not attempt to weigh the clays either.</p>
+measurements come from. The version of it available at the time quantifies four phases &mdash; quartz,
+albite, kaolinite 2<var>M</var> and sekaninaite &mdash; and fits illite and chlorite as structureless
+<span class="kw">hkl_Is</span> phases with no weight at all, which is itself worth noting: an expert
+refinement of an oriented mount does not attempt to weigh the clays either.</p>
+
+<div class="note">The specimens are laboratory material and their compositions are not reproduced in
+this manual. What is given below is the <em>ratio</em> of ClayQuant's answer to the reference's,
+which is what a verification record needs and which says nothing about what the specimen contains.
+</div>
 
 <div class="tablewrap"><table>
-<tr><th>Phase</th><th class="num">Cell volume</th><th class="num">TOPAS</th>
-<th class="num">Without <var>V</var></th><th class="num">With <var>V</var></th></tr>
-<tr><td>Quartz</td><td class="num">113 &aring;<sup>3</sup></td><td class="num">46.8 %</td>
-<td class="num">84.7 %</td><td class="num"><strong>51.6 %</strong></td></tr>
-<tr><td>Albite</td><td class="num">664 &aring;<sup>3</sup></td><td class="num">23.2 %</td>
-<td class="num">9.0 %</td><td class="num"><strong>32.1 %</strong></td></tr>
-<tr><td>Kaolinite</td><td class="num">657 &aring;<sup>3</sup></td><td class="num">28.0 %</td>
-<td class="num">5.6 %</td><td class="num">9.9 %</td></tr>
-<tr><td>Sekaninaite</td><td class="num">1551 &aring;<sup>3</sup></td><td class="num">2.0 %</td>
-<td class="num">0.8 %</td><td class="num">6.5 %</td></tr>
+<tr><th>Phase</th><th class="num">Cell volume</th>
+<th class="num">ClayQuant / reference, without <var>V</var></th>
+<th class="num">ClayQuant / reference, with <var>V</var></th></tr>
+<tr><td>Quartz</td><td class="num">113 &aring;<sup>3</sup></td><td class="num">1.81</td>
+<td class="num"><strong>1.10</strong></td></tr>
+<tr><td>Albite</td><td class="num">664 &aring;<sup>3</sup></td><td class="num">0.39</td>
+<td class="num"><strong>1.38</strong></td></tr>
+<tr><td>Kaolinite</td><td class="num">657 &aring;<sup>3</sup></td><td class="num">0.20</td>
+<td class="num">0.35</td></tr>
+<tr><td>Sekaninaite</td><td class="num">1551 &aring;<sup>3</sup></td><td class="num">0.40</td>
+<td class="num">3.2</td></tr>
 </table></div>
 
 <p>Quartz has the smallest cell of the four and was over-weighted against albite by 4.7 times, which
 is the ratio of their cell volumes, 5.9, to within the other differences between the two analyses.
 With the volume included, quartz and albite agree with the refinement to 10 % and 38 % where they
-were out by factors of two and five. The same correction takes the glycol-solvated mount of that
-specimen from 61 % quartz to 20 %, with the clay minerals carrying 46 % of the mass, which is what a
-clay separate should look like.</p>
+were out by factors of two and five &mdash; and the same correction cuts the quartz of the
+glycol-solvated mount of that specimen by two thirds, leaving the clay minerals carrying most of the
+mass, which is what a clay separate should look like.</p>
 
 <p>Two differences remained and were not explained by this: kaolinite at a third of the refined value
 and sekaninaite at three times it. A later version of the refinement accounts for both, and is
@@ -2454,36 +2461,31 @@ described next.</p>
 are modelled as structures rather than as <span class="kw">hkl_Is</span> peak sets, every phase
 carries a refined March&ndash;Dollase parameter instead of a fixed one, and all seven phases are
 weighed to a sum of 100 %. It is the better reference in every respect, and it changes the earlier
-comparison as much as it confirms it: quartz rises from 46.8 to 51.8 %, albite falls from 23.2 to
-6.1 % now that its texture is refined rather than assumed absent, kaolinite falls from 28.0 to 11.6 %
-for the same reason, and rutile &mdash; which ClayQuant had been finding, and which was suspected of
-being a false positive &mdash; appears at 3.3 %. Its fit statistics are
-<var>R</var><sub>wp</sub> = 6.71 % against <var>R</var><sub>exp</sub> = 3.73 %.</p>
+comparison as much as it confirms it. Kaolinite and albite both fall by more than half once their
+texture is refined rather than assumed absent, which is where two of the disagreements above went;
+and rutile &mdash; which ClayQuant had been finding, and which was suspected of being a false
+positive &mdash; is in it as a phase of a few per cent.</p>
 
 <div class="tablewrap"><table>
-<tr><th>Phase</th><th class="num">TOPAS</th><th class="num">ClayQuant</th><th class="num">Ratio</th>
-<th class="num">TOPAS <var>r</var></th><th class="num">ClayQuant <var>r</var></th></tr>
-<tr><td>Quartz</td><td class="num">51.8 %</td><td class="num">31.6 %</td><td class="num">0.61</td>
-<td class="num">1.00 (fixed)</td><td class="num">1.00 (fixed)</td></tr>
-<tr><td>Chlorite (clinochlore)</td><td class="num">25.0 %</td><td class="num">22.1 %</td>
-<td class="num"><strong>0.88</strong></td><td class="num">0.65</td><td class="num">0.36 / 0.60</td></tr>
-<tr><td>Kaolinite</td><td class="num">11.6 %</td><td class="num">5.8 %</td><td class="num">0.50</td>
-<td class="num">0.89</td><td class="num">1.00</td></tr>
-<tr><td>Albite</td><td class="num">6.1 %</td><td class="num">19.6 %</td><td class="num">3.20</td>
-<td class="num">0.35 (020)</td><td class="num">1.00</td></tr>
-<tr><td>Rutile</td><td class="num">3.3 %</td><td class="num">2.9 %</td>
-<td class="num"><strong>0.89</strong></td><td class="num">0.67 (110)</td><td class="num">1.00</td></tr>
-<tr><td>Illite</td><td class="num">1.8 %</td><td class="num">14.2 %</td><td class="num">7.8</td>
-<td class="num">0.14</td><td class="num">0.11 / 0.32</td></tr>
-<tr><td>Sekaninaite</td><td class="num">0.3 %</td><td class="num">3.8 %</td><td class="num">11</td>
-<td class="num">0.32 (200)</td><td class="num">1.00</td></tr>
+<tr><th>Phase</th><th class="num">ClayQuant / reference</th>
+<th class="num">Reference <var>r</var>, relative to ClayQuant's</th></tr>
+<tr><td>Quartz</td><td class="num">0.61</td><td class="num">both fixed at 1</td></tr>
+<tr><td>Chlorite (clinochlore)</td><td class="num"><strong>0.88</strong></td>
+<td class="num">within a factor of 1.8</td></tr>
+<tr><td>Kaolinite</td><td class="num">0.50</td><td class="num">slightly more textured</td></tr>
+<tr><td>Albite</td><td class="num">3.20</td><td class="num">textured about <span class="kw">0 2 0</span>, which ClayQuant cannot express</td></tr>
+<tr><td>Rutile</td><td class="num"><strong>0.89</strong></td>
+<td class="num">textured about <span class="kw">1 1 0</span>, which ClayQuant cannot express</td></tr>
+<tr><td>Illite</td><td class="num">7.8</td><td class="num">far more textured than the fit chooses</td></tr>
+<tr><td>Sekaninaite</td><td class="num">11</td>
+<td class="num">textured about <span class="kw">2 0 0</span>, which ClayQuant cannot express</td></tr>
 </table></div>
 
 <p>ClayQuant's figures are renormalised over these seven phases; the competitive screen also admitted
 six minerals the refinement does not use &mdash; microcline, anorthite, tridymite, thaumasite, a
-calcium phosphate and pseudoboleite &mdash; carrying a further 25 % of its mass, and the first three
-of those sit on feldspar and silica lines. ClayQuant's <var>R</var><sub>wp</sub> for this mount is
-36 %, against the refinement's 6.7 %: a fixed library fitted linearly is not a Rietveld refinement
+calcium phosphate and pseudoboleite &mdash; carrying a further quarter of its mass, and the first
+three of those sit on feldspar and silica lines. ClayQuant's <var>R</var><sub>wp</sub> for this mount
+is 36 %, against the refinement's 6.7 %: a fixed library fitted linearly is not a Rietveld refinement
 and does not pretend to be one.</p>
 
 <p><strong>What this settles.</strong> Chlorite at 0.88 and rutile at 0.89 are the first phases to
@@ -2495,23 +2497,23 @@ clinochlore phase in the refinement corresponds to. Rutile is real.</p>
 <p><strong>What it does not.</strong> Illite is nearly eight times the refined value and albite three
 times. Both have an identifiable cause and they are different causes.</p>
 
-<p>Illite is the texture parameter, and the refinement now measures it: 0.138, against the 0.11 and
-0.32 the fit here chooses for the illite/smectite and illite entries. Because a basal series has the
-same shape at every <var>r</var> (&sect;<a href="#s2-9">2.9</a>), that difference is invisible in the
-residual and enters the mass as <var>r</var><sup>3</sup>. Holding ClayQuant's illite at the refined
-0.138 and leaving everything else alone takes it from 14.2 % to 6.2 %, and the ratio from 7.8 to 3.4
-&mdash; most of the discrepancy, and exactly the quantity the following section says the measurement
-cannot determine.</p>
+<p>Illite is the texture parameter, and the refinement measures it where ClayQuant cannot: it settles
+on a far stronger texture than the fit here chooses for its illite and illite/smectite entries.
+Because a basal series has the same shape at every <var>r</var> (&sect;<a href="#s2-9">2.9</a>), that
+difference is invisible in the residual and enters the mass as <var>r</var><sup>3</sup>. Holding
+ClayQuant's illite at the refined value and leaving everything else alone takes the ratio from 7.8 to
+3.4 &mdash; most of the discrepancy, and exactly the quantity the following section says the
+measurement cannot determine.</p>
 
-<p>Albite is a limitation of the model rather than of the fit. Its refined texture is
-March&ndash;Dollase 0.35 about <span class="kw">0 2 0</span>, and sekaninaite's is 0.32 about
-<span class="kw">2 0 0</span> &mdash; axes that are not <var>c</var>*. ClayQuant applies
-March&ndash;Dollase about <var>c</var>* only, which is right for a platy clay and wrong for a
-feldspar lying on a cleavage that is not basal, so it has no way to express either texture and
-assumes both minerals are randomly oriented. Offering the accompanying minerals at several values of
-<var>r</var> about <var>c</var>* rather than at 1 alone brings albite from 3.20 down to 2.14 and
-leaves the rest where they were, which is about as much as an axis-restricted correction can do. A
-general orientation axis per phase is the fix, and it is not implemented.</p>
+<p>Albite is a limitation of the model rather than of the fit. Its refined texture is about
+<span class="kw">0 2 0</span>, and sekaninaite's about <span class="kw">2 0 0</span> &mdash; axes that
+are not <var>c</var>*. ClayQuant applies March&ndash;Dollase about <var>c</var>* only, which is right
+for a platy clay and wrong for a feldspar lying on a cleavage that is not basal, so it has no way to
+express either texture and assumes both minerals are randomly oriented. Offering the accompanying
+minerals at several values of <var>r</var> about <var>c</var>* rather than at 1 alone brings albite
+from 3.20 down to 2.14 and leaves the rest where they were, which is about as much as an
+axis-restricted correction can do. A general orientation axis per phase is the fix, and it is not
+implemented.</p>
 
 <p>Expressed as a mass ratio to quartz, which does not move when another phase does, the seven come
 out at 1.00 for quartz, 0.82 for kaolinite, 1.45 for chlorite, 1.46 for rutile, 5.2 for albite, 12.8
@@ -2556,9 +2558,9 @@ present.</p>
 <p>The refinement bears this out from the other side. It determines <var>r</var> for each phase
 because it fits the <var>hkl</var> reflections as well as the basal ones, in a pattern where those
 reflections are weak but present; ClayQuant's clay library is basal-only by construction, so nothing
-in it constrains <var>r</var> at all. Where the two agree on <var>r</var> &mdash; chlorite, 0.65
-against 0.36 and 0.60 &mdash; they agree on the weight to 12 %; where they do not, they disagree by
-the cube of the ratio.</p>
+in it constrains <var>r</var> at all. Where the two nearly agree on <var>r</var> &mdash; chlorite
+&mdash; they agree on the weight to 12 %; where they do not, they disagree by the cube of the
+ratio.</p>
 
 <h4>The importer now checks itself against TOPAS</h4>
 
@@ -2581,8 +2583,8 @@ refinement's own output for the same phase. The cell volume agrees exactly, whic
 to the site list rather than the cell. Restoring the five sites brings the computed mass to 2592.090
 against the stated 2592.043. The phase is still written to the database, because whether an incomplete
 structure is usable is the user's judgement and not the importer's; it is only no longer silent.
-Sekaninaite is 0.3 % of this specimen, so little followed from it here, but the same fault in a major
-phase would have gone the same way.</p>
+Sekaninaite is a trace phase here, so little followed from it, but the same fault in a major phase
+would have gone the same way.</p>
 
 <p><strong>Conclusion.</strong> A test built by inverting the code it tests will agree with the code
 and not with nature. Both faults in this section were found by comparison with something that did not
@@ -2694,17 +2696,16 @@ two independent reasons, either of which alone would be enough:</p>
 <ul>
 <li>They are a different material. The spiked mounts are bulk rock powders; the oriented mounts are
 the fine separate of the same rock. For the specimen of &sect;<a href="#a-14">A.14</a> both
-refinements exist, and they settle it directly: the bulk carries about a quarter of its weight as
-calcite and a little dolomite-ankerite, and <em>neither carbonate appears in the oriented mount at
-all</em>, while kaolinite and rutile appear in the oriented mount and in no form in the bulk. The
+refinements exist, and they settle it directly: calcite and dolomite-ankerite are both major
+constituents of the bulk, and <em>neither appears in the oriented mount at all</em>, while kaolinite
+and rutile appear in the oriented mount and in no form in the bulk. The
 separation removes the carbonate and concentrates the fine, dense accessories, so the composition of
 one preparation is not the composition of the other, and nothing in either measurement says what
 fraction of the rock the separate is.</li>
 <li>The reference refinements leave illite and chlorite unweighed. Even for the bulk rock they give
-clay plus amorphous as one number &mdash; for the specimen of &sect;<a href="#a-14">A.14</a>, a sixth
-of the spiked powder and a fifth of the rock, reproducible between its two preparations to 2
-percentage points &mdash; so they do not state the clay composition that <var>k<sub>p</sub></var>
-would be fitted against.</li>
+clay plus amorphous as one number &mdash; for the specimen of &sect;<a href="#a-14">A.14</a>, a
+substantial one, reproducible between its two preparations to 2 percentage points &mdash; so they do
+not state the clay composition that <var>k<sub>p</sub></var> would be fitted against.</li>
 </ul>
 
 <p>What would supply it is the pairing described in &sect;<a href="#s2-13">2.13</a>: the
@@ -2721,13 +2722,18 @@ shortcomings listed above would have to be addressed first.</p>
 <tr><td>Basal / three-dimensional consistency</td><td>9 automated, four phases</td><td>Pass</td></tr>
 <tr><td>External validation</td><td>4 automated, against Reynolds (1965); <var>R</var> = 0.039 vs his 0.042</td><td>Pass</td></tr>
 <tr><td>Workflow on synthetic data</td><td>7 automated</td><td>Pass</td></tr>
-<tr><td>Structure import</td><td>205 phases; 12 positions to 0.03&deg;; origin convention established</td><td>Pass</td></tr>
+<tr><td>Structure import</td><td>209 phases; 12 positions to 0.03&deg;; origin convention
+established; every phase checked against the cell mass and volume its block states</td>
+<td>Pass; one incomplete structure found</td></tr>
 <tr><td>File readers</td><td>33 files; bit-for-bit against vendor export</td><td>Pass</td></tr>
 <tr><td>Zero error</td><td>11 specimens &times; 3 mounts</td><td>Pass after correction</td></tr>
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
 <td>Defect found and corrected; 12 automated</td></tr>
-<tr><td>Weight percent</td><td>9 automated, against known masses</td><td>Exact; needs a texture calibration</td></tr>
+<tr><td>Weight percent</td><td>11 automated, against known masses</td>
+<td>Exact; needs a texture calibration</td></tr>
+<tr><td>Internal standard</td><td>10 automated, on both bases</td>
+<td>Pass; the absolute scale and the unaccounted fraction</td></tr>
 <tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
 <td><var>R</var><sub>wp</sub> 37&ndash;68 %, median 45 %</td></tr>
 <tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
@@ -2736,7 +2742,7 @@ shortcomings listed above would have to be addressed first.</p>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>153 tests</strong> and runs in under two seconds
+<p>The automated suite comprises <strong>169 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>
