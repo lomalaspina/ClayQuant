@@ -354,6 +354,22 @@ class Crystal:
         return np.arccos(cosine)
 
     # -- content --------------------------------------------------------------
+    @property
+    def cell_mass(self) -> float:
+        """Mass of the contents of one unit cell, in g/mol.
+
+        Summed over the symmetry-expanded sites with their occupancies, so it is
+        the mass of exactly what the structure factor was computed from.  That
+        correspondence is the whole point of it: the fitted scale factor of a
+        phase is proportional to how many of these cells are in the beam, so
+        multiplying by this converts it to something proportional to mass
+        (:mod:`clayquant.masses`).
+        """
+        from .masses import atomic_weight
+
+        return float(sum(site.occupancy * atomic_weight(site.species)
+                         for site in self.expanded_sites()))
+
     def expanded_sites(self, tolerance: float = 1e-4) -> list[AtomSite]:
         """Apply the symmetry operations and return the full cell content."""
         operations = [parse_symop(op) for op in self.symops]
@@ -512,6 +528,20 @@ class LayerModel:
     def electrons(self) -> float:
         """Total number of electrons per layer (the ``s -> 0`` structure factor)."""
         return float(abs(self.structure_factor(np.array([0.0]))[0]))
+
+    @property
+    def mass(self) -> float:
+        """Mass of one layer, in g/mol.
+
+        The counterpart of :attr:`electrons` for quantification: the
+        interstratification model computes intensity per layer, so a fitted
+        scale factor is proportional to a number of layers, and this converts
+        that to mass.
+        """
+        from .masses import atomic_weight
+
+        return float(sum(float(occupancy) * atomic_weight(species)
+                         for species, occupancy in zip(self.species, self.occupancy)))
 
     def structure_factor(self, s: np.ndarray) -> np.ndarray:
         """Complex layer structure factor at ``s = 2 sin(theta)/lambda = 1/d`` [1/A].
