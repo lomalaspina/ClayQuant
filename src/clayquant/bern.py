@@ -119,6 +119,13 @@ _SITE_RE = re.compile(
     re.VERBOSE,
 )
 _PO_RE = re.compile(r"PO\([^)]*?,,\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*\)")
+# TOPAS writes back what the structure it refined weighs and how large its cell
+# is, either bare or under a parameter name.  They are not needed to calculate
+# anything - ClayQuant works both out from the sites and the cell - which is
+# exactly what makes them worth reading: they are an independent statement of
+# the same two numbers, by the program the library was written for.
+_CELL_MASS_RE = re.compile(r"^cell_mass\s+(?:[A-Za-z_]\w*\s+)?([-+0-9.eE]+)")
+_CELL_VOLUME_RE = re.compile(r"^cell_volume\s+(?:[A-Za-z_]\w*\s+)?([-+0-9.eE]+)")
 _ICSD_RE = re.compile(r"No:\s*(\d+)")
 
 
@@ -186,6 +193,8 @@ class PhaseDefinition:
     sites: list[AtomSite]
     icsd: int | None = None
     po_hkl: tuple[int, int, int] | None = None
+    stated_mass: float | None = None
+    stated_volume: float | None = None
     source_item: str = ""
     warnings: list[str] = field(default_factory=list)
 
@@ -210,6 +219,37 @@ class PhaseDefinition:
                 + f", space group {self.space_group}"
             ),
         )
+
+    def check_stated_values(self, symops: list[str], tolerance: float = 0.005) -> list[str]:
+        """Compare the cell against the mass and volume TOPAS itself wrote down.
+
+        Neither number is used for anything - both are worked out from the sites
+        and the cell - so a disagreement means the block does not describe the
+        structure that was refined, and the commonest way for that to happen is
+        a hand-edited item with sites left out.  The mass is the sensitive one:
+        it is the only statement in the block that depends on every site being
+        present, so a missing atom shows up here and nowhere else.  Five oxygens
+        absent from a cordierite item cost it a third of its mass, its calculated
+        pattern, and the weight percent that follows from both, and the item
+        otherwise imported without complaint.
+        """
+        notes: list[str] = []
+        crystal = self.to_crystal(symops)
+        for label, stated, computed in (
+            ("mass", self.stated_mass, crystal.cell_mass),
+            ("volume", self.stated_volume, crystal.volume),
+        ):
+            if stated is None or stated <= 0.0:
+                continue
+            if abs(computed - stated) / stated > tolerance:
+                notes.append(
+                    f"{self.name}: cell {label} works out to {computed:.3f} from the sites and "
+                    f"cell given, but the block states {stated:.3f} "
+                    f"({100 * computed / stated:.0f} % of it)"
+                    + ("; sites are probably missing" if label == "mass" and computed < stated
+                       else "")
+                )
+        return notes
 
     def to_dict(self, symops: list[str]) -> dict:
         return {
@@ -279,6 +319,8 @@ def parse_topas_structures(
         space_group = ""
         sites: list[AtomSite] = []
         po_hkl = None
+        stated_mass: float | None = None
+        stated_volume: float | None = None
         warnings: list[str] = []
 
         for line in block:
@@ -323,6 +365,15 @@ def parse_topas_structures(
                         label=site.group("label"),
                     )
                 )
+                continue
+
+            mass_line = _CELL_MASS_RE.match(stripped)
+            if mass_line:
+                stated_mass = _value(mass_line.group(1))
+                continue
+            volume_line = _CELL_VOLUME_RE.match(stripped)
+            if volume_line:
+                stated_volume = _value(volume_line.group(1))
                 continue
 
             orientation = _PO_RE.search(stripped)
@@ -390,6 +441,8 @@ def parse_topas_structures(
                 sites=sites,
                 icsd=icsd,
                 po_hkl=po_hkl,
+                stated_mass=stated_mass,
+                stated_volume=stated_volume,
                 source_item=source_item,
                 warnings=warnings,
             )
@@ -514,6 +567,7 @@ def write_phase_database(
     phases = parse_macro_library(xml_path, skipped=skipped)
     records = []
     failures: list[str] = list(skipped)
+    disagreements: list[str] = []
     for phase in phases:
         try:
             symops = symmetry_operations(phase.space_group)
@@ -521,6 +575,10 @@ def write_phase_database(
             failures.append(f"{phase.name}: {exc}")
             continue
         records.append(phase.to_dict(symops))
+        # An import that reads a phase is not the same as an import that reads
+        # it correctly, and the phase is written either way: this is the only
+        # place the difference shows.
+        disagreements.extend(phase.check_stated_values(symops))
         if verbose:
             for warning in phase.warnings:
                 print(f"  note: {warning}")
@@ -541,11 +599,17 @@ def write_phase_database(
         print("\nphases that could not be imported:")
         for failure in failures:
             print(f"  {failure}")
+    if verbose and disagreements:
+        print("\nphases that were imported but do not match what TOPAS says they weigh:")
+        for note in disagreements:
+            print(f"  {note}")
     return {
         "parsed": len(phases) + len(skipped),
         "written": len(records),
         "failed": len(failures),
         "clay": sum(1 for record in records if record["is_clay"]),
+        "disagreeing": len(disagreements),
+        "disagreements": disagreements,
     }
 
 
@@ -612,6 +676,14 @@ def main(argv: list[str] | None = None) -> int:
             f"\n{counts['written']} phases written to {arguments.out} "
             f"({counts['clay']} classified as clay minerals, {counts['failed']} failed)"
         )
+        if counts["disagreeing"]:
+            n = counts["disagreeing"]
+            print(
+                f"{n} of them {'disagrees' if n == 1 else 'disagree'} with the cell mass or "
+                "volume the library states; check "
+                f"{'that item' if n == 1 else 'those items'} before quantifying with "
+                f"{'it' if n == 1 else 'them'}."
+            )
     return 0
 
 

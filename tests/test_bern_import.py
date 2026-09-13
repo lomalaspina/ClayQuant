@@ -19,6 +19,8 @@ from clayquant.bern import (
     decode_macro_item,
     parse_macro_library,
     parse_topas_structures,
+    symmetry_operations,
+    write_phase_database,
 )
 
 
@@ -166,3 +168,50 @@ def test_an_item_that_is_not_a_structure_at_all_is_passed_over(tmp_path):
     phases = parse_macro_library(library, skipped=skipped)
     assert [p.name for p in phases] == ["Quartz"]
     assert skipped == []
+
+
+def test_the_stated_cell_mass_is_checked_against_the_sites():
+    """The fault that cost a hand-added phase a third of its atoms.
+
+    TOPAS writes ``cell_mass`` and ``cell_volume`` into the block it refined.
+    ClayQuant needs neither - it works both out from the sites and the cell -
+    which is what makes them useful: they are the same two numbers stated
+    independently, so a block missing atoms disagrees with itself.  Nothing else
+    in the import notices, because a phase with some of its sites is still a
+    phase that reads.
+    """
+    # What this cell and these sites actually come to, so that the complete
+    # block agrees with itself and only the incomplete one does not.
+    quartz = list(QUARTZ) + ["\\t\\tcell_volume vol_Quartz  130.490`",
+                             "\\t\\tcell_mass mass_Quartz  264.504"]
+    phase = only_phase(macro_item("Quartz", quartz))
+    assert phase.stated_mass == pytest.approx(264.504)
+    assert phase.stated_volume == pytest.approx(130.490)
+    symops = symmetry_operations(phase.space_group)
+    assert phase.check_stated_values(symops) == []
+
+    short = [line for line in quartz if not line.startswith("\\t\\tsite O1")]
+    missing = only_phase(macro_item("Quartz", short))
+    notes = missing.check_stated_values(symmetry_operations(missing.space_group))
+    assert len(notes) == 1
+    assert "cell mass" in notes[0] and "sites are probably missing" in notes[0]
+
+
+def test_a_block_that_states_nothing_is_not_accused(tmp_path):
+    """Most hand-written blocks carry no cell_mass; that is not a disagreement."""
+    phase = only_phase(macro_item("Quartz", QUARTZ))
+    assert phase.stated_mass is None and phase.stated_volume is None
+    assert phase.check_stated_values(symmetry_operations(phase.space_group)) == []
+
+
+def test_the_import_reports_the_disagreement_without_dropping_the_phase(tmp_path):
+    """It is still written: the user decides whether the structure is usable."""
+    lines = [line for line in QUARTZ if not line.startswith("\\t\\tsite O1")]
+    lines.append("\\t\\tcell_mass mass_Quartz  264.504")
+    library = tmp_path / "library.xml"
+    library.write_text(macro_item("Quartz", lines), encoding="utf-8")
+
+    counts = write_phase_database(library, tmp_path / "phases.json")
+    assert counts["written"] == 1
+    assert counts["disagreeing"] == 1
+    assert "Quartz" in counts["disagreements"][0]
