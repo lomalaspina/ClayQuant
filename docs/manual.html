@@ -122,6 +122,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-9">A.9 Fit weighting</a>
 <a href="#a-11">A.11 Stripping width</a>
 <a href="#a-14">A.14 Weight percent</a>
+<a href="#a-15">A.15 Internal standard</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -753,6 +754,43 @@ share in the mount is not its share in the suspension.</p>
 <div class="note">The older route is still available for a laboratory that has measured reference
 intensity ratios of its own: <span class="kw">Quantification.weight_percent</span> divides each
 phase's share of diffracted intensity by its ratio.</div>
+
+<h4>An internal standard, and what the fit does not account for</h4>
+
+<p>Every weight percent above is a share of what was <em>fitted</em>, and sums to 100 however much of
+the specimen was left out. A mount holding amorphous material, or a mineral the library does not
+have, therefore reports every phase in it overstated by one common factor, and nothing inside the fit
+reveals the factor: the residual of a whole-pattern fit is not a measure of missing crystalline
+matter, because a missing phase's intensity is taken up by whatever else lies under it.</p>
+
+<p>A weighed addition of a standard reveals it. If a mass fraction
+<var>W</var><sub>std</sub> of a standard is mixed into the specimen before mounting, and the fit
+returns <var>W</var>&prime;<sub>std</sub> for it on the relative basis, then every phase's weight
+percent <em>of the specimen</em> is</p>
+
+<div class="eq"><var>W<sub>p</sub></var> = <var>W</var>&prime;<sub><var>p</var></sub> &middot;
+<var>W</var><sub>std</sub> / <var>W</var>&prime;<sub>std</sub>
+<span class="n">(2.26)</span></div>
+
+<p>and what is left over,
+100 &minus; &Sigma;<sub><var>p</var></sub><var>W<sub>p</sub></var>, is the amorphous content together
+with any crystalline phase absent from the fit. The measurement separates that sum from the phases
+that were fitted, but not into its two parts.</p>
+
+<p>Pass the standard and its weight to the analysis
+(<span class="kw">quantify(..., internal_standard=("Corundum", 20.0))</span>) and the table gains an
+absolute column beside the relative one, with the unaccounted fraction reported alongside. A standard
+that was weighed in but does not appear in the fit leaves the analysis relative and says so, rather
+than scaling by a number it does not have. The absolute column is given on the whole-specimen basis
+only: a clay-mineral table is renormalised to 100 % by definition, so scaling it would mean
+nothing.</p>
+
+<div class="lim"><strong>An internal standard belongs in a random mount, not an oriented one.</strong>
+The standard must share the specimen's texture for (2.26) to hold, and a spike added to a clay
+suspension does not: it does not plate onto the slide as the clays do, so its share of the mount is
+not its share of the suspension. Equation (2.26) is for a pressed random powder. This is also why the
+internal-standard route cannot by itself measure <var>k<sub>p</sub></var> for an oriented mount
+(&sect;<a href="#a-15">A.15</a>).</div>
 
 <p>Results are given on two bases: over all fitted phases, and over the clay minerals alone,
 renormalised to 100 % with the accompanying minerals removed. The latter is the customary basis for
@@ -2553,6 +2591,128 @@ oxygen sites by the refinement's own statement of what the structure weighs. The
 remains, rebuilt from the powder relation rather than from ClayQuant's conversion, alongside a check
 that the two calculation routes for one phase &mdash; as a discrete cell and as the host layer of a
 stack &mdash; weigh a specimen alike.</p>
+
+<h3 id="a-15">A.15 A weighed standard, and a random mount ClayQuant cannot fit</h3>
+
+<p><strong>Reasoning.</strong> The oriented mounts confound two things: whether the conversion from a
+scale factor to a mass is right, and whether each phase's texture is modelled. A random powder mount
+removes the second &mdash; there is no texture and every phase is fitted at <var>r</var> = 1 &mdash;
+so what remains is the conversion alone. And a random mount can carry a weighed standard, which makes
+the reference absolute rather than relative. The laboratory's bulk analyses are exactly this: pressed
+random powders with 20 % of corundum by weight added before mounting, refined in TOPAS.</p>
+
+<p><strong>What the spike says about the reference analyses.</strong> The refinements record no trace
+of the spike &mdash; the weight of corundum added is knowledge held outside the files &mdash; so their
+weight percent is relative, normalised to 100 over the phases that were weighed. Applying (2.26)
+makes them absolute, and the difference from 100 is what each refinement does not account for: its
+illite and chlorite, which it fits as <span class="kw">hkl_Is</span> peak sets carrying no weight,
+together with any amorphous content. Sixteen refinements, eight specimens each prepared twice:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Specimen</th><th class="num">Corundum refined</th><th class="num">Scale</th>
+<th class="num">Quartz</th><th class="num">Calcite</th><th class="num">Dolomite</th>
+<th class="num">Anhydrite</th><th class="num">Unaccounted</th></tr>
+<tr><td>DBB 17 a / b</td><td class="num">21.2 / 21.0 %</td><td class="num">0.94 / 0.95</td>
+<td class="num">31.0 / 32.1</td><td class="num">36.9 / 36.3</td><td class="num">1.4 / 1.7</td>
+<td class="num">&mdash;</td><td class="num">5.5 / 4.9</td></tr>
+<tr><td>DBB 20 a / b</td><td class="num">24.4 / 23.6 %</td><td class="num">0.82 / 0.85</td>
+<td class="num">26.6 / 27.6</td><td class="num">27.1 / 26.6</td><td class="num">1.6 / 2.8</td>
+<td class="num">&mdash;</td><td class="num">18.0 / 15.2</td></tr>
+<tr><td>DBB 27 a / b</td><td class="num">40.9 / 38.7 %</td><td class="num">0.49 / 0.52</td>
+<td class="num">15.5 / 16.9</td><td class="num">5.8 / 5.8</td><td class="num">0.2 / 0.5</td>
+<td class="num">&mdash;</td><td class="num">51.1 / 48.3</td></tr>
+<tr><td>DBB 28 a / b</td><td class="num">27.7 / 28.1 %</td><td class="num">0.72 / 0.71</td>
+<td class="num">32.7 / 31.3</td><td class="num">9.2 / 9.2</td><td class="num">0.1 / 0.3</td>
+<td class="num">&mdash;</td><td class="num">27.8 / 28.8</td></tr>
+<tr><td>DBB 32 a / b</td><td class="num">44.5 / 42.1 %</td><td class="num">0.45 / 0.47</td>
+<td class="num">10.2 / 11.0</td><td class="num">8.1 / 8.4</td><td class="num">1.4 / 1.1</td>
+<td class="num">&mdash;</td><td class="num">55.0 / 52.5</td></tr>
+<tr><td>DBB 40 a / b</td><td class="num">27.3 / 27.7 %</td><td class="num">0.73 / 0.72</td>
+<td class="num">8.5 / 8.4</td><td class="num">34.8 / 34.5</td><td class="num">3.8 / 3.6</td>
+<td class="num">&mdash;</td><td class="num">26.8 / 27.7</td></tr>
+<tr><td>DBB 45 a / b</td><td class="num">28.2 / 28.8 %</td><td class="num">0.71 / 0.69</td>
+<td class="num">5.2 / 5.2</td><td class="num">0.8 / 0.5</td><td class="num">38.7 / 36.6</td>
+<td class="num">&mdash;</td><td class="num">29.1 / 30.7</td></tr>
+<tr><td>DBB 64 a / b</td><td class="num">23.2 / 23.0 %</td><td class="num">0.86 / 0.87</td>
+<td class="num">3.4 / 3.2</td><td class="num">0.7 / 0.7</td><td class="num">&mdash;</td>
+<td class="num">59.0 / 59.6</td><td class="num">14.0 / 13.0</td></tr>
+</table></div>
+
+<p>The two preparations of a specimen agree to between 0.6 and 3 percentage points on the unaccounted
+fraction, which is the reproducibility of the whole chain &mdash; splitting, spiking, pressing,
+measuring and refining &mdash; and is the figure against which any disagreement below should be read.
+The unaccounted fraction ranges from 5 % to 55 %, so for these specimens it is not a correction but
+the largest single number in several of the analyses.</p>
+
+<h4>The test that could not be run</h4>
+
+<p>ClayQuant was fitted to the same random mount, over the phases the refinement uses so that phase
+selection was not part of what was being tested, every phase at <var>r</var> = 1, with the corundum
+declared as the internal standard. The result is not a usable check, and the reason is worth
+recording rather than the numbers:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Window</th><th class="num">8&ndash;16&deg;</th><th class="num">16&ndash;24&deg;</th>
+<th class="num">24&ndash;32&deg;</th><th class="num">32&ndash;40&deg;</th><th class="num">40&ndash;48&deg;</th>
+<th class="num">48&ndash;56&deg;</th><th class="num">56&ndash;64&deg;</th><th class="num">64&ndash;72&deg;</th></tr>
+<tr><td class="num"><var>R</var><sub>wp</sub></td><td class="num">94 %</td><td class="num">60 %</td>
+<td class="num">45 %</td><td class="num">42 %</td><td class="num">50 %</td><td class="num">47 %</td>
+<td class="num">40 %</td><td class="num">54 %</td></tr>
+</table></div>
+
+<p>Overall <var>R</var><sub>wp</sub> is 43 % against the refinement's 7.6 %, at the best setting
+found, and the misfit is spread across the whole range rather than concentrated anywhere.</p>
+
+<p>What makes the result unusable is not its size but its instability. Shifting the pattern by the
+zero error the refinement reports, 0.035&deg;, and then by twice that in each direction, with
+everything else held fixed:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Shift applied</th><th class="num">&minus;0.070&deg;</th><th class="num">&minus;0.035&deg;</th>
+<th class="num">0</th><th class="num">+0.035&deg;</th><th class="num">+0.070&deg;</th></tr>
+<tr><td class="num"><var>R</var><sub>wp</sub></td><td class="num">67 %</td><td class="num">51 %</td>
+<td class="num">43 %</td><td class="num">54 %</td><td class="num">61 %</td></tr>
+<tr><td class="num">Calcite, against the reference</td><td class="num">0.45</td><td class="num">0.54</td>
+<td class="num">0.69</td><td class="num">1.05</td><td class="num">1.32</td></tr>
+<tr><td class="num">Quartz</td><td class="num">0.63</td><td class="num">0.82</td>
+<td class="num">0.84</td><td class="num">0.69</td><td class="num">0.56</td></tr>
+</table></div>
+
+<p>A tenth of a degree of alignment moves calcite by a factor of three. Nothing about the mass
+conversion can be read through a sensitivity that large, and the sensitivity has a cause: the
+reference refinement models a specimen displacement of 0.061 mm, which displaces each reflection by
+an amount varying as cos<var>&theta;</var>, and ClayQuant has no such model. No single constant zero
+error can align peaks across 8&ndash;70&deg; in its place, so the fit trades one end of the range
+against the other and the phase weights follow. Over the 3&ndash;40&deg; of an oriented clay mount
+the same displacement is nearly a constant offset and the zero-error correction absorbs it; over a
+bulk scan it is not. The other absences compound it &mdash; one fixed pseudo-Voigt where the
+reference convolves an axial-divergence model and a slit width, no sample-transparency correction,
+and no per-phase cell, size or strain &mdash; and 70 % of the weighted misfit lies between the peaks
+rather than on them, which is the background left over when peaks sit in the wrong places.</p>
+
+<p>The background model is <em>not</em> the cause: Chebyshev degree 4, 6 and 8, with and without an
+inverse term, change <var>R</var><sub>wp</sub> by 0.2 percentage points and calcite by 0.01. That was
+worth checking, because it was the first explanation that suggested itself and it was wrong.</p>
+
+<p><strong>Conclusion, and what it does not license.</strong> The internal-standard arithmetic is
+implemented and tested, and the reference analyses above are absolute because of it. But the
+corundum-spiked mounts do <em>not</em> supply the calibration of &sect;<a href="#s2-13">2.13</a>, for
+two independent reasons, either of which alone would be enough:</p>
+
+<ul>
+<li>They are a different material. The spiked mounts are bulk rock powders; the oriented mounts are
+the &lt;2 &micro;m separate of the same rock. The composition of one is not the composition of the
+other, and nothing in either measurement says what fraction of the rock the separate is.</li>
+<li>The reference refinements leave illite and chlorite unweighed. Even for the bulk rock they give
+clay plus amorphous as one number, so they do not state the clay composition that
+<var>k<sub>p</sub></var> would be fitted against.</li>
+</ul>
+
+<p>What would supply it is the pairing described in &sect;<a href="#s2-13">2.13</a>: the
+<em>same separate</em> mounted twice, once as a spiked random powder and once oriented. The random
+mount fixes the composition without texture; the oriented fit of that known composition then yields
+<var>k<sub>p</sub></var> directly. For ClayQuant to fit the random half of such a pair, the
+shortcomings listed above would have to be addressed first.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 

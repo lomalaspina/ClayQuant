@@ -159,6 +159,16 @@ class PhaseShare:
     clay_weight: float = 0.0
     """Weight percent over the clay minerals alone."""
 
+    absolute_weight: float = 0.0
+    """Weight percent of the whole specimen, when an internal standard fixes it.
+
+    ``weight`` is a share of what was fitted and sums to 100 whatever was left
+    out; this does not.  A specimen containing amorphous material, or a phase
+    absent from the library, has a ``weight`` that overstates every phase in it
+    by the same factor, and nothing in the fit reveals the factor.  A weighed
+    addition of a standard does: see :attr:`Quantification.unaccounted`.
+    """
+
     entries: list[str] = field(default_factory=list)
 
     @property
@@ -187,6 +197,34 @@ class Quantification:
 
     unweighable: list[str] = field(default_factory=list)
     """Entries that took a share of the pattern but could not be weighed."""
+
+    internal_standard: str = ""
+    """The phase added to the specimen in a known amount, if there was one."""
+
+    standard_weight: float = 0.0
+    """How much of it was added, as a weight percent of the spiked specimen."""
+
+    absolute_scale: float = 0.0
+    """Factor from a fitted weight percent to a weight percent of the specimen.
+
+    The ratio of what was weighed out to what the fit recovers.  It is 1 for a
+    specimen that is wholly crystalline and wholly in the library; above 1 when
+    something is present that the fit does not account for, since the standard
+    is then over-stated against phases that are all under-stated together.
+    """
+
+    unaccounted: float = 0.0
+    """Weight percent of the specimen that the fitted phases do not account for.
+
+    Amorphous material, and any crystalline phase missing from the fit, together:
+    the measurement separates them from the phases that were fitted but not from
+    each other.
+    """
+
+    @property
+    def absolute(self) -> bool:
+        """Whether weights are of the specimen rather than of what was fitted."""
+        return self.absolute_scale > 0.0
 
     @property
     def clays(self) -> list[PhaseShare]:
@@ -241,6 +279,11 @@ class Quantification:
                 "coefficient": share.coefficient,
                 "weight_percent": (share.clay_weight if clay_basis else share.weight)
                 if self.weights_available else "",
+                # Only on the whole-specimen basis: a weight percent of the clay
+                # minerals renormalised to 100 is already not a weight percent of
+                # the specimen, so scaling it by the standard would mean nothing.
+                "absolute_weight_percent": share.absolute_weight
+                if self.absolute and not clay_basis else "",
                 "march_dollase": share.orientation,
                 "scattering_percent": 100.0
                 * (share.clay_scattering if clay_basis else share.scattering),
@@ -270,6 +313,13 @@ class Quantification:
                     f"# clay minerals account for "
                     f"{100.0 * self.clay_total_scattering:.2f}% of the whole pattern\n"
                 )
+            if self.absolute and not clay_basis:
+                handle.write(
+                    f"# absolute_weight_percent is of the whole specimen, fixed by "
+                    f"{self.standard_weight:g}% of {self.internal_standard} weighed into it; "
+                    f"the fitted phases account for {100.0 - self.unaccounted:.2f}% of it and "
+                    f"{self.unaccounted:.2f}% is amorphous or missing from the fit\n"
+                )
             if self.weights_available:
                 handle.write(
                     "# weight_percent is computed from the fitted scale factors and the mass of "
@@ -296,6 +346,7 @@ class Quantification:
                     "group",
                     "coefficient",
                     "weight_percent",
+                    "absolute_weight_percent",
                     "march_dollase",
                     "scattering_percent",
                     "amplitude_percent",
@@ -343,6 +394,7 @@ def quantify(
     result: FitResult,
     clay_phases: set[str] | None = None,
     calibration: "Calibration | None" = None,
+    internal_standard: tuple[str, float] | None = None,
 ) -> Quantification:
     """Group a fit by phase and normalise it on both bases.
 
@@ -355,6 +407,16 @@ def quantify(
     calibration:
         Per-phase factors for the weight percent; see :class:`Calibration`.
         Without one every factor is 1 and the weight percent is as calculated.
+    internal_standard:
+        The name of a phase weighed into the specimen, and how much of it was
+        added as a weight percent of the spiked specimen - ``("Corundum", 20.0)``
+        for the usual 20 % of corundum.  The fit's weight percent is a share of
+        what was fitted and sums to 100 however much of the specimen was left
+        out of it; a standard of known weight converts that to a weight percent
+        of the specimen, and the difference from 100 is what the fit does not
+        account for.  The phase must be one the fit found: a standard that was
+        added and not fitted leaves the analysis relative, and says so through
+        :attr:`Quantification.absolute` rather than by raising.
     """
     calibration = calibration or Calibration()
     masses = (
@@ -412,6 +474,20 @@ def quantify(
             if clay_mass > 0.0:
                 share.clay_weight = 100.0 * share.mass / clay_mass
 
+    standard_name, standard_weight, scale = "", 0.0, 0.0
+    if internal_standard is not None:
+        standard_name, standard_weight = internal_standard[0], float(internal_standard[1])
+        if not 0.0 < standard_weight < 100.0:
+            raise ValueError(
+                "the internal standard's weight percent must lie between 0 and 100, "
+                f"not {standard_weight}"
+            )
+        fitted = next((share for share in shares if share.phase == standard_name), None)
+        if fitted is not None and fitted.weight > 0.0 and total_mass > 0.0:
+            scale = standard_weight / fitted.weight
+            for share in shares:
+                share.absolute_weight = share.weight * scale
+
     return Quantification(
         shares=shares,
         r_wp=result.r_wp,
@@ -420,4 +496,8 @@ def quantify(
         calibration=calibration,
         weights_available=total_mass > 0.0,
         unweighable=list(result.metadata.get("unweighable_entries", [])),
+        internal_standard=standard_name,
+        standard_weight=standard_weight,
+        absolute_scale=scale,
+        unaccounted=(100.0 - sum(share.absolute_weight for share in shares)) if scale else 0.0,
     )
