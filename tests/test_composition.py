@@ -181,3 +181,64 @@ def test_the_integration_window_must_not_truncate_the_tails():
     # And the default is the wide one, so a caller who thinks about none of this
     # is not silently handed the truncated answer.
     assert measure_basal_series(pattern, 14.2782).area == wide.area
+
+
+def test_magnesium_and_iron_on_one_site_share_its_displacement_parameter():
+    """They occupy the same site, so they cannot have different B.
+
+    Letting them differ would be unphysical - one site, one environment - and
+    degenerate with the occupancy that shares it, since raising B and raising
+    the iron fraction both change the same scattering contribution.  The
+    published structure already pairs them; this keeps it true of anything
+    derived from it, including a B that is being fitted.
+    """
+    published = chlorite_crystal(0.3, 0.15)
+    for sheet in CHLORITE_OCTAHEDRA.values():
+        for magnesium, iron in (sheet[0:2], sheet[2:4]):
+            a = next(s for s in published.sites if s.label == magnesium)
+            b = next(s for s in published.sites if s.label == iron)
+            assert a.species.startswith("Mg") and b.species.startswith("Fe")
+            assert a.b_iso == pytest.approx(b.b_iso)
+
+    imposed = chlorite_crystal(0.3, 0.15, octahedral_b=1.4)
+    octahedral = set(CHLORITE_OCTAHEDRA["2:1"]) | set(CHLORITE_OCTAHEDRA["hydroxide"])
+    assert {s.b_iso for s in imposed.sites if s.label in octahedral} == {1.4}
+    # And nothing else is touched.
+    for a, b in zip(published.sites, imposed.sites):
+        if a.label not in octahedral:
+            assert a.b_iso == pytest.approx(b.b_iso)
+    assert "octahedral B" in imposed.source
+
+
+def test_a_negative_displacement_parameter_is_refused():
+    with pytest.raises(ValueError, match="cannot be negative"):
+        chlorite_crystal(0.3, 0.15, octahedral_b=-0.5)
+
+
+def test_the_octahedral_b_barely_moves_the_higher_basal_orders():
+    """Recorded because it was proposed as the cause of a 30 % shortfall.
+
+    exp(-B q^2) is a weak factor at these angles - at 005 of a 14.28 A spacing,
+    q^2 = 0.031 A^-2 - but F(00l) is a sum of terms with opposing signs, so the
+    sensitivity does not follow from the size of the exponential and has to be
+    computed.  Computed, it is small: the whole range from B = 0 to B = 6 moves
+    the 004/002 ratio by under a fifth, and in the direction opposite to the one
+    a shortfall would need.
+    """
+    def ratio(b):
+        series = measure_basal_series(
+            Pattern(GRID, _calculated(chlorite_layer(0.09, 0.06, octahedral_b=b))),
+            14.2782, orders=(2, 4), reference=2,
+        )
+        return series.normalised()[4]
+
+    low, high = ratio(0.0), ratio(6.0)
+    assert high < low, "more thermal motion lowers 004 against 002, it does not raise it"
+    assert abs(high - low) / low < 0.2, (
+        f"B moves 004/002 from {low:.3f} to {high:.3f}; a 30 % shortfall is out of its reach"
+    )
+
+
+def _calculated(layer, mean_layers=8.0):
+    stack = MixedLayerStack(layer, layer, 1.0, csds=lognormal_csds(mean_layers))
+    return basal_pattern(stack, GRID, INSTRUMENT).intensity

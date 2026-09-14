@@ -213,22 +213,38 @@ what makes them separable from a measured basal series
 """
 
 
-def chlorite_crystal(iron_2to1: float, iron_hydroxide: float) -> Crystal:
+def chlorite_crystal(
+    iron_2to1: float,
+    iron_hydroxide: float,
+    octahedral_b: float | None = None,
+) -> Crystal:
     """The chlorite structure with its octahedral iron set to these fractions.
 
     Each fraction is the iron occupancy of one sheet, with magnesium taking the
     rest, so ``(0.0, 0.0)`` is an iron-free clinochlore and ``(1.0, 1.0)`` a
     fully ferrous chamosite-like end member.  Everything else - the cell, the
-    positions, the tetrahedral Si/Al, the displacement parameters - is the
-    published structure's.
+    positions, the tetrahedral Si/Al - is the published structure's.
 
     The substitution changes the cell mass as well as the basal intensities, so
     a weight percent computed from a fitted composition is consistent with it
     (Sec. 2.13).
+
+    ``octahedral_b`` replaces the displacement parameter of every octahedral
+    site, in A^2.  It is one value for all of them rather than one per species
+    because the magnesium and the iron of a substituted site occupy the *same*
+    site: they share its environment, so they share its displacement parameter,
+    and letting them differ would be both unphysical and degenerate with the
+    occupancy that shares the site.  The published structure already pairs them
+    this way; this keeps that true of anything derived from it.  ``None`` leaves
+    the published values alone.
     """
     for name, value in (("iron_2to1", iron_2to1), ("iron_hydroxide", iron_hydroxide)):
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"{name} is an occupancy and must lie in [0, 1], not {value}")
+    if octahedral_b is not None and octahedral_b < 0.0:
+        raise ValueError(
+            f"a displacement parameter cannot be negative, and {octahedral_b} is"
+        )
 
     base = load_crystal("chlorite")
     iron_of = {"2:1": float(iron_2to1), "hydroxide": float(iron_hydroxide)}
@@ -243,21 +259,30 @@ def chlorite_crystal(iron_2to1: float, iron_hydroxide: float) -> Crystal:
             continue
         iron = iron_of[sheet]
         fraction = iron if site.species.startswith("Fe") else 1.0 - iron
-        sites.append(dataclasses.replace(site, occupancy=fraction))
+        sites.append(dataclasses.replace(
+            site,
+            occupancy=fraction,
+            b_iso=site.b_iso if octahedral_b is None else float(octahedral_b),
+        ))
+    described = (
+        f"{base.source}, octahedral iron set to {iron_2to1:.3f} (2:1 sheet) "
+        f"and {iron_hydroxide:.3f} (hydroxide sheet)"
+    )
+    if octahedral_b is not None:
+        described += f", octahedral B = {octahedral_b:.3f} A^2 on every such site"
     return dataclasses.replace(
         base,
         sites=sites,
         name=f"chlorite Fe {iron_2to1:.2f}/{iron_hydroxide:.2f}",
-        source=(
-            f"{base.source}, octahedral iron set to {iron_2to1:.3f} (2:1 sheet) "
-            f"and {iron_hydroxide:.3f} (hydroxide sheet)"
-        ),
+        source=described,
     )
 
 
-def chlorite_layer(iron_2to1: float, iron_hydroxide: float) -> LayerModel:
+def chlorite_layer(
+    iron_2to1: float, iron_hydroxide: float, octahedral_b: float | None = None
+) -> LayerModel:
     """One folded layer of :func:`chlorite_crystal`."""
-    crystal = chlorite_crystal(iron_2to1, iron_hydroxide)
+    crystal = chlorite_crystal(iron_2to1, iron_hydroxide, octahedral_b=octahedral_b)
     return crystal.layer_model(
         layers_per_cell=CIF_SOURCES["chlorite"].layers_per_cell, name=crystal.name
     )
