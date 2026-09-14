@@ -51,6 +51,14 @@ class FitResult:
     components: dict[str, np.ndarray] = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
     march_dollase: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    fraction: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    """Host-layer fraction of each entry, for the interstratified ones.
+
+    1 for a discrete phase and for a pure end member, 0.8 for an 80/20 stack.
+    Worth carrying through to the report: an entry at 0.99 is a stack of
+    essentially pure host layers, and a result that calls it "I/S" without
+    saying so reads as if smectite had been found.
+    """
     """The texture parameter each entry was calculated with."""
 
     relative_mass: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
@@ -291,6 +299,10 @@ def nnls_fit(
         amplitude_fraction=amplitudes,
         relative_mass=np.zeros_like(relative_mass) if unweighable else relative_mass,
         march_dollase=np.array([entry.march_dollase for entry in library.entries]),
+        fraction=np.array([
+            1.0 if entry.fraction is None else float(entry.fraction)
+            for entry in library.entries
+        ]),
         r_wp=r_wp,
         r_p=r_p,
         mask=selection,

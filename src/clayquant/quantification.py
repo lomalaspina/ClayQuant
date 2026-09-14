@@ -159,6 +159,21 @@ class PhaseShare:
     clay_weight: float = 0.0
     """Weight percent over the clay minerals alone."""
 
+    host_fraction: float = 1.0
+    """Host-layer fraction of this phase, averaged over its entries.
+
+    1 for a discrete mineral.  For an interstratified phase it is the
+    proportion of host layers the fit chose - 0.8 for an 80/20 illite/smectite.
+    It is reported because the phase name does not carry it: an "I/S" at 0.99 is
+    a stack of essentially pure illite, and a table that calls it I/S without
+    the number reads as if smectite had been found.
+    """
+
+    @property
+    def expandable_fraction(self) -> float:
+        """Proportion of expandable layers in this phase, 0 for a discrete one."""
+        return 0.0 if self.host_fraction >= 1.0 else 1.0 - self.host_fraction
+
     absolute_weight: float = 0.0
     """Weight percent of the whole specimen, when an internal standard fixes it.
 
@@ -315,6 +330,7 @@ class Quantification:
                 "absolute_weight_percent": share.absolute_weight
                 if self.absolute and not clay_basis else "",
                 "march_dollase": share.orientation,
+                "host_fraction": share.host_fraction,
                 "scattering_percent": 100.0
                 * (share.clay_scattering if clay_basis else share.scattering),
                 "amplitude_percent": 100.0
@@ -378,6 +394,7 @@ class Quantification:
                     "weight_percent",
                     "absolute_weight_percent",
                     "march_dollase",
+                    "host_fraction",
                     "scattering_percent",
                     "amplitude_percent",
                     "entries",
@@ -459,9 +476,15 @@ def quantify(
         if len(result.march_dollase) == len(result.coefficients)
         else [0.0] * len(result.coefficients)
     )
+    fractions = (
+        result.fraction
+        if len(result.fraction) == len(result.coefficients)
+        else [1.0] * len(result.coefficients)
+    )
     weighted_orientation: dict[str, float] = {}
+    weighted_fraction: dict[str, float] = {}
     totals: dict[str, PhaseShare] = {}
-    for name, phase, coefficient, scattering, amplitude, mass, orientation in zip(
+    for name, phase, coefficient, scattering, amplitude, mass, orientation, fraction in zip(
         result.names,
         result.phases,
         result.coefficients,
@@ -469,6 +492,7 @@ def quantify(
         result.amplitude_fraction,
         masses,
         orientations,
+        fractions,
     ):
         if coefficient <= 0.0:
             continue
@@ -486,6 +510,9 @@ def quantify(
         weighted_orientation[phase] = (
             weighted_orientation.get(phase, 0.0) + float(coefficient) * float(orientation)
         )
+        weighted_fraction[phase] = (
+            weighted_fraction.get(phase, 0.0) + float(coefficient) * float(fraction)
+        )
         share.entries.append(name)
 
     shares = sorted(totals.values(), key=lambda share: share.scattering, reverse=True)
@@ -496,6 +523,7 @@ def quantify(
     for share in shares:
         if share.coefficient > 0.0:
             share.orientation = weighted_orientation.get(share.phase, 0.0) / share.coefficient
+            share.host_fraction = weighted_fraction.get(share.phase, 0.0) / share.coefficient
         if total_mass > 0.0:
             share.weight = 100.0 * share.mass / total_mass
         if share.is_clay:

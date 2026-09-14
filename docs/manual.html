@@ -707,6 +707,20 @@ more integrated area per unit peak height than a sharp discrete phase, so the tw
 factor of several.</dd>
 </dl>
 
+<h4>How much of an interstratified phase is the host</h4>
+
+<p>The library spans illite/smectite from 0.20 to 0.99 illite layers and groups every one of those
+entries under the phase name <span class="kw">I/S</span>. The name alone is therefore misleading at
+the ends of the series: a fit that settles on the 0.99/0.01 entry has found a stack of essentially
+pure illite, and a table reporting that as &ldquo;I/S, 63 % of the pattern&rdquo; reads as though
+63 % of the specimen were an expandable clay. On a measurement of a pure illite standard that is the
+difference between accepting the material and rejecting it.</p>
+
+<p>So each phase also reports the host-layer fraction the fit chose, averaged over its entries and
+weighted by their coefficients, with the expandable fraction as its complement. A discrete mineral
+reports 1. Read the two together: <span class="kw">I/S</span> at 0.99 is an illite, at 0.60 it is
+genuinely interstratified.</p>
+
 <h4>Weight percent</h4>
 
 <p>A third quantity is reported, and it is a weight percent. It needs no reference intensity ratios,
@@ -3130,6 +3144,8 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
+<tr><td>Interstratification reporting</td><td>5 automated, across the I/S series</td>
+<td>Host-layer fraction reported beside the phase name</td></tr>
 <tr><td>Pure-mineral basal ratios</td><td>14 automated; three single-phase mounts;
 eight candidate causes of the chlorite shortfall</td>
 <td>Kaolinite 002/001 = 1.05; one conclusion retracted; the chlorite 004 open</td></tr>
@@ -3144,7 +3160,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>215 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>221 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>
