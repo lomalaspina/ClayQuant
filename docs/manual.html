@@ -123,6 +123,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-11">A.11 Stripping width</a>
 <a href="#a-14">A.14 Weight percent</a>
 <a href="#a-15">A.15 Internal standard</a>
+<a href="#a-16">A.16 Refined structures</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -1113,6 +1114,46 @@ not needed afterwards.</p>
 
 <p>The generated database is derived from licensed structure data and is likewise kept out of version
 control.</p>
+
+<h4>Structures from one of your own refinements</h4>
+
+<p>TOPAS writes a refinement's result back in the syntax it read, so a refinement's
+<span class="kw">.out</span> &mdash; or its <span class="kw">.inp</span> &mdash; is itself a
+structure library, of the few phases that refinement contained. The same command reads it, and
+decides which kind of file it has by looking:</p>
+
+<pre><code>clayquant-import-structures M_26_1041_air.out -o structures/refined.json</code></pre>
+
+<p>Several sources may be given, in increasing order of authority: where two name the same phase the
+later one is kept, so a refinement laid over a library keeps the library's breadth and takes the
+refinement's structure for the phases it covers.</p>
+
+<pre><code>clayquant-import-structures my_structures.xml M_26_1041_air.out -o structures/phases.json</code></pre>
+
+<p>For the clay minerals the refined structure goes further than the phase database: it can replace
+the published CIF the pattern library is calculated from.</p>
+
+<pre><code>clayquant-build-library --refined-structures M_26_1041_air.out</code></pre>
+
+<p>This is worth doing, and worth doing for the clays in particular, because the octahedral
+Fe-for-Mg and Fe-for-Al substitutions are refinable against the basal intensities, differ from one
+deposit to the next, and change those intensities substantially &mdash; iron scatters about twice as
+strongly as the magnesium it replaces. On the specimen of &sect;<a href="#a-16">A.16</a> it improves
+<var>R</var><sub>wp</sub> from 35.9 % to 31.2 %, and the occupancies rather than the refined cells
+account for nearly all of that.</p>
+
+<div class="lim"><strong>Do not extend it to the accompanying minerals without checking.</strong>
+Measured on the same specimen, taking their refined cells as well <em>costs</em> 3 points of
+<var>R</var><sub>wp</sub> (&sect;<a href="#a-16">A.16</a>). Part of the reason is identifiable
+&mdash; quartz is also the zero-error standard (&sect;<a href="#s5-3">5.3</a>), so replacing its
+structure puts the calibration and the fitted cell out of step &mdash; and part is not. Where a
+library structure is <em>wrong</em> rather than merely someone else's, overriding it is still right:
+a refinement is how the incomplete cordierite of &sect;<a href="#a-14">A.14</a> was found to be
+incomplete, and supplies the sites it is missing.</div>
+
+<p>A refinement that models its clays as <span class="kw">hkl_Is</span> peak sets, which is the usual
+way to refine an oriented mount, contains no clay structure at all; the import says so rather than
+reporting success with nothing in it.</p>
 
 <h4>What it reads, and what it reports</h4>
 
@@ -2714,6 +2755,102 @@ mount fixes the composition without texture; the oriented fit of that known comp
 <var>k<sub>p</sub></var> directly. For ClayQuant to fit the random half of such a pair, the
 shortcomings listed above would have to be addressed first.</p>
 
+<h3 id="a-16">A.16 Structures as refined, rather than as published</h3>
+
+<p><strong>Reasoning.</strong> Every structure the library calculates from is of somebody else's
+specimen. For quartz that hardly matters; for a clay it may matter a great deal, because the
+octahedral sheets accept iron for magnesium and for aluminium in proportions that differ from one
+deposit to the next, iron scatters about twice as strongly as the magnesium it replaces, and the
+substitution sits at a definite height in the layer &mdash; so it changes the basal structure
+factors, and therefore every basal intensity ratio the quantification rests on. Those occupancies
+are refinable against a measured pattern. Where a refinement of the same specimen exists, it has
+already measured them.</p>
+
+<p><strong>What the reference refinement of &sect;<a href="#a-14">A.14</a> actually refined.</strong>
+Its cells, and seven occupancy parameters across three phases: the two octahedral sites of the
+illite, four octahedral and two tetrahedral sites of the chlorite, and the Mg/Fe site of the
+cordierite. No atomic position and no displacement parameter was refined for any phase, so
+positions and <var>B</var> come from the published structures either way. The chlorite refines to
+substantially more iron than the published clinochlore carries, and unevenly between its four
+octahedral sites; the illite takes iron on one of its two sites and none on the other. The values
+are this specimen's and are not reproduced here.</p>
+
+<div class="note">Two of the seven parameters are worth distrusting rather than using blindly. Both
+tetrahedral Si/Al parameters of the chlorite refined to a bound, leaving an all-aluminium tetrahedral
+sheet, which is not a chlorite; silicon and aluminium differ by one electron, so the data cannot
+separate them and the parameter drifts. It costs little &mdash; about 0.7 % of the cell mass and
+nothing measurable in the pattern &mdash; but a parameter at its limit is a parameter the measurement
+did not determine, and the same is true of the specimen displacement in the same file.</div>
+
+<p><strong>Method.</strong> TOPAS writes a refined value back in the syntax it read, so the
+refinement's output is a structure library and the same importer serves. The clay structures were
+taken from it, the pattern library recalculated, and the fit of &sect;<a href="#a-14">A.14</a>
+repeated. To separate the refined occupancies from the refined cells, a third library was built with
+the refined sites placed on the published cells.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Structures used</th><th class="num"><var>R</var><sub>wp</sub></th></tr>
+<tr><td>Published throughout</td><td class="num">35.9 %</td></tr>
+<tr><td>Clays: refined occupancies, published cells</td><td class="num">31.7 %</td></tr>
+<tr><td>Clays: refined occupancies and cells</td><td class="num"><strong>31.2 %</strong></td></tr>
+<tr><td>&hellip; and the accompanying minerals refined too</td><td class="num">34.9 %</td></tr>
+</table></div>
+
+<p><strong>Result.</strong> Taking the clay structures from the refinement improves
+<var>R</var><sub>wp</sub> by 4.7 percentage points, the largest single improvement recorded in this
+appendix after the fit weighting of &sect;<a href="#a-9">A.9</a>, and the occupancies account for 4.2
+of the 4.7. The agreement ratios of &sect;<a href="#a-14">A.14</a> barely move: chlorite from 0.94 to
+1.08, illite from 7.5 to 7.3, quartz unchanged at 0.6. That combination is coherent rather than
+disappointing. <var>R</var><sub>wp</sub> measures the shape of the calculated pattern, which the
+occupancies fix; the weights are governed by the <var>r</var>-degeneracy and by texture axes the
+model cannot express (&sect;<a href="#a-14">A.14</a>), which a structure cannot touch.</p>
+
+<p>The effect on the calculated basal series, as the cosine similarity of the normalised pattern to
+the one from the published structure, locates it:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Refined cell only</th><th class="num">Refined sites only</th>
+<th class="num">Both</th></tr>
+<tr><td>Chlorite</td><td class="num">0.826</td><td class="num">0.961</td><td class="num">0.810</td></tr>
+<tr><td>Illite</td><td class="num">0.953</td><td class="num">0.989</td><td class="num">0.947</td></tr>
+<tr><td>Kaolinite 2<var>M</var></td><td class="num">0.993</td><td class="num">1.000</td>
+<td class="num">0.993</td></tr>
+</table></div>
+
+<p>Chlorite moves most, and its 003 &mdash; the reflection an octahedral iron content is refined
+against &mdash; falls by a factor of about 2.6 relative to 002. Kaolinite barely moves, which is
+expected: its occupancies are all 1 and only its cell changed. Note that the cell changes the
+isolated pattern more than the sites do, while the sites improve the <em>fit</em> more. That is not a
+contradiction: a changed cell mostly moves the basal peaks, and the library spans layer spacing
+(&sect;<a href="#a-8">A.8</a>), so the fit absorbs a spacing change by choosing a different spanned
+entry. A changed intensity ratio it cannot absorb at all.</p>
+
+<h4>Why not the accompanying minerals as well</h4>
+
+<p>Because it is measurably worse, by 3 points of <var>R</var><sub>wp</sub>, and the phase
+responsible is quartz: taking quartz's refined cell alone costs 3.0 points, albite's alone 1.3, and
+rutile's and cordierite's nothing. Quartz is a special case with an identifiable mechanism. It is
+also the zero-error standard (&sect;<a href="#s5-3">5.3</a>), and the standard is a fixed
+<var>d</var>(100) constant rather than the library's quartz: align the pattern to that constant and
+then fit a quartz whose refined cell puts its own 100 elsewhere, and the standard and the structure
+are out of step by 0.027&deg;. Making the standard consistent with the refined cell recovers 1.2 of
+the 3.0 points. The remaining 1.8 is not explained; the refined quartz cell is simply a worse
+description of these data than the published one, in a program that cannot re-refine it.</p>
+
+<div class="note">A first hypothesis was that the refined cells carried the refinement's own
+alignment corrections &mdash; it fits a zero error and a specimen displacement, the displacement at
+its limit, where ClayQuant fits only a constant zero error. It was wrong: removing ClayQuant's
+zero-error correction makes every case worse, refined and published alike. Recorded because it was
+plausible and is the sort of explanation that is easier to assert than to test.</div>
+
+<p><strong>Conclusion.</strong> Refined clay structures are used where a refinement supplies them,
+and are the recommended input; the accompanying minerals stay on the library structures unless a
+library structure is demonstrably wrong, as the incomplete cordierite of &sect;<a href="#a-14">A.14</a>
+was. What a refinement cannot supply is the commonest case: an oriented mount refined with its clays
+as <span class="kw">hkl_Is</span> peak sets has no clay structure in it, and the import reports that
+rather than succeeding emptily. 21 automated tests cover the reading, the name mapping, the
+substitution inside the loader, and the restoration of the published structures afterwards.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -2734,6 +2871,8 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
+<tr><td>Refined structures</td><td>21 automated; against a refinement of one specimen</td>
+<td><var>R</var><sub>wp</sub> 35.9 &rarr; 31.2 %; adopted for the clays</td></tr>
 <tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
 <td><var>R</var><sub>wp</sub> 37&ndash;68 %, median 45 %</td></tr>
 <tr><td>File pairing</td><td>12 automated, on real naming conventions</td><td>Pass</td></tr>
@@ -2742,7 +2881,7 @@ established; every phase checked against the cell mass and volume its block stat
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>169 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>191 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

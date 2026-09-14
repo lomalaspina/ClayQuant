@@ -30,7 +30,14 @@ from .crystal import Crystal
 from .emission import CU_KA_5LINE
 from .mixed_layer import MixedLayerStack, lognormal_csds
 from .optics import Divergence
-from .models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
+from .models import (
+    CIF_SOURCES,
+    available_phases,
+    eg_smectite_layer,
+    load_crystal,
+    load_layer,
+    use_refined_structures,
+)
 from .pattern import (
     Instrument,
     Pattern,
@@ -680,8 +687,40 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="omit the beam overflow correction (leaves a 1/sin^2 ramp at low angle)",
     )
+    parser.add_argument(
+        "--refined-structures",
+        type=Path,
+        default=None,
+        metavar="REFINEMENT",
+        help=(
+            "a TOPAS refinement (.out or .inp) whose clay structures to use in place of "
+            "the published CIFs; its refined cell and occupancies describe the specimen "
+            "it was refined on rather than somebody else's"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     arguments = parser.parse_args(argv)
+
+    if arguments.refined_structures is not None:
+        from .bern import refined_clay_structures
+
+        skipped: list[str] = []
+        structures = refined_clay_structures(arguments.refined_structures, skipped=skipped)
+        if not structures:
+            parser.error(
+                f"{arguments.refined_structures} holds no clay structure the library uses. "
+                "A refinement that models its clays as hkl_Is peaks phases has no structure "
+                "to take."
+                + ("\n" + "\n".join(f"  {note}" for note in skipped) if skipped else "")
+            )
+        use_refined_structures(structures)
+        if not arguments.quiet:
+            print(f"structures taken from {arguments.refined_structures}:")
+            for key, crystal in sorted(structures.items()):
+                print(f"  {key:<14} {crystal.name}, d(001) = {crystal.d001:.3f} A, "
+                      f"cell mass {crystal.cell_mass:.1f}")
+            for note in skipped:
+                print(f"  note: {note}")
 
     divergence = (
         None

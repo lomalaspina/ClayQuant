@@ -23,6 +23,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -111,6 +112,14 @@ _NUMBER_RE = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$")
 _CELL_KEYS = {"a": "a", "b": "b", "c": "c", "al": "alpha", "be": "beta", "ga": "gamma"}
 _SITE_RE = re.compile(
     r"""^\s*site\s+(?P<label>\S+)\s+
+        # A site may state its own multiplicity instead of leaving it to the
+        # space group.  TOPAS writes that as "num_posns 4", and a structure
+        # written out by a refinement of a low-symmetry phase usually does,
+        # since the refinement counted the positions once and recorded the
+        # count.  ClayQuant expands the site by the symmetry operations and
+        # removes duplicates, so it arrives at the same multiplicity itself and
+        # only needs to not be confused by the statement.
+        (?:num_posns\s+\S+\s+)?
         x\s+(?P<x>.+?)\s+
         y\s+(?P<y>.+?)\s+
         z\s+(?P<z>.+?)\s+
@@ -119,6 +128,12 @@ _SITE_RE = re.compile(
     re.VERBOSE,
 )
 _PO_RE = re.compile(r"PO\([^)]*?,,\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*\)")
+# A peaks phase and the name it goes under, for a refinement read as plain TOPAS.
+_PEAKS_PHASE_RE = re.compile(
+    r"^[^\S\n]*(hkl_Is|xo_Is)\b(?:(?!^[^\S\n]*(?:str|hkl_Is|xo_Is)\b).)*?"
+    r'phase_name\s+"?([^"\n]+?)"?\s*$',
+    re.S | re.M,
+)
 # TOPAS writes back what the structure it refined weighs and how large its cell
 # is, either bare or under a parameter name.  They are not needed to calculate
 # anything - ClayQuant works both out from the sites and the cell - which is
@@ -457,6 +472,52 @@ def parse_topas_structures(
     return phases
 
 
+def looks_like_a_macro_library(text: str) -> bool:
+    """Is this a jEdit macro menu, or plain TOPAS input?
+
+    The two sources are read the same way once the macro escaping is undone, so
+    the only thing that has to be decided is whether to undo it.
+    """
+    return "<item name=" in text
+
+
+def parse_refinement(
+    path: str | Path, skipped: list[str] | None = None
+) -> list[PhaseDefinition]:
+    """Read the structures out of a TOPAS refinement's input or output file.
+
+    A refinement is the best source of a structure there is for the specimen it
+    was refined on: its cell, and any occupancy that was refined, are the values
+    that actually fitted the measured intensities, rather than a published
+    structure of a different specimen of the same mineral.  A ``.out`` file is
+    plain TOPAS input - TOPAS writes the refined values back into the same
+    syntax it read - so the same parser serves, with the macro unescaping
+    skipped.
+
+    The file holds much besides structures (the instrument, the background, the
+    agreement factors), all of which is passed over: only ``str`` blocks become
+    phases.  A ``hkl_Is`` block is reported through ``skipped`` as usual, which
+    matters here, because a refinement that models a clay as a peaks phase
+    contributes no structure for it.
+    """
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    if looks_like_a_macro_library(text):
+        return parse_macro_library(path, skipped=skipped)
+    phases = parse_topas_structures(text, source_item=Path(path).stem, skipped=skipped)
+    # parse_topas_structures looks for "str" and passes over everything else in
+    # silence, which is right for a file that is mostly instrument settings but
+    # wrong for the one thing a reader of a refinement most needs to be told:
+    # that a phase is in it as a peak set and so brought no structure with it.
+    for match in _PEAKS_PHASE_RE.finditer(text):
+        kind, name = match.group(1), match.group(2) or "an unnamed phase"
+        _note_skipped(
+            skipped, name,
+            f"a peaks phase ({kind}) in this refinement, which fits its intensity without a "
+            "structure; no cell or occupancy can be taken from it",
+        )
+    return phases
+
+
 def parse_macro_library(
     path: str | Path, skipped: list[str] | None = None
 ) -> list[PhaseDefinition]:
@@ -555,16 +616,98 @@ def symmetry_operations(space_group: str) -> list[str]:
     return [operation.triplet() for operation in group.operations()]
 
 
+CLAY_KEY_ALIASES: dict[str, str] = {
+    "illite": "illite",
+    "chlorite": "chlorite",
+    "clinochlore": "chlorite",
+    "kaolinite": "kaolinite_1M",
+    "kaolinite1m": "kaolinite_1M",
+    "kaolinite2m": "kaolinite_2M",
+}
+"""Phase names a refinement may use, against the keys of :data:`models.CIF_SOURCES`.
+
+A refinement names a phase whatever the person refining it typed, and the clay
+library asks for it by a fixed key.  Only the clays need this: an accompanying
+mineral is looked up in the phase database by its own name.
+"""
+
+
+def clay_key_for(name: str) -> str | None:
+    """The clay library key a refinement's phase name corresponds to, if any."""
+    squashed = re.sub(r"[^a-z0-9]", "", name.lower())
+    if squashed in CLAY_KEY_ALIASES:
+        return CLAY_KEY_ALIASES[squashed]
+    # "Kaolinite 2M (2)" from a duplicate name, "Illite-HiCryst", and so on.
+    for alias, key in sorted(CLAY_KEY_ALIASES.items(), key=lambda kv: -len(kv[0])):
+        if squashed.startswith(alias):
+            return key
+    return None
+
+
+def refined_crystals(
+    path: str | Path, skipped: list[str] | None = None
+) -> dict[str, Crystal]:
+    """Structures from a refinement, by the name the refinement gives them."""
+    crystals: dict[str, Crystal] = {}
+    for phase in parse_refinement(path, skipped=skipped):
+        try:
+            symops = symmetry_operations(phase.space_group)
+        except ValueError as exc:
+            _note_skipped(skipped, phase.name, str(exc))
+            continue
+        crystals[phase.name] = phase.to_crystal(symops)
+    return crystals
+
+
+def refined_clay_structures(
+    path: str | Path, skipped: list[str] | None = None
+) -> dict[str, Crystal]:
+    """The clay structures from a refinement, keyed for the clay library.
+
+    Pass the result to :func:`clayquant.models.use_refined_structures` to have
+    the library built from the structures as refined rather than as published.
+    """
+    found: dict[str, Crystal] = {}
+    for name, crystal in refined_crystals(path, skipped=skipped).items():
+        key = clay_key_for(name)
+        if key is not None:
+            found[key] = crystal
+    return found
+
+
 def write_phase_database(
-    xml_path: str | Path, output: str | Path, verbose: bool = False
+    xml_path: str | Path | Sequence[str | Path], output: str | Path, verbose: bool = False
 ) -> dict[str, int]:
-    """Import a macro library and write a ClayQuant phase database.
+    """Import structure libraries and refinements and write a phase database.
+
+    Each source may be a jEdit macro menu or a TOPAS refinement's ``.inp`` or
+    ``.out``; which it is, is decided by looking at it.  Given several, a phase
+    from a later source replaces one of the same name from an earlier, so a
+    refinement can be laid over a library: the library supplies the breadth and
+    the refinement supplies, for the few phases it contains, the cell and the
+    occupancies that actually fitted a measurement.
 
     Returns counts of what happened, and prints per-phase problems when
     ``verbose``.
     """
+    sources = (
+        [xml_path]
+        if isinstance(xml_path, (str, Path))
+        else [Path(source) for source in xml_path]
+    )
     skipped: list[str] = []
-    phases = parse_macro_library(xml_path, skipped=skipped)
+    phases: list[PhaseDefinition] = []
+    replaced: list[str] = []
+    for source in sources:
+        found = parse_refinement(source, skipped=skipped)
+        incoming = {phase.name for phase in found}
+        kept = [phase for phase in phases if phase.name not in incoming]
+        replaced.extend(
+            f"{phase.name}: replaced by the one in {Path(source).name}"
+            for phase in phases
+            if phase.name in incoming
+        )
+        phases = kept + found
     records = []
     failures: list[str] = list(skipped)
     disagreements: list[str] = []
@@ -588,7 +731,7 @@ def write_phase_database(
     with output.open("w") as handle:
         json.dump(
             {
-                "source": str(Path(xml_path).name),
+                "source": ", ".join(Path(source).name for source in sources),
                 "n_phases": len(records),
                 "phases": records,
             },
@@ -599,6 +742,10 @@ def write_phase_database(
         print("\nphases that could not be imported:")
         for failure in failures:
             print(f"  {failure}")
+    if verbose and replaced:
+        print("\nphases replaced by a later source:")
+        for note in replaced:
+            print(f"  {note}")
     if verbose and disagreements:
         print("\nphases that were imported but do not match what TOPAS says they weigh:")
         for note in disagreements:
@@ -610,6 +757,15 @@ def write_phase_database(
         "clay": sum(1 for record in records if record["is_clay"]),
         "disagreeing": len(disagreements),
         "disagreements": disagreements,
+        # Which of them the clay library could be built from, which is not
+        # obvious from a phase list: a refinement naming a phase "Clinochlore"
+        # supplies ClayQuant's "chlorite", and one that models its clays as
+        # peaks phases supplies none of them.
+        "replaced": len(replaced),
+        "clay_structures": sorted(
+            {key for record in records
+             if (key := clay_key_for(record["name"])) is not None}
+        ),
     }
 
 
@@ -665,7 +821,14 @@ def main(argv: list[str] | None = None) -> int:
         prog="clayquant-import-structures",
         description="Import a TOPAS/jEdit structure library into a ClayQuant phase database.",
     )
-    parser.add_argument("xml", type=Path, help="the jEdit macro menu XML file")
+    parser.add_argument(
+        "xml", type=Path, nargs="+", metavar="SOURCE",
+        help=(
+            "jEdit macro menu XML files and TOPAS refinements (.inp or .out), in "
+            "increasing order of authority: where two name the same phase, the later "
+            "one is kept, so a refinement given last overrides the library"
+        ),
+    )
     parser.add_argument("-o", "--out", type=Path, default=Path("structures/phases.json"))
     parser.add_argument("--quiet", action="store_true")
     arguments = parser.parse_args(argv)
@@ -676,6 +839,13 @@ def main(argv: list[str] | None = None) -> int:
             f"\n{counts['written']} phases written to {arguments.out} "
             f"({counts['clay']} classified as clay minerals, {counts['failed']} failed)"
         )
+        if counts["clay_structures"]:
+            print(
+                "clay structures these sources can supply to the pattern library: "
+                + ", ".join(sorted(counts["clay_structures"]))
+                + "\n  clayquant-build-library --refined-structures "
+                + str(arguments.xml[-1])
+            )
         if counts["disagreeing"]:
             n = counts["disagreeing"]
             print(

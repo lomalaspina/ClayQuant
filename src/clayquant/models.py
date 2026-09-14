@@ -33,6 +33,9 @@ __all__ = [
     "describe_structure_search",
     "load_crystal",
     "load_layer",
+    "use_refined_structures",
+    "clear_refined_structures",
+    "refined_structures",
     "eg_smectite_layer",
     "available_phases",
     "REYNOLDS_1965_EG_SMECTITE_ROWS",
@@ -173,8 +176,15 @@ def find_structure_file(source: "CifSource") -> Path | None:
 
 
 def available_phases() -> dict[str, bool]:
-    """Map each expected CIF phase key to whether a matching file was found."""
-    return {key: find_structure_file(source) is not None for key, source in CIF_SOURCES.items()}
+    """Map each expected phase key to whether its structure can be loaded.
+
+    A structure supplied by :func:`use_refined_structures` counts as available:
+    it needs no file, and a refinement is a legitimate source of a structure.
+    """
+    return {
+        key: key in _REFINED or find_structure_file(source) is not None
+        for key, source in CIF_SOURCES.items()
+    }
 
 
 def describe_structure_search() -> str:
@@ -187,9 +197,61 @@ def describe_structure_search() -> str:
     return "Searched:\n" + searched + "\nStructures:\n" + "\n".join(lines)
 
 
+_REFINED: dict[str, Crystal] = {}
+"""Structures to use in place of the published ones; see :func:`use_refined_structures`."""
+
+
+def use_refined_structures(structures: dict[str, Crystal]) -> dict[str, Crystal]:
+    """Use these structures in place of the CIFs, keyed as in :data:`CIF_SOURCES`.
+
+    A published structure is of somebody else's specimen.  Where a refinement of
+    *this* specimen exists, its cell and its refined occupancies describe the
+    material in the beam, and a clay is exactly where that matters most: the
+    octahedral Fe-for-Mg and Fe-for-Al substitutions are refinable against the
+    basal intensities, they differ from one deposit to the next, and iron
+    scatters about twice as strongly as the magnesium it replaces, so an
+    occupancy taken from a published structure can distort a calculated basal
+    series and with it every intensity ratio that follows.
+
+    Returns what was replaced, so a caller can put it back.  Both this and
+    :func:`clear_refined_structures` clear the caches of
+    :func:`load_crystal` and :func:`load_layer`, since those hold structures
+    loaded under the previous setting.
+    """
+    unknown = sorted(set(structures) - set(CIF_SOURCES))
+    if unknown:
+        raise KeyError(
+            f"not structures the library asks for: {unknown}; "
+            f"expected among {sorted(CIF_SOURCES)}"
+        )
+    replaced = dict(_REFINED)
+    _REFINED.update(structures)
+    load_crystal.cache_clear()
+    load_layer.cache_clear()
+    return replaced
+
+
+def clear_refined_structures() -> None:
+    """Go back to the published structures."""
+    _REFINED.clear()
+    load_crystal.cache_clear()
+    load_layer.cache_clear()
+
+
+def refined_structures() -> dict[str, Crystal]:
+    """Which structures are currently overridden."""
+    return dict(_REFINED)
+
+
 @lru_cache(maxsize=None)
 def load_crystal(key: str) -> Crystal:
-    """Load one of the :data:`CIF_SOURCES` structures."""
+    """Load one of the :data:`CIF_SOURCES` structures.
+
+    A structure registered through :func:`use_refined_structures` is returned in
+    place of the CIF, and is not required to be present on disk.
+    """
+    if key in _REFINED:
+        return _REFINED[key]
     try:
         source = CIF_SOURCES[key]
     except KeyError:
