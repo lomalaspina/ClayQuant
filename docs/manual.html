@@ -3178,7 +3178,7 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
 <tr><td>Interstratification reporting</td><td>5 automated, across the I/S series</td>
 <td>Host-layer fraction reported beside the phase name</td></tr>
-<tr><td>Parameters on a range edge</td><td>8 automated</td>
+<tr><td>Parameters on a range edge</td><td>9 automated, including that the end member is the pure phase</td>
 <td>Reported by every fit; both series extended to their end member</td></tr>
 <tr><td>Pure-mineral basal ratios</td><td>14 automated; three single-phase mounts;
 eight candidate causes of the chlorite shortfall</td>
@@ -3194,7 +3194,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>230 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>231 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

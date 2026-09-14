@@ -119,3 +119,44 @@ def test_the_illite_series_reaches_its_pure_end_member():
 
     assert max(ILLITE_SMECTITE_FRACTIONS) == 1.00
     assert max(CHLORITE_SMECTITE_FRACTIONS) == 1.00
+
+
+def test_the_end_member_really_is_the_pure_phase(library):
+    """A degenerate transition matrix is where this could go quietly wrong.
+
+    At a host fraction of 1 the stationary proportion of the second component is
+    zero and the junction probability with it is zero too, so the Markov chain
+    is degenerate.  It has to come out as a stack of pure host layers rather than
+    as a division by zero or a silently different pattern.
+    """
+    from clayquant.mixed_layer import MixedLayerStack, lognormal_csds
+    from clayquant.models import load_layer
+    from clayquant.pattern import basal_pattern
+
+    instrument = Instrument(
+        peak_shape=PeakShape(u=0.004, v=-0.001, w=0.002, eta=0.5, size_ab=600.0),
+        divergence=Divergence(),
+    )
+    layer = load_layer("illite")
+    grid = np.arange(4.0, 34.0, 0.02)
+    pure = basal_pattern(
+        MixedLayerStack(layer, layer, 1.0, csds=lognormal_csds(15.0)), grid, instrument
+    ).intensity
+
+    from clayquant.models import eg_smectite_layer
+
+    end_member = basal_pattern(
+        MixedLayerStack(layer, eg_smectite_layer(), 1.0, csds=lognormal_csds(15.0)),
+        grid,
+        instrument,
+    ).intensity
+
+    assert np.all(np.isfinite(end_member))
+    assert end_member.max() > 0
+    similarity = float(
+        np.dot(pure, end_member) / np.sqrt(np.dot(pure, pure) * np.dot(end_member, end_member))
+    )
+    assert similarity > 0.9999, (
+        "a stack of 100 % host layers must be the pure host, whatever the second "
+        f"component is; similarity {similarity:.6f}"
+    )
