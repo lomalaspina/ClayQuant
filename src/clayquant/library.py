@@ -91,11 +91,30 @@ ILLITE_SMECTITE_FRACTIONS: tuple[float, ...] = (
     0.97,
     0.98,
     0.99,
+    1.00,
 )
-"""Illite fraction of the illite/smectite series."""
+"""Illite fraction of the illite/smectite series.
 
-CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (0.95, 0.90, 0.85)
-"""Chlorite fraction of the chlorite/smectite series."""
+The series reaches 1.00, the pure illite end member, and that matters more than
+it looks.  Without it the closest a pure illite can be described as is 0.99, and
+a fit of one piles its whole coefficient onto that entry - which reports 1 % of
+smectite the specimen does not have, and, worse, reports a *bound* as though it
+were a measurement.  A measured pure illite standard is what showed this: the
+fit put 94 % of its illite on the 0.99 entry, the end of the range.
+
+The end member is not redundant with the discrete ``illite`` entries either.
+Those are three-dimensional powder patterns whose basal widths come from the
+instrumental profile; the interstratified entries carry the crystallite
+thickness distribution of Sec. 2.6, which is what actually sets a basal width.
+Only through this series can a pure illite be fitted with its thickness spanned.
+"""
+
+CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (1.00, 0.95, 0.90, 0.85)
+"""Chlorite fraction of the chlorite/smectite series.
+
+Reaching 1.00 for the same reason as the illite series: a chlorite with no
+expandable component has to be describable without one.
+"""
 
 CHLORITE_IRON: tuple[tuple[float, float], ...] = ()
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
@@ -301,6 +320,28 @@ class PatternLibrary:
                 for entry in self.entries
             ]
         )
+
+    def spanned(self) -> dict[str, list[float]]:
+        """The distinct values of each parameter this library samples, per phase.
+
+        The fit chooses among pre-computed patterns, so a parameter is only as
+        well determined as the library samples it - and a result that lands on
+        the lowest or highest value sampled has not been determined at all, it
+        has been stopped there.  This is what makes that detectable; see
+        :func:`clayquant.nnls.parameters_at_an_edge`.
+        """
+        axes: dict[str, set[float]] = {}
+        for entry in self.entries:
+            for name, value in (("march_dollase", entry.march_dollase),
+                                ("thickness", entry.thickness),
+                                ("csds_mean", entry.csds_mean),
+                                ("fraction", entry.fraction)):
+                if value is None:
+                    continue
+                axes.setdefault(f"{entry.phase}/{name}", set()).add(float(value))
+        return {
+            key: sorted(values) for key, values in axes.items() if len(values) > 1
+        }
 
     def select(
         self,

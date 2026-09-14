@@ -173,6 +173,61 @@ class FitResult:
         return "\n".join(lines)
 
 
+def parameters_at_an_edge(
+    result: "FitResult", library, threshold: float = 0.8
+) -> list[str]:
+    """Parameters whose fitted weight piles up on the lowest or highest value spanned.
+
+    The fit chooses among pre-computed patterns, so it cannot report a value the
+    library does not hold.  When a phase's coefficients collect on the end of a
+    spanned range, the honest reading is not that the parameter equals that
+    value but that the data wanted to go further and the library stopped it -
+    the answer is a bound, not a measurement.  It is the same signal that marks
+    a refined parameter sitting on its limit, and it is easy to miss in a table
+    of numbers that all look like results.
+
+    ``threshold`` is the share of a phase's coefficient that has to sit on the
+    end value before it is reported, so a fit that merely includes the end value
+    among others is not flagged.
+    """
+    axes = library.spanned()
+    if not axes:
+        return []
+    weight: dict[tuple[str, float], float] = {}
+    total: dict[str, float] = {}
+    for entry, coefficient in zip(library.entries, result.coefficients):
+        if coefficient <= 0.0:
+            continue
+        for name, value in (("march_dollase", entry.march_dollase),
+                            ("thickness", entry.thickness),
+                            ("csds_mean", entry.csds_mean),
+                            ("fraction", entry.fraction)):
+            if value is None:
+                continue
+            key = f"{entry.phase}/{name}"
+            if key not in axes:
+                continue
+            weight[(key, float(value))] = weight.get((key, float(value)), 0.0) + float(coefficient)
+            total[key] = total.get(key, 0.0) + float(coefficient)
+
+    notes = []
+    for key, values in axes.items():
+        if total.get(key, 0.0) <= 0.0:
+            continue
+        for end, where in ((values[0], "lowest"), (values[-1], "highest")):
+            share = weight.get((key, end), 0.0) / total[key]
+            if share >= threshold:
+                # A phase name may itself carry a slash - "I/S", "C/S" - so the
+                # parameter is what follows the *last* one.
+                phase, name = key.rsplit("/", 1)
+                notes.append(
+                    f"{phase}: {share * 100:.0f} % of the fit sits on {name} = {end:g}, the "
+                    f"{where} value the library holds, so {name} is a bound here and not a "
+                    f"measurement - span it further to find out where it wanted to go"
+                )
+    return notes
+
+
 def nnls_fit(
     measured: Pattern,
     library,
@@ -288,7 +343,7 @@ def nnls_fit(
     total_observed = float(np.sum(np.abs(target)))
     r_p = float(np.sum(np.abs(residual)) / total_observed) if total_observed > 0 else float("nan")
 
-    return FitResult(
+    result = FitResult(
         two_theta=two_theta,
         observed=observed,
         calculated=calculated,
@@ -319,3 +374,6 @@ def nnls_fit(
             ],
         },
     )
+    # Worked out after the result exists, since it needs the coefficients.
+    result.metadata["parameters_at_an_edge"] = parameters_at_an_edge(result, library)
+    return result
