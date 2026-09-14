@@ -15,6 +15,7 @@ Two kinds of entry are provided:
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import re
 from dataclasses import dataclass
@@ -33,6 +34,9 @@ __all__ = [
     "describe_structure_search",
     "load_crystal",
     "load_layer",
+    "chlorite_crystal",
+    "chlorite_layer",
+    "CHLORITE_OCTAHEDRA",
     "use_refined_structures",
     "clear_refined_structures",
     "refined_structures",
@@ -191,6 +195,72 @@ def find_structure_file(source: "CifSource") -> Path | None:
                 if name in _normalised(entry.stem):
                     return entry
     return None
+
+
+CHLORITE_OCTAHEDRA: dict[str, tuple[str, ...]] = {
+    "2:1": ("Mg1", "Fe1", "Mg2", "Fe2"),
+    "hydroxide": ("Mg3", "Fe3", "Mg4", "Fe4"),
+}
+"""The two octahedral sheets of the chlorite structure, by site label.
+
+A chlorite layer carries two of them: the octahedral sheet of the 2:1 layer, at
+the layer origin, and the interlayer hydroxide ("brucite") sheet at half the
+repeat.  Iron substitutes for magnesium in both, in proportions that differ
+between the two and between deposits, and because the sheets sit at different
+heights the two substitutions act differently on the basal orders - which is
+what makes them separable from a measured basal series
+(:func:`clayquant.composition.fit_chlorite_iron`).
+"""
+
+
+def chlorite_crystal(iron_2to1: float, iron_hydroxide: float) -> Crystal:
+    """The chlorite structure with its octahedral iron set to these fractions.
+
+    Each fraction is the iron occupancy of one sheet, with magnesium taking the
+    rest, so ``(0.0, 0.0)`` is an iron-free clinochlore and ``(1.0, 1.0)`` a
+    fully ferrous chamosite-like end member.  Everything else - the cell, the
+    positions, the tetrahedral Si/Al, the displacement parameters - is the
+    published structure's.
+
+    The substitution changes the cell mass as well as the basal intensities, so
+    a weight percent computed from a fitted composition is consistent with it
+    (Sec. 2.13).
+    """
+    for name, value in (("iron_2to1", iron_2to1), ("iron_hydroxide", iron_hydroxide)):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} is an occupancy and must lie in [0, 1], not {value}")
+
+    base = load_crystal("chlorite")
+    iron_of = {"2:1": float(iron_2to1), "hydroxide": float(iron_hydroxide)}
+    sheet_of = {
+        label: sheet for sheet, labels in CHLORITE_OCTAHEDRA.items() for label in labels
+    }
+    sites = []
+    for site in base.sites:
+        sheet = sheet_of.get(site.label)
+        if sheet is None:
+            sites.append(site)
+            continue
+        iron = iron_of[sheet]
+        fraction = iron if site.species.startswith("Fe") else 1.0 - iron
+        sites.append(dataclasses.replace(site, occupancy=fraction))
+    return dataclasses.replace(
+        base,
+        sites=sites,
+        name=f"chlorite Fe {iron_2to1:.2f}/{iron_hydroxide:.2f}",
+        source=(
+            f"{base.source}, octahedral iron set to {iron_2to1:.3f} (2:1 sheet) "
+            f"and {iron_hydroxide:.3f} (hydroxide sheet)"
+        ),
+    )
+
+
+def chlorite_layer(iron_2to1: float, iron_hydroxide: float) -> LayerModel:
+    """One folded layer of :func:`chlorite_crystal`."""
+    crystal = chlorite_crystal(iron_2to1, iron_hydroxide)
+    return crystal.layer_model(
+        layers_per_cell=CIF_SOURCES["chlorite"].layers_per_cell, name=crystal.name
+    )
 
 
 def available_phases() -> dict[str, bool]:

@@ -33,6 +33,7 @@ from .optics import Divergence
 from .models import (
     CIF_SOURCES,
     available_phases,
+    chlorite_crystal,
     eg_smectite_layer,
     load_crystal,
     load_layer,
@@ -95,6 +96,19 @@ ILLITE_SMECTITE_FRACTIONS: tuple[float, ...] = (
 
 CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (0.95, 0.90, 0.85)
 """Chlorite fraction of the chlorite/smectite series."""
+
+CHLORITE_IRON: tuple[tuple[float, float], ...] = ()
+"""Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
+
+Empty by default, which calculates the published structure alone.  A chlorite's
+octahedral iron varies from one deposit to the next and acts directly on its
+basal intensities, so one published clinochlore cannot describe two chlorites of
+different composition - but neither is there a sensible generic set to span, the
+way there is for the illite/smectite ratio.  What there is instead is a way to
+measure it: fit the composition to a pattern of the pure mineral
+(:func:`clayquant.composition.fit_chlorite_iron`) and span the values that come
+out of your own standards.
+"""
 
 NORMALIZATION_FLOOR = 4.0
 """Patterns are normalised on their maximum above this 2theta, in degrees."""
@@ -439,6 +453,7 @@ def build_library(
     orientations: tuple[float, ...] = PREFERRED_ORIENTATIONS,
     illite_smectite: tuple[float, ...] = ILLITE_SMECTITE_FRACTIONS,
     chlorite_smectite: tuple[float, ...] = CHLORITE_SMECTITE_FRACTIONS,
+    chlorite_iron: tuple[tuple[float, float], ...] = CHLORITE_IRON,
     csds_means: tuple[float, ...] = CSDS_MEANS,
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
@@ -467,6 +482,13 @@ def build_library(
     smectite_thickness:
         Layer repeat of the glycolated smectite in A; defaults to the 16.86 A
         measured by Reynolds (1965).
+    chlorite_iron:
+        Octahedral iron fractions to calculate chlorite for, as
+        ``(2:1 sheet, hydroxide sheet)`` pairs; see :data:`CHLORITE_IRON`.
+        Each pair produces its own set of chlorite entries, all grouped under
+        the phase ``chlorite``, so the fit chooses among compositions as it
+        chooses among layer spacings.  Empty calculates the published structure
+        alone.
     """
     grid = two_theta_grid(2.0, 40.0, 0.02) if grid is None else np.asarray(grid, dtype=float)
     # Every pattern is calculated on a grid reaching below the one it is stored
@@ -513,6 +535,7 @@ def build_library(
             "orientations": list(orientations),
             "illite_smectite": list(illite_smectite),
             "chlorite_smectite": list(chlorite_smectite),
+            "chlorite_iron": [list(pair) for pair in chlorite_iron],
             "csds_means": [distribution.mean for distribution in distributions],
             "csds_beta": csds_beta,
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
@@ -528,24 +551,31 @@ def build_library(
         if progress:
             print(message, flush=True)
 
-    # Discrete phases at each orientation parameter and layer spacing.
+    # Discrete phases at each orientation parameter and layer spacing, and for
+    # chlorite at each octahedral iron content asked for.
     for key, source in CIF_SOURCES.items():
-        base = load_crystal(key)
-        spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
-        announce(f"{key}: {len(orientations)} orientations x {len(spacings)} layer spacings")
-        for thickness in spacings:
-            crystal = scaled_to_d001(base, source.layers_per_cell, thickness)
-            spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
-            for r in orientations:
-                pattern = powder_pattern(
-                    crystal,
-                    extended,
-                    instrument,
-                    r_march_dollase=r,
-                    name=f"{key} PO={r:g}{spacing_tag}",
-                )
-                library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
-                            unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
+        variants: list[tuple[Crystal, str]] = [(load_crystal(key), "")]
+        if key == "chlorite" and chlorite_iron:
+            variants = [
+                (chlorite_crystal(a, b), f" Fe={a:g}/{b:g}") for a, b in chlorite_iron
+            ]
+        for base, iron_tag in variants:
+            spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
+            announce(f"{key}{iron_tag}: {len(orientations)} orientations "
+                     f"x {len(spacings)} layer spacings")
+            for thickness in spacings:
+                crystal = scaled_to_d001(base, source.layers_per_cell, thickness)
+                spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
+                for r in orientations:
+                    pattern = powder_pattern(
+                        crystal,
+                        extended,
+                        instrument,
+                        r_march_dollase=r,
+                        name=f"{key}{iron_tag} PO={r:g}{spacing_tag}",
+                    )
+                    library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
+                                unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
 
     # Pure glycolated smectite.  All its reflections are basal, so the
     # orientation parameter only scales the pattern and one entry suffices.
@@ -717,8 +747,41 @@ def main(argv: list[str] | None = None) -> int:
             "chlorite, while taking the refined illite and kaolinite"
         ),
     )
+    parser.add_argument(
+        "--chlorite-iron",
+        default=None,
+        metavar="PAIRS",
+        help=(
+            "octahedral iron contents to calculate chlorite for, as "
+            "'a/b,a/b' pairs of (2:1 sheet)/(hydroxide sheet) fractions, "
+            "for example 0.35/0.20,0.55/0.30; measure them from patterns of your "
+            "own pure chlorites with clayquant.composition.fit_chlorite_iron"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     arguments = parser.parse_args(argv)
+
+    iron: tuple[tuple[float, float], ...] = CHLORITE_IRON
+    if arguments.chlorite_iron:
+        pairs = []
+        for part in arguments.chlorite_iron.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            halves = part.split("/")
+            if len(halves) != 2:
+                parser.error(
+                    f"{part!r} is not an iron pair; write each as (2:1 sheet)/(hydroxide "
+                    "sheet), for example 0.35/0.20"
+                )
+            try:
+                a, b = (float(half) for half in halves)
+            except ValueError:
+                parser.error(f"{part!r} is not a pair of numbers")
+            if not (0.0 <= a <= 1.0 and 0.0 <= b <= 1.0):
+                parser.error(f"{part!r}: an occupancy lies between 0 and 1")
+            pairs.append((a, b))
+        iron = tuple(pairs)
 
     def phase_list(value):
         return [part.strip() for part in value.split(",") if part.strip()] if value else None
@@ -785,6 +848,7 @@ def main(argv: list[str] | None = None) -> int:
     library = build_library(
         grid=two_theta_grid(arguments.start, arguments.stop, arguments.step),
         instrument=instrument,
+        chlorite_iron=iron,
         csds_means=tuple(arguments.csds_means),
         csds_beta=arguments.csds_beta,
         smectite_thickness=arguments.smectite_thickness,

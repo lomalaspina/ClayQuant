@@ -37,4 +37,5 @@ where = ["src"]
 clayquant = ["data/*.json"]
 
 [tool.pytest.ini_options]
+markers = ["slow: needs a grid search over calculated patterns"]
 testpaths = ["tests"]

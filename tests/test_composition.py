@@ -1,0 +1,152 @@
+"""Fitting a chlorite's octahedral iron to a pattern of the pure mineral.
+
+A chlorite's two octahedral sheets take iron for magnesium in proportions that
+differ between deposits, iron scatters about twice as strongly as the magnesium
+it replaces, and the sheets sit at different heights in the layer - so the
+composition acts on the basal intensities the quantification is read from, and
+one published clinochlore cannot describe two chlorites of different iron
+content.
+
+The tests below are of the arithmetic and of the recovery: a pattern calculated
+from a known composition must give that composition back.  What they cannot test
+is whether a real chlorite's iron is distributed between the two sheets the way
+this two-parameter model says; that is what a measurement of the pure mineral is
+for, and what the residual reports.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from clayquant.composition import (
+    ChloriteComposition,
+    fit_chlorite_iron,
+    measure_basal_series,
+    two_theta_of,
+)
+from clayquant.mixed_layer import MixedLayerStack, lognormal_csds
+from clayquant.models import CHLORITE_OCTAHEDRA, available_phases, chlorite_crystal, chlorite_layer
+from clayquant.optics import Divergence
+from clayquant.pattern import Instrument, Pattern, basal_pattern
+from clayquant.profile import PeakShape
+
+pytestmark = pytest.mark.skipif(
+    not available_phases()["chlorite"], reason="the chlorite CIF is not installed"
+)
+
+INSTRUMENT = Instrument(
+    peak_shape=PeakShape(u=0.004, v=-0.001, w=0.002, eta=0.5, size_ab=600.0),
+    divergence=Divergence(specimen_length=20.0, goniometer_radius=240.0, divergence=0.5),
+)
+GRID = np.arange(3.0, 40.0, 0.0167)
+
+
+def synthetic(iron_2to1, iron_hydroxide, mean_layers=25.0, name="synthetic chlorite"):
+    """A pattern of a pure chlorite of known composition, with a flat background."""
+    layer = chlorite_layer(iron_2to1, iron_hydroxide)
+    stack = MixedLayerStack(layer, layer, 1.0, csds=lognormal_csds(mean_layers))
+    intensity = basal_pattern(stack, GRID, INSTRUMENT).intensity
+    return Pattern(GRID, 50.0 + 1000.0 * intensity / intensity.max(), name=name)
+
+
+def test_the_iron_goes_where_it_is_asked_to_go():
+    crystal = chlorite_crystal(0.4, 0.15)
+    occupancy = {site.label: site.occupancy for site in crystal.sites}
+    for label in CHLORITE_OCTAHEDRA["2:1"]:
+        expected = 0.4 if label.startswith("Fe") else 0.6
+        assert occupancy[label] == pytest.approx(expected)
+    for label in CHLORITE_OCTAHEDRA["hydroxide"]:
+        expected = 0.15 if label.startswith("Fe") else 0.85
+        assert occupancy[label] == pytest.approx(expected)
+    # Magnesium and iron on one site must still add to a full site.
+    for sheet in CHLORITE_OCTAHEDRA.values():
+        pairs = {}
+        for label in sheet:
+            site = next(s for s in crystal.sites if s.label == label)
+            pairs.setdefault(label[2:], 0.0)
+            pairs[label[2:]] += site.occupancy
+        assert all(total == pytest.approx(1.0) for total in pairs.values())
+
+
+def test_more_iron_weighs_more_and_leaves_the_cell_alone():
+    light = chlorite_crystal(0.0, 0.0)
+    heavy = chlorite_crystal(1.0, 1.0)
+    assert heavy.cell_mass > light.cell_mass
+    assert heavy.volume == pytest.approx(light.volume), "a substitution is not a cell change"
+    assert heavy.d001 == pytest.approx(light.d001)
+    # Fe(55.85) for Mg(24.31) over the cell's twelve octahedral positions, six
+    # in the 2:1 sheet and six in the hydroxide sheet.
+    assert heavy.cell_mass - light.cell_mass == pytest.approx(12 * (55.845 - 24.305), rel=0.01)
+
+
+@pytest.mark.parametrize("value", [-0.01, 1.01, 2.0])
+def test_an_occupancy_outside_zero_to_one_is_refused(value):
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        chlorite_crystal(value, 0.1)
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        chlorite_crystal(0.1, value)
+
+
+def test_iron_changes_the_basal_ratios_it_is_fitted_from():
+    """If it did not, there would be nothing to fit."""
+    def ratios(a, b):
+        pattern = synthetic(a, b)
+        return measure_basal_series(pattern, 14.2782).normalised()
+
+    poor, rich = ratios(0.05, 0.05), ratios(0.7, 0.35)
+    assert poor.keys() == rich.keys()
+    changed = max(abs(poor[l] - rich[l]) / max(poor[l], 1e-9) for l in poor if l != 2)
+    assert changed > 0.2, "the basal ratios must move with the iron content"
+
+
+def test_the_basal_series_is_integrated_where_the_spacing_puts_it():
+    pattern = synthetic(0.3, 0.15)
+    series = measure_basal_series(pattern, 14.2782)
+    assert series.reference == 2
+    assert series.orders[0] == 1
+    for order, angle in zip(series.orders, series.two_theta):
+        assert angle == pytest.approx(two_theta_of(14.2782, order), abs=1e-6)
+    assert series.normalised()[2] == 1.0
+    assert all(value >= 0.0 for value in series.normalised().values())
+
+
+def test_an_order_outside_the_measured_range_is_left_out_not_zeroed():
+    pattern = synthetic(0.3, 0.15)
+    # 003 sits at 18.63 deg, so a pattern ending at 18.8 contains its centre but
+    # not the window its area would be integrated over.
+    keep = pattern.two_theta < 18.8
+    narrow = Pattern(pattern.two_theta[keep], pattern.intensity[keep], name="narrow")
+    series = measure_basal_series(narrow, 14.2782)
+    assert series.orders == (1, 2), "003's centre is inside the range, its window is not"
+
+
+def test_a_reference_order_that_was_not_measured_is_an_error():
+    pattern = synthetic(0.3, 0.15)
+    with pytest.raises(ValueError, match="nothing to"):
+        measure_basal_series(pattern, 14.2782, reference=9)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("iron", [(0.30, 0.15), (0.60, 0.30)])
+def test_a_known_composition_is_recovered(iron):
+    """The test that would catch the fit converging on the wrong answer."""
+    pattern = synthetic(*iron)
+    fit = fit_chlorite_iron(pattern, INSTRUMENT, mean_layers=(25.0,))
+    assert isinstance(fit, ChloriteComposition)
+    assert fit.iron_2to1 == pytest.approx(iron[0], abs=0.06)
+    assert fit.iron_hydroxide == pytest.approx(iron[1], abs=0.10)
+    assert fit.residual < 0.02
+    assert fit.residual <= fit.published_residual
+
+
+def test_the_description_reports_what_was_fitted_and_what_it_beats():
+    fit = ChloriteComposition(
+        iron_2to1=0.35, iron_hydroxide=0.2, mean_layers=25.0, residual=0.01,
+        observed={2: 1.0, 3: 0.5}, calculated={2: 1.0, 3: 0.52},
+        published_residual=0.04, measurement="Chlorite_16",
+    )
+    assert fit.improvement == pytest.approx(4.0)
+    text = fit.describe()
+    assert "Chlorite_16" in text and "0.350" in text and "0.200" in text
+    assert "4.0 times better" in text
