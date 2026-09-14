@@ -1135,6 +1135,14 @@ the published CIF the pattern library is calculated from.</p>
 
 <pre><code>clayquant-build-library --refined-structures M_26_1041_air.out</code></pre>
 
+<p>Which phases to take is chosen per mineral, with
+<span class="kw">--refined-only</span> or <span class="kw">--refined-except</span>, because the
+judgement differs between them. Keeping a published structure that can be cited, while taking the
+refined ones that describe the specimen better, is a reasonable decision rather than a missed
+opportunity:</p>
+
+<pre><code>clayquant-build-library --refined-structures M_26_1041_air.out --refined-except chlorite</code></pre>
+
 <p>This is worth doing, and worth doing for the clays in particular, because the octahedral
 Fe-for-Mg and Fe-for-Al substitutions are refinable against the basal intensities, differ from one
 deposit to the next, and change those intensities substantially &mdash; iron scatters about twice as
@@ -2902,7 +2910,7 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
-<tr><td>Refined structures</td><td>26 automated; against a refinement of one specimen, and
+<tr><td>Refined structures</td><td>27 automated; against a refinement of one specimen, and
 against a CIF written by TOPAS</td>
 <td><var>R</var><sub>wp</sub> 35.9 &rarr; 31.2 %; adopted for the clays</td></tr>
 <tr><td>Quantitative fit</td><td>11 real specimens, after the correction</td>
@@ -2913,7 +2921,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>196 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>197 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

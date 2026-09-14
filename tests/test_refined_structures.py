@@ -361,3 +361,42 @@ def test_a_synonym_does_not_capture_another_phase(tmp_path, monkeypatch):
     for key in ("illite", "kaolinite_1M", "kaolinite_2M"):
         found = models.find_structure_file(models.CIF_SOURCES[key])
         assert found is None or found.name != "Clinochlore.cif"
+
+
+def test_which_phases_to_take_is_chosen_per_mineral(tmp_path):
+    """A refined occupancy is worth taking for one mineral and not another.
+
+    An Fe-rich chlorite refined on one deposit describes that deposit and no
+    other, so keeping the published clinochlore is a decision rather than an
+    oversight - and it has to be expressible, or the choice is the file's rather
+    than the user's.
+    """
+    text = """\
+    \tstr
+    \t\tphase_name "Illite"
+    \t\ta 5.203089
+    \t\tb 9.040800
+    \t\tc 20.087833
+    \t\tbe 97.10957
+    \t\tspace_group "C12/c1"
+    \t\tsite Al2 x 0.2586 y 0.0828 z 0.0068 occ Al+3 0.95 beq 5.8
+    \t\tsite Fe2 x 0.2586 y 0.0828 z 0.0068 occ Fe+3 0.05 beq 5.8
+    \tstr
+    \t\tphase_name "Clinochlore"
+    \t\tspace_group "C -1"
+    \t\ta 5.492495
+    \t\tb 9.275810
+    \t\tc 14.280135
+    \t\tal 89.34883
+    \t\tbe 97.04046
+    \t\tga 88.05500
+    \t\tsite Mg1 num_posns 2 x 0 y 0 z 0 occ Mg+2 0.7 beq 0.62
+    \t\tsite Fe1 num_posns 2 x 0 y 0 z 0 occ Fe+3 0.3 beq 0.62
+    """
+    path = write(tmp_path, text)
+    assert set(refined_clay_structures(path)) == {"illite", "chlorite"}
+    assert set(refined_clay_structures(path, exclude=["chlorite"])) == {"illite"}
+    assert set(refined_clay_structures(path, only=["chlorite"])) == {"chlorite"}
+    assert refined_clay_structures(path, exclude=["illite", "chlorite"]) == {}
+    # A phase the file does not hold is simply not in the result.
+    assert set(refined_clay_structures(path, only=["illite", "kaolinite_2M"])) == {"illite"}

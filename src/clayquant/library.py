@@ -698,19 +698,61 @@ def main(argv: list[str] | None = None) -> int:
             "it was refined on rather than somebody else's"
         ),
     )
+    parser.add_argument(
+        "--refined-only",
+        default=None,
+        metavar="PHASES",
+        help=(
+            "take only these phases from the refinement, comma separated "
+            "(illite, chlorite, kaolinite_1M, kaolinite_2M)"
+        ),
+    )
+    parser.add_argument(
+        "--refined-except",
+        default=None,
+        metavar="PHASES",
+        help=(
+            "take every phase the refinement supplies except these, comma separated; "
+            "use it to keep a published structure you would rather cite, such as the "
+            "chlorite, while taking the refined illite and kaolinite"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     arguments = parser.parse_args(argv)
+
+    def phase_list(value):
+        return [part.strip() for part in value.split(",") if part.strip()] if value else None
+
+    if arguments.refined_structures is None and (arguments.refined_only or arguments.refined_except):
+        parser.error("--refined-only and --refined-except need --refined-structures")
+    if arguments.refined_only and arguments.refined_except:
+        parser.error("give one of --refined-only and --refined-except, not both")
 
     if arguments.refined_structures is not None:
         from .bern import refined_clay_structures
 
         skipped: list[str] = []
-        structures = refined_clay_structures(arguments.refined_structures, skipped=skipped)
+        wanted = phase_list(arguments.refined_only)
+        unwanted = phase_list(arguments.refined_except)
+        for name in (wanted or []) + (unwanted or []):
+            if name not in CIF_SOURCES:
+                parser.error(
+                    f"{name!r} is not a phase of the clay library; expected among "
+                    f"{', '.join(sorted(CIF_SOURCES))}"
+                )
+        structures = refined_clay_structures(
+            arguments.refined_structures, skipped=skipped, only=wanted, exclude=unwanted
+        )
         if not structures:
+            selection = (
+                f" among {arguments.refined_only}" if arguments.refined_only
+                else f" once {arguments.refined_except} is left out" if arguments.refined_except
+                else ""
+            )
             parser.error(
-                f"{arguments.refined_structures} holds no clay structure the library uses. "
-                "A refinement that models its clays as hkl_Is peaks phases has no structure "
-                "to take."
+                f"{arguments.refined_structures} holds no clay structure the library uses"
+                f"{selection}. A refinement that models its clays as hkl_Is peaks phases has "
+                "no structure to take."
                 + ("\n" + "\n".join(f"  {note}" for note in skipped) if skipped else "")
             )
         use_refined_structures(structures)
@@ -719,6 +761,8 @@ def main(argv: list[str] | None = None) -> int:
             for key, crystal in sorted(structures.items()):
                 print(f"  {key:<14} {crystal.name}, d(001) = {crystal.d001:.3f} A, "
                       f"cell mass {crystal.cell_mass:.1f}")
+            for key in sorted(set(CIF_SOURCES) - set(structures)):
+                print(f"  {key:<14} published structure kept")
             for note in skipped:
                 print(f"  note: {note}")
 

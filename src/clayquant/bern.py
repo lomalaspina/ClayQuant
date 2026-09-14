@@ -23,7 +23,7 @@ from __future__ import annotations
 import html
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -660,18 +660,33 @@ def refined_crystals(
 
 
 def refined_clay_structures(
-    path: str | Path, skipped: list[str] | None = None
+    path: str | Path,
+    skipped: list[str] | None = None,
+    only: "Iterable[str] | None" = None,
+    exclude: "Iterable[str] | None" = None,
 ) -> dict[str, Crystal]:
     """The clay structures from a refinement, keyed for the clay library.
 
     Pass the result to :func:`clayquant.models.use_refined_structures` to have
     the library built from the structures as refined rather than as published.
+
+    ``only`` and ``exclude`` select which phases to take, because the choice is
+    made per mineral rather than per file.  A refined occupancy is worth having
+    where it describes the specimen better than the published structure does,
+    and worth leaving out where the published one is the more defensible
+    reference - an Fe-rich chlorite refined on one deposit is not a chlorite
+    anywhere else, and keeping the published clinochlore is a reasonable
+    decision rather than a missed opportunity.  Names are the library's keys, so
+    ``exclude=["chlorite"]`` keeps the published chlorite and takes the rest.
     """
     found: dict[str, Crystal] = {}
+    wanted = {str(key) for key in only} if only is not None else None
+    unwanted = {str(key) for key in exclude} if exclude is not None else set()
     for name, crystal in refined_crystals(path, skipped=skipped).items():
         key = clay_key_for(name)
-        if key is not None:
-            found[key] = crystal
+        if key is None or key in unwanted or (wanted is not None and key not in wanted):
+            continue
+        found[key] = crystal
     return found
 
 
