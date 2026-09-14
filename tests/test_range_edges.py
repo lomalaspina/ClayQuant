@@ -74,11 +74,17 @@ def test_a_phase_name_with_a_slash_is_not_split_by_it(library):
 
 
 def test_an_end_of_range_value_is_reported(library):
+    """That it is reported at all, and names the phase, the parameter and the share.
+
+    Which *wording* it gets depends on whether the end is a physical limit or
+    just where the library stops; both cases are covered below.
+    """
     name = next(n for n in library.names if n.startswith("I/S 1.00"))
     notes = parameters_at_an_edge(fit_entry(library, name), library)
     fraction = next(note for note in notes if "fraction" in note)
-    assert "highest" in fraction and "1" in fraction
-    assert "bound here and not a measurement" in fraction
+    assert fraction.startswith("I/S: ")
+    assert "100 %" in fraction or "9" in fraction.split("%")[0]
+    assert "fraction = 1" in fraction
 
 
 def test_a_value_inside_the_range_is_not_reported(library):
@@ -160,3 +166,45 @@ def test_the_end_member_really_is_the_pure_phase(library):
         "a stack of 100 % host layers must be the pure host, whatever the second "
         f"component is; similarity {similarity:.6f}"
     )
+
+
+def test_a_physical_limit_is_not_reported_as_a_missing_library(library):
+    """Two different things look identical in a table of numbers.
+
+    A crystallite thickness on the largest value calculated means the data
+    wanted a larger one and the library should be extended.  A composition on
+    1.00 means the data wants the pure phase, and there is nothing beyond it -
+    the fit has answered, not run out of room.  Advice to span it further is
+    advice the user cannot take, and it would train them to ignore the warning
+    that matters.
+    """
+    from clayquant.nnls import PHYSICAL_BOUNDS
+
+    assert PHYSICAL_BOUNDS["fraction"][1.0]
+    assert PHYSICAL_BOUNDS["march_dollase"][1.0]
+
+    name = next(n for n in library.names if n.startswith("I/S 1.00"))
+    notes = parameters_at_an_edge(fit_entry(library, name), library)
+    fraction = next(note for note in notes if "fraction" in note)
+    assert "read it as the answer" in fraction
+    assert "span it further" not in fraction
+    assert "end of what can exist" in fraction
+
+
+def test_a_library_limit_still_says_to_span_it(library):
+    """The warning that is actionable has to stay actionable."""
+    name = next(n for n in library.names if n.startswith("I/S 1.00") and "N=" in n)
+    notes = parameters_at_an_edge(fit_entry(library, name), library)
+    thickness = [note for note in notes if "csds_mean" in note]
+    if not thickness:
+        pytest.skip("this fixture's fit did not land on a thickness edge")
+    assert "span it further" in thickness[0]
+    assert "read it as the answer" not in thickness[0]
+
+
+def test_an_orientation_of_one_is_a_random_powder_not_a_missing_entry(library):
+    name = next(n for n in library.names if n.startswith("kaolinite_1M PO=1"))
+    notes = parameters_at_an_edge(fit_entry(library, name), library)
+    orientation = next(note for note in notes if "march_dollase" in note)
+    assert "random powder" in orientation
+    assert "span it further" not in orientation

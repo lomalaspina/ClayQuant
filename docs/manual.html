@@ -721,6 +721,14 @@ parameter whose fitted weight piles up on an end of its range, and the fit recor
 metadata without being asked. Merely including an end value among others is not flagged; the default
 threshold is 80 % of a phase's coefficient.</p>
 
+<p>Two cases look identical in a table of numbers and are not the same thing, so they are worded
+differently. A crystallite thickness sitting on the largest value calculated means the data wanted a
+larger one and the library should be extended. A composition sitting on 1.00 means the data wants the
+pure phase, and there is nothing beyond it to extend to &mdash; the fit has answered rather than run
+out of room, and the same goes for an orientation parameter at <var>r</var> = 1, which is a random
+powder. Advice to span those further is advice that cannot be taken, and a warning a user learns to
+ignore is worse than none.</p>
+
 <p>What prompted it: a measured pure illite standard put 94 % of its illite on the 0.99 entry of the
 illite/smectite series, the highest the series went. That reported 1 % of smectite the specimen did
 not have, and reported the end of a range as though it were a composition. The series now reaches
@@ -3178,7 +3186,7 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
 <tr><td>Interstratification reporting</td><td>5 automated, across the I/S series</td>
 <td>Host-layer fraction reported beside the phase name</td></tr>
-<tr><td>Parameters on a range edge</td><td>9 automated, including that the end member is the pure phase</td>
+<tr><td>Parameters on a range edge</td><td>12 automated, including that the end member is the pure phase and that a physical limit reads differently from a library one</td>
 <td>Reported by every fit; both series extended to their end member</td></tr>
 <tr><td>Pure-mineral basal ratios</td><td>14 automated; three single-phase mounts;
 eight candidate causes of the chlorite shortfall</td>
@@ -3194,7 +3202,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>231 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>234 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

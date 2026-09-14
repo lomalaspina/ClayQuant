@@ -22,6 +22,7 @@ otherwise read the output as relative.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -173,6 +174,26 @@ class FitResult:
         return "\n".join(lines)
 
 
+PHYSICAL_BOUNDS: dict[str, dict[float, str]] = {
+    "fraction": {
+        1.0: "the pure host end member",
+        0.0: "the pure second component",
+    },
+    "march_dollase": {
+        1.0: "a random powder, the least oriented a platy clay can be",
+    },
+}
+"""Ends of a range that are physical limits rather than where the library stops.
+
+The distinction changes what a caller can do about it.  A crystallite thickness
+piled up on the largest value calculated means the data wanted a larger one and
+the library should be extended.  A composition piled up on 1.00 means the data
+wants the pure phase, and there is nothing beyond it to extend to - the fit has
+given an answer, not run out of room.  Telling the user to span it further there
+is advice they cannot take.
+"""
+
+
 def parameters_at_an_edge(
     result: "FitResult", library, threshold: float = 0.8
 ) -> list[str]:
@@ -216,10 +237,23 @@ def parameters_at_an_edge(
             continue
         for end, where in ((values[0], "lowest"), (values[-1], "highest")):
             share = weight.get((key, end), 0.0) / total[key]
-            if share >= threshold:
-                # A phase name may itself carry a slash - "I/S", "C/S" - so the
-                # parameter is what follows the *last* one.
-                phase, name = key.rsplit("/", 1)
+            if share < threshold:
+                continue
+            # A phase name may itself carry a slash - "I/S", "C/S" - so the
+            # parameter is what follows the *last* one.
+            phase, name = key.rsplit("/", 1)
+            meaning = next(
+                (text for value, text in PHYSICAL_BOUNDS.get(name, {}).items()
+                 if math.isclose(end, value)),
+                None,
+            )
+            if meaning is not None:
+                notes.append(
+                    f"{phase}: {share * 100:.0f} % of the fit sits on {name} = {end:g}, which "
+                    f"is {meaning} - the end of what can exist rather than the end of the "
+                    f"library, so read it as the answer"
+                )
+            else:
                 notes.append(
                     f"{phase}: {share * 100:.0f} % of the fit sits on {name} = {end:g}, the "
                     f"{where} value the library holds, so {name} is a bound here and not a "
