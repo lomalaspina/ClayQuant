@@ -124,6 +124,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-14">A.14 Weight percent</a>
 <a href="#a-15">A.15 Internal standard</a>
 <a href="#a-16">A.16 Refined structures</a>
+<a href="#a-17">A.17 Pure minerals</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -1225,6 +1226,52 @@ Build it on the same 2&theta; grid as the measurements.</p>
 
 <p>Building the default library takes about three minutes. Within the interface the same operation
 is available as <em>Build library now</em>, using the current instrument settings.</p>
+
+<h4>Chlorite compositions</h4>
+
+<p>The library holds one chlorite by default, the published structure, and that is the recommended
+setting. The two octahedral sheets of a chlorite take iron for magnesium in proportions that vary
+from one deposit to the next, iron scatters about twice as strongly as the magnesium it replaces, and
+each sheet sits at a definite height in the layer, so the composition does act directly on the basal
+intensities a quantification is read from. Whether that matters enough to fit is a separate question,
+and on the two pure chlorites of &sect;<a href="#a-17">A.17</a> it did not: the fit improved the
+residual only 1.5 to 1.7 times, drove one specimen to implausibly little iron, and ran against the
+bound of the crystallite-thickness grid.</p>
+
+<p>So the facility is there for a specimen where the evidence calls for it, and is off by default.
+Unlike the illite/smectite ratio there is no generic set of compositions worth spanning; fit the
+composition to a measured pattern of a pure chlorite, check that the residual improves by enough to
+be worth having and that nothing lands on a bound, and only then calculate the library for the
+values that came out:</p>
+
+<pre><code>clayquant-build-library --chlorite-iron 0.35/0.20,0.55/0.30</code></pre>
+
+<p>Each pair is the iron occupancy of the 2:1 layer's octahedral sheet and of the interlayer
+hydroxide sheet. Every pair gets its own set of chlorite patterns, all grouped under the phase
+<span class="kw">chlorite</span>, so the fit chooses among compositions as it already chooses among
+layer spacings and orientations, and the quantification reports one chlorite. The cell mass follows
+the substitution, so the weight percent is consistent with whichever composition the fit chooses.</p>
+
+<p>To measure the pairs, from a pattern of the pure mineral:</p>
+
+<pre><code>from clayquant.composition import fit_chlorite_iron
+from clayquant.io import read_pattern
+
+fit = fit_chlorite_iron(read_pattern("Chlorite_pure.xrdml"), instrument)
+print(fit.describe())</code></pre>
+
+<p>The fit uses ratios of basal intensities within the one pattern, not the intensities themselves,
+so it needs neither a standard nor a known amount of material nor a known texture: preferred
+orientation multiplies a basal series by a single factor and divides straight out. It reports the
+residual beside the residual of the published structure, so a composition that is no improvement says
+so &mdash; and reports the crystallite thickness it settled on, because one at the edge of the grid
+means the composition absorbed something that was not composition.</p>
+
+<div class="warn">Check the integration window before believing the result. A clay basal reflection
+has a diffuse tail from stacking disorder that carries much of its area, so a window that looks ample
+beside the peak width can hold a different fraction of each order &mdash; which is exactly what a
+ratio of orders responds to. &sect;<a href="#a-17">A.17</a> records a conclusion drawn from a window
+too narrow by a factor of three, and its retraction.</div>
 
 <h2 id="s5">5 Operating procedure</h2>
 
@@ -2890,6 +2937,104 @@ as <span class="kw">hkl_Is</span> peak sets has no clay structure in it, and the
 rather than succeeding emptily. 21 automated tests cover the reading, the name mapping, the
 substitution inside the loader, and the restoration of the published structures afterwards.</p>
 
+<h3 id="a-17">A.17 Against measurements of the pure minerals</h3>
+
+<p><strong>Reasoning.</strong> Every comparison up to here has been against an analysis of a mixture,
+where a disagreement can lie in the calculation, in the phase selection, in the texture of one phase
+among several, or in the reference itself. A measurement of a single pure mineral removes all of that
+at once. And one quantity in such a pattern is free of the two things a pure mount does not reveal
+&mdash; how much material is in the beam, and how well oriented it is: the <em>ratio</em> of one
+basal intensity to another. Preferred orientation multiplies a whole basal series by one factor
+(&sect;<a href="#s2-9">2.9</a>), so it divides out completely, and so does the amount of material.
+What is left in a basal ratio is the structure factors, the Lorentz&ndash;polarization factor, the
+beam-overflow correction and the crystallite thickness distribution.</p>
+
+<p><strong>Method.</strong> Oriented air-dried mounts of separate pure clay minerals, measured on one
+instrument under one setting within fourteen hours: 240 mm radius, graded incident mirror, 0.03 and
+0.02 rad Soller slits, fixed 0.5&deg; divergence and anti-scatter slits, 14 mm mask, 0.0167&deg;
+steps, 19.7 s per step, no attenuator. Each 00<var>l</var> was integrated over &plusmn;1.0&deg; of
+where the layer spacing puts it, after peak-stripped background subtraction, and divided by another
+order of the same pattern. The calculation used the published structures and the same instrument
+description, at the crystallite thickness that best matches the measured peak widths.</p>
+
+<div class="warn"><strong>The integration window is not a detail, and getting it wrong produced a
+confident and wrong conclusion.</strong> A clay basal reflection has a full width at half maximum
+near 0.1&ndash;0.2&deg;, so &plusmn;0.35&deg; looks more than ample. It is not. Stacking disorder
+gives these reflections a long diffuse tail, and on one of the chlorites below a &plusmn;0.35&deg;
+window held only 36&ndash;72 % of each order's area &mdash; and a different fraction of each order,
+which is precisely what a ratio of orders is sensitive to. At &plusmn;1.0&deg; the same pattern gives
+85&ndash;93 %. The 005 ratio of that chlorite reads 0.77 at &plusmn;0.35&deg;, 1.22 at
+&plusmn;0.6&deg; and 1.34 at &plusmn;1.0&deg;. An earlier version of this section reported the
+&plusmn;0.35&deg; figures and drew a conclusion from them that the corrected figures do not support;
+the retraction is below.</div>
+
+<div class="tablewrap"><table>
+<tr><th class="num">00<var>l</var></th><th class="num">Kaolinite</th>
+<th class="num">Chlorite A</th><th class="num">Chlorite B</th></tr>
+<tr><td class="num">001</td><td class="num">1.00</td><td class="num">0.94</td><td class="num">0.99</td></tr>
+<tr><td class="num">002</td><td class="num"><strong>1.05</strong></td><td class="num">1.00</td><td class="num">1.00</td></tr>
+<tr><td class="num">003</td><td class="num">0.92</td><td class="num">0.94</td><td class="num">1.18</td></tr>
+<tr><td class="num">004</td><td class="num">&mdash;</td><td class="num">1.34</td><td class="num">1.32</td></tr>
+<tr><td class="num">005</td><td class="num">&mdash;</td><td class="num">1.34</td><td class="num">1.18</td></tr>
+</table></div>
+
+<p class="small">Observed divided by calculated, each column normalised on the order shown as 1.00
+&mdash; 001 for kaolinite, 002 for the chlorites, 002 being the strongest chlorite basal. Integrated
+over &plusmn;1.0&deg;. The 006 of both chlorites is omitted: the calculated 006 falls close to a node
+of the structure factor, so its ratio is set by noise rather than by the model.</p>
+
+<p><strong>Result.</strong> Kaolinite's 002/001 comes back at <strong>1.05</strong>, and it is stable
+against the window: 1.02 at &plusmn;0.35&deg;, 1.05 at &plusmn;1.0&deg;, 1.08 at &plusmn;1.5&deg;.
+That is the strongest single piece of evidence in this appendix that the chain of
+&sect;<a href="#s2">2</a> is right &mdash; an absolute basal intensity ratio of a real mineral,
+reproduced to about 5 % with nothing fitted. Its 003 is 0.92, having read 0.65 at the narrow window.</p>
+
+<p>Both chlorites come out about 1.3 on 004 and 1.2&ndash;1.3 on 005: the calculation
+<em>under</em>-produces the higher orders, by a similar amount in both specimens. Their 003 differs
+(0.94 against 1.18), which is the one place they are not alike.</p>
+
+<h4>A retraction</h4>
+
+<p>Read at &plusmn;0.35&deg; and at a crystallite thickness fixed at 25 layers rather than matched to
+the observed widths, the same two chlorites appeared to depart from the published clinochlore <em>in
+opposite directions</em> &mdash; 0.62 against 0.83 on 003, 0.61 against 0.81 on 005. That looked like
+strong evidence that the two specimens differ in octahedral iron, that no single structure can serve
+both, and that a per-specimen composition was needed. Corrected, the two chlorites agree with each
+other to within 0.02 on 004 and differ from the published structure in the <em>same</em> direction on
+every order but 003. The pattern is a common shortfall in the calculated higher orders, not a
+composition difference between specimens, so this data does not call for a per-specimen chlorite
+composition; the published structure remains the better-supported default.</p>
+
+<p>Fitting the iron content anyway bears that out rather than contradicting it. On these two patterns
+the two-parameter fit of &sect;<a href="#s4-4">4.4</a> reduces the residual by only 1.5 to 1.7
+times, drives one specimen to essentially zero octahedral iron &mdash; which for a mineral sold as an
+iron-rich chlorite is not credible &mdash; and settles against the lower bound of the crystallite
+thickness grid. A parameter at its bound is a parameter the measurement has not determined, and three
+signs of a model straining to fit are worth more than the improvement in the number being minimised.
+The mechanism is available and is verified against patterns calculated from known compositions, which
+it recovers; what these measurements do not show is a need for it.</p>
+
+<p><strong>What this does not cover.</strong> Only kaolinite and the two chlorites are single-phase
+enough to use. Of the other mounts measured, an illite's strongest reflection is quartz rather than
+illite, two smectites and a saponite carry several per cent of quartz, a bentonite carries opal-CT,
+and a synthetic hectorite is close to X-ray amorphous. None of those can serve as a reference for a
+basal ratio until the accompanying phase is either removed or modelled. All the mounts are also
+air-dried, while the quantitative fit is made on the glycol-solvated mount
+(&sect;<a href="#s2-1">2.1</a>), so nothing here bears on the expandable clays at all.</p>
+
+<p><strong>And the absolute scale.</strong> A basal <em>ratio</em> needs no standard, which is why
+these figures can be given at all. The absolute scale &mdash; the <var>k<sub>p</sub></var> of
+&sect;<a href="#s2-13">2.13</a> &mdash; needs one, measured through the same optics. A corundum mount
+measured alongside these was run with a 0.25&deg; divergence slit where the clays had 0.5&deg;, and
+with a fixed slit the ratio between two such settings is not a constant: where the beam overflows the
+specimen both slits illuminate the same area and the ratio is 1, where neither overflows it is 2, and
+the crossover falls between 2&theta; = 6&deg; and 12&deg; at a place that depends on the specimen
+length. That is exactly where the diagnostic basal reflections are &mdash; glycol-smectite 001 at
+5.2&deg;, chlorite 001 at 6.2&deg;, illite 001 at 8.8&deg;, kaolinite 001 at 12.3&deg;. A standard
+measured through the clays' own optics avoids putting a modelled factor of up to two across the very
+peaks the calibration is for, so that is what &sect;<a href="#s2-13">2.13</a> asks for and this
+appendix does not yet report.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -2910,6 +3055,8 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
 <td>Pass; the absolute scale and the unaccounted fraction</td></tr>
+<tr><td>Pure-mineral basal ratios</td><td>12 automated; three single-phase mounts</td>
+<td>Kaolinite 002/001 = 1.05; a chlorite conclusion retracted</td></tr>
 <tr><td>Refined structures</td><td>27 automated; against a refinement of one specimen, and
 against a CIF written by TOPAS</td>
 <td><var>R</var><sub>wp</sub> 35.9 &rarr; 31.2 %; adopted for the clays</td></tr>
@@ -2921,7 +3068,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>197 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>212 tests</strong> and runs in a few seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

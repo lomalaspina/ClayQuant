@@ -83,7 +83,7 @@ def measure_basal_series(
     spacing: float,
     orders: tuple[int, ...] = (1, 2, 3, 4, 5),
     reference: int = 2,
-    half_width: float = 0.35,
+    half_width: float = 1.0,
     background: "BackgroundModel | None" = None,
 ) -> BasalSeries:
     """Integrate the 00l reflections of a measured pattern of one pure phase.
@@ -91,6 +91,17 @@ def measure_basal_series(
     Each order is integrated over ``half_width`` degrees either side of where the
     spacing puts it.  Orders outside the measured range, and orders whose window
     would run off the end of it, are left out rather than reported as zero.
+
+    ``half_width`` has to be generous, and 0.35 deg - a width that looks ample
+    beside a basal reflection whose full width at half maximum is 0.1 to 0.2 deg
+    - is not.  A basal reflection of a real clay carries a long diffuse tail from
+    stacking disorder: on a measured chlorite such a window held between 36 %
+    and 72 % of each order's area, and, worse for a ratio, a *different*
+    fraction of each order.  At 1.0 deg the same pattern gives 85 to 93 %, and
+    the obs/calc ratios of the higher orders settle: a chlorite 005 read 0.77
+    at 0.35 deg, 1.22 at 0.6 deg and 1.34 at 1.0 deg, so a conclusion drawn at
+    0.35 deg was measuring the window.  Check the sensitivity to this number
+    before believing a result that depends on it.
     """
     model = background or BackgroundModel(chebyshev_degree=4, inverse=True, inverse_offset=1.0)
     fit = model.fit(pattern.two_theta, pattern.intensity, snip_window=4.0)
@@ -127,7 +138,7 @@ def calculated_basal_series(
     instrument: Instrument,
     mean_layers: float,
     csds_beta: float = 0.35,
-    half_width: float = 0.35,
+    half_width: float = 1.0,
 ) -> dict[int, float]:
     """The same integrals, from a calculated pattern of ``layer``."""
     grid = np.arange(series.two_theta[0] - 2.0, series.two_theta[-1] + 2.0, 0.01)
@@ -185,9 +196,10 @@ def fit_chlorite_iron(
     instrument: Instrument,
     spacing: float = 14.2782,
     irons: np.ndarray | None = None,
-    mean_layers: tuple[float, ...] = (10.0, 15.0, 25.0, 40.0, 70.0),
+    mean_layers: tuple[float, ...] = (6.0, 8.0, 10.0, 15.0, 25.0, 40.0, 70.0),
     reference: int = 2,
     orders: tuple[int, ...] = (1, 2, 3, 4, 5),
+    half_width: float = 1.0,
 ) -> ChloriteComposition:
     """Fit the octahedral iron of a chlorite to a measured pure-phase pattern.
 
@@ -196,13 +208,16 @@ def fit_chlorite_iron(
     parameters wide, and bounded on both by being occupancies; and because a
     grid cannot converge to a local minimum and report it as the answer.
     """
-    series = measure_basal_series(pattern, spacing, orders=orders, reference=reference)
+    series = measure_basal_series(
+        pattern, spacing, orders=orders, reference=reference, half_width=half_width
+    )
     observed = series.normalised()
     compared = [order for order in series.orders if order != reference]
 
     def residual_of(iron_a: float, iron_b: float, layers: float):
         calculated = calculated_basal_series(
-            chlorite_layer(iron_a, iron_b), series, instrument, layers
+            chlorite_layer(iron_a, iron_b), series, instrument, layers,
+            half_width=half_width,
         )
         difference = [observed[order] - calculated[order] for order in compared]
         return float(np.sqrt(np.mean(np.square(difference)))), calculated

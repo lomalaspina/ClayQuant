@@ -150,3 +150,34 @@ def test_the_description_reports_what_was_fitted_and_what_it_beats():
     text = fit.describe()
     assert "Chlorite_16" in text and "0.350" in text and "0.200" in text
     assert "4.0 times better" in text
+
+
+def test_the_integration_window_must_not_truncate_the_tails():
+    """The defect that produced a confident conclusion from an artefact.
+
+    A basal reflection of a real clay has a full width at half maximum near
+    0.1-0.2 deg, so a window of +-0.35 deg looks more than ample.  It is not: the
+    diffuse tail from stacking disorder carries much of the area, and a narrow
+    window keeps a different fraction of each order - which is exactly the
+    quantity a ratio of orders is sensitive to.  Measured on a calculated
+    pattern here, where the truth is known; on a real chlorite the same window
+    moved the 005 ratio from 0.77 to 1.34.
+    """
+    pattern = synthetic(0.3, 0.15, mean_layers=8.0)
+    narrow = measure_basal_series(pattern, 14.2782, half_width=0.35)
+    wide = measure_basal_series(pattern, 14.2782, half_width=1.0)
+
+    kept = {}
+    for order, narrow_area, wide_area in zip(narrow.orders, narrow.area, wide.area):
+        assert wide_area >= narrow_area, "a wider window cannot hold less"
+        kept[order] = narrow_area / wide_area
+
+    assert min(kept.values()) < 0.95, "if the narrow window lost nothing there is nothing to test"
+    spread = max(kept.values()) - min(kept.values())
+    assert spread > 0.02, (
+        "the point of the test: the narrow window keeps a different fraction of "
+        f"each order, here {kept}"
+    )
+    # And the default is the wide one, so a caller who thinks about none of this
+    # is not silently handed the truncated answer.
+    assert measure_basal_series(pattern, 14.2782).area == wide.area
