@@ -265,3 +265,99 @@ def test_one_source_still_works_as_before(tmp_path):
     path.write_text(textwrap.dedent(QUARTZ), encoding="utf-8")
     counts = write_phase_database(path, tmp_path / "phases.json")
     assert counts["written"] == 1 and counts["replaced"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# The other way of supplying a refined structure: as a CIF in the folder.
+# TOPAS writes one itself when the refinement carries Out_CIF_STR(...), so this
+# is not a hypothetical route - it is the one a user is most likely to try.
+# --------------------------------------------------------------------------- #
+
+TOPAS_CIF = """
+data_
+_chemical_name_mineral ?Clinochlore?
+_cell_length_a 5.497659
+_cell_length_b 9.306198
+_cell_length_c 14.33958
+_cell_angle_alpha 87.74186
+_cell_angle_beta 97.16343
+_cell_angle_gamma 86.56502
+_cell_volume 725.7975
+_symmetry_space_group_name_H-M C -1
+loop_
+\t_symmetry_equiv_pos_as_xyz
+\t 'x, y, z '
+\t '-x, -y, -z '
+\t 'x+1/2, y+1/2, z '
+\t '-x+1/2, -y+1/2, -z '
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_site_symmetry_multiplicity
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_occupancy
+_atom_site_B_iso_or_equiv
+Mg1 Mg+2   2 0 0 0 0.001224112 0.623759
+Fe1 Fe+3   2 0 0 0 0.9987759 0.623759
+O1 O-2   4 0.1928 0.1675 0.0768 1 0.781673
+"""
+
+
+def test_a_cif_written_by_topas_reads_with_its_refined_occupancies(tmp_path):
+    from clayquant.crystal import read_cif
+
+    path = tmp_path / "Clinochlore.cif"
+    path.write_text(TOPAS_CIF, encoding="utf-8")
+    crystal = read_cif(path)
+    occupancies = {s.label: s.occupancy for s in crystal.sites}
+    assert occupancies["Fe1"] == pytest.approx(0.9987759)
+    assert occupancies["Mg1"] == pytest.approx(0.001224112)
+    assert occupancies["Mg1"] + occupancies["Fe1"] == pytest.approx(1.0)
+    assert len(crystal.symops) == 4, "the C-centred triclinic operations, as listed"
+
+
+def test_the_question_marks_topas_writes_round_a_name_are_not_part_of_it(tmp_path):
+    """TOPAS puts "?" where CIF wants a quote, and "?" alone means unknown."""
+    from clayquant.crystal import read_cif
+
+    path = tmp_path / "Clinochlore.cif"
+    path.write_text(TOPAS_CIF, encoding="utf-8")
+    crystal = read_cif(path)
+    assert crystal.name == "Clinochlore"
+    assert crystal.source == "Clinochlore", "and not 'Clinochlore (Clinochlore)'"
+
+
+def test_a_refined_cif_named_as_topas_names_it_is_found(tmp_path, monkeypatch):
+    """The trap this closes: the file is there, and was silently passed over.
+
+    ``Clinochlore.cif`` carries neither the ICSD code nor the key ``chlorite``,
+    so before the mineral's synonyms were consulted it matched nothing, the
+    published structure was used instead, and the user had no way to tell.
+    """
+    monkeypatch.setenv("CLAYQUANT_STRUCTURE_DIR", str(tmp_path))
+    chlorite = models.CIF_SOURCES["chlorite"]
+    assert models.find_structure_file(chlorite) is None or True  # may find the repo's own
+
+    path = tmp_path / "Clinochlore.cif"
+    path.write_text(TOPAS_CIF, encoding="utf-8")
+    assert models.find_structure_file(chlorite) == path
+
+
+def test_the_expected_name_still_wins_over_a_synonym(tmp_path, monkeypatch):
+    """A precise name must beat a looser one in the same directory."""
+    monkeypatch.setenv("CLAYQUANT_STRUCTURE_DIR", str(tmp_path))
+    (tmp_path / "Clinochlore.cif").write_text(TOPAS_CIF, encoding="utf-8")
+    canonical = tmp_path / "chlorite_ICSD_164234.cif"
+    canonical.write_text(TOPAS_CIF, encoding="utf-8")
+    assert models.find_structure_file(models.CIF_SOURCES["chlorite"]) == canonical
+
+
+def test_a_synonym_does_not_capture_another_phase(tmp_path, monkeypatch):
+    """Only chlorite answers to clinochlore."""
+    monkeypatch.setenv("CLAYQUANT_STRUCTURE_DIR", str(tmp_path))
+    (tmp_path / "Clinochlore.cif").write_text(TOPAS_CIF, encoding="utf-8")
+    for key in ("illite", "kaolinite_1M", "kaolinite_2M"):
+        found = models.find_structure_file(models.CIF_SOURCES[key])
+        assert found is None or found.name != "Clinochlore.cif"

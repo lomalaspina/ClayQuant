@@ -52,6 +52,17 @@ class CifSource:
     icsd: int
     description: str
     layers_per_cell: int
+    synonyms: tuple[str, ...] = ()
+    """Other names the same mineral goes under, for finding a file.
+
+    A structure exported from somewhere else is named by whoever exported it,
+    and TOPAS writing a refined structure out names it after the phase as the
+    refinement called it.  A chlorite refined as "Clinochlore" arrives as
+    ``Clinochlore.cif``, which carries neither the ICSD code nor the key, so
+    without this it is passed over in silence and the published structure used
+    instead - the user drops in the refined file, sees no change, and has
+    nothing to go on.
+    """
 
 
 CIF_SOURCES: dict[str, CifSource] = {
@@ -68,6 +79,7 @@ CIF_SOURCES: dict[str, CifSource] = {
             key="chlorite",
             filename="chlorite_ICSD_164234.cif",
             icsd=164234,
+            synonyms=("clinochlore",),
             description=(
                 "Clinochlore IIb-4, C-1, Zanazzi, Comodi, Nazzareni & Andreozzi (2009) "
                 "Eur. J. Mineral. 21, 581-589"
@@ -149,11 +161,16 @@ def find_structure_file(source: "CifSource") -> Path | None:
     be used rather than reported missing over its spelling.  So a file is
     accepted when its name carries the ICSD code, or when it carries the phase
     name (``kaolinite_2M`` and ``kaolinite_1M`` being distinguished by the
-    polytype, which is part of the key).
+    polytype, which is part of the key), or one of the mineral's
+    :attr:`CifSource.synonyms`.
+
+    The four are tried in that order, and each is tried against every file in a
+    directory before the next directory is looked at, so a precise name always
+    beats a looser one and a nearer directory beats a further one.
     """
     canonical = source.filename.lower()
     code = str(source.icsd)
-    key = _normalised(source.key)
+    names = [_normalised(source.key), *(_normalised(name) for name in source.synonyms)]
 
     for directory in structure_directories():
         if not directory.is_dir():
@@ -169,9 +186,10 @@ def find_structure_file(source: "CifSource") -> Path | None:
         for entry in files:
             if code in _normalised(entry.stem):
                 return entry
-        for entry in files:
-            if key in _normalised(entry.stem):
-                return entry
+        for name in names:
+            for entry in files:
+                if name in _normalised(entry.stem):
+                    return entry
     return None
 
 

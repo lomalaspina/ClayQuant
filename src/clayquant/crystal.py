@@ -170,7 +170,10 @@ def read_cif(path: str | Path) -> "Crystal":
         if raw.startswith("_chemical_name_mineral"):
             tokens = _tokenize(raw)
             if len(tokens) >= 2:
-                mineral = _unquote(tokens[1]).strip("'\" ")
+                # TOPAS writes a name out as ?Clinochlore? - it uses "?" where
+                # CIF wants a quote - and a bare "?" is CIF's own marker for a
+                # value that is not known, which is not a name either.
+                mineral = _unquote(tokens[1]).strip("'\"? ")
             continue
         if raw.startswith("_database_code_ICSD"):
             tokens = _tokenize(raw)
@@ -263,7 +266,10 @@ def read_cif(path: str | Path) -> "Crystal":
         sites=sites,
         symops=symops,
         name=mineral or name,
-        source=f"{mineral} ({name})" if mineral else name,
+        # "Clinochlore (ICSD 164234)" is worth saying; "Clinochlore
+        # (Clinochlore)", which is what a file carrying only a mineral name
+        # gives, is not.
+        source=f"{mineral} ({name})" if mineral and name and name != mineral else (mineral or name),
     )
 
 
