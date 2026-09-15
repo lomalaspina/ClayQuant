@@ -125,6 +125,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-15">A.15 Internal standard</a>
 <a href="#a-16">A.16 Refined structures</a>
 <a href="#a-17">A.17 Pure minerals</a>
+<a href="#a-18">A.18 External standard</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -794,6 +795,11 @@ random mount fixes the composition, the oriented fit then yields <var>k<sub>p</s
 oriented mount cannot be spiked usefully, since the standard does not orient as the clays do and its
 share in the mount is not its share in the suspension.</p>
 
+<p>The other route needs no mixture at all: mount one pure mineral, and measure a standard of known
+weight separately through the same optics. Then the mass the specimen holds is known independently of
+any fit, and <var>k<sub>p</sub></var> is what stands between it and the mass (2.25) infers. That is
+the external-standard method below, and &sect;<a href="#a-18">A.18</a> reports it.</p>
+
 <div class="note">The older route is still available for a laboratory that has measured reference
 intensity ratios of its own: <span class="kw">Quantification.weight_percent</span> divides each
 phase's share of diffracted intensity by its ratio.</div>
@@ -833,7 +839,55 @@ The standard must share the specimen's texture for (2.26) to hold, and a spike a
 suspension does not: it does not plate onto the slide as the clays do, so its share of the mount is
 not its share of the suspension. Equation (2.26) is for a pressed random powder. This is also why the
 internal-standard route cannot by itself measure <var>k<sub>p</sub></var> for an oriented mount
-(&sect;<a href="#a-15">A.15</a>).</div>
+(&sect;<a href="#a-15">A.15</a>); an <em>external</em> standard can, and is treated next.</div>
+
+<h4>An external standard, and the absolute scale</h4>
+
+<p>The restriction just stated &mdash; that a standard mixed into an oriented mount cannot work
+&mdash; does not apply to a standard that is never mixed in. Measure a standard of known weight
+fraction on its own, under the same optics, and it is never asked to share the specimen's texture.
+That is the external-standard method of O'Connor and Raven (1988), and it is what turns the
+proportionality of (2.25) into an equality.</p>
+
+<p>The standard's own measurement fixes one instrument constant,</p>
+
+<div class="eq"><var>K</var> = <var>S</var><sub>std</sub>(<var>ZMV</var>)<sub>std</sub> &middot;
+(<var>&mu;</var>/<var>&rho;</var>)<sub>std</sub> / <var>W</var><sub>std</sub>
+<span class="n">(2.27)</span></div>
+
+<p>and any later measurement on the same instrument then gives an absolute weight fraction without a
+spike,</p>
+
+<div class="eq"><var>W<sub>p</sub></var> = <var>S<sub>p</sub></var>(<var>ZMV</var>)<sub><var>p</var></sub>
+&middot; (<var>&mu;</var>/<var>&rho;</var>)<sub>spec</sub> / <var>K</var>
+<span class="n">(2.28)</span></div>
+
+<p>where <var>S</var>(<var>ZMV</var>) is, in ClayQuant's normalisation, exactly the sum
+&Sigma;<var>c<sub>e</sub></var><var>M<sub>e</sub></var>/<var>s<sub>e</sub></var> of (2.25), and
+<var>&mu;</var>/<var>&rho;</var> is the mass attenuation coefficient of the whole specimen at the
+wavelength used. Absorption enters because the two measurements sample different depths: a weakly
+absorbing specimen returns intensity from further down, and the ratio of the two coefficients
+corrects for it. <span class="kw">absorption.py</span> computes
+<var>&mu;</var>/<var>&rho;</var> for a structure from its mass fractions and tabulated elemental
+coefficients at Cu K&alpha;, and refuses &mdash; rather than guessing &mdash; for an element it does
+not hold.</p>
+
+<p>Two conditions have to hold, and both are checkable rather than assumed. The specimen must be
+thicker than the beam penetrates, since (2.28) is derived for infinite thickness;
+<span class="kw">penetration_depth</span> and <span class="kw">thick_enough</span> give the depth
+sin<var>&theta;</var>/2<var>&mu;</var> and test a film against it, which for a clay mount matters most
+at low angle where the depth is smallest. And the two measurements must be made through the same
+optics: a difference in divergence slit, mask, counting time or tube setting changes <var>K</var> and
+is not recoverable afterwards. So <span class="kw">ExternalStandard</span> records the conditions of
+the standard's measurement and <span class="kw">comparable_with</span> names every difference it finds
+against a later one, rather than scaling by a constant that no longer applies.</p>
+
+<p>For a mount of a <em>known</em> phase this reads backwards and measures
+<var>k<sub>p</sub></var> directly: <var>W<sub>p</sub></var> is known, so
+<span class="kw">calibration_factor</span> returns the ratio of the mass (2.25) infers to the mass
+the specimen holds. That is the one route to <var>k<sub>p</sub></var> for an oriented mount that does
+not need an independent analysis of a mixture, and &sect;<a href="#a-18">A.18</a> carries it out on
+four pure clay mounts against a corundum measured through the same optics.</p>
 
 <p>Results are given on two bases: over all fitted phases, and over the clay minerals alone,
 renormalised to 100 % with the accompanying minerals removed. The latter is the customary basis for
@@ -848,6 +902,7 @@ reporting a clay mineral assemblage.</p>
 <tr><td class="kw">crystal.py</td><td>CIF reading, symmetry expansion, the <span class="kw">Crystal</span> and
 <span class="kw">LayerModel</span> classes, structure factors, derivation of a layer model from a polytype cell</td></tr>
 <tr><td class="kw">scattering.py</td><td>Waasmaier&ndash;Kirfel scattering factors, species normalisation, displacement factors</td></tr>
+<tr><td class="kw">absorption.py</td><td>mass attenuation coefficients at Cu K&alpha;, penetration depth, the infinite-thickness test</td></tr>
 <tr><td class="kw">emission.py</td><td>emission profiles, including the five-line Cu K&alpha; description</td></tr>
 <tr><td class="kw">optics.py</td><td>Lorentz&ndash;polarization, March&ndash;Dollase, beam overflow</td></tr>
 <tr><td class="kw">profile.py</td><td>pseudo-Voigt peak shapes, Caglioti widths, Scherrer broadening</td></tr>
@@ -1862,6 +1917,11 @@ Kristallographie</em> <strong>83</strong>, 75&ndash;88.</li>
 with NumPy. <em>Nature</em> <strong>585</strong>, 357&ndash;362.</li>
 <li>Hendricks, S. &amp; Teller, E. (1942) X-ray interference in partially ordered layer lattices.
 <em>Journal of Chemical Physics</em> <strong>10</strong>, 147&ndash;167.</li>
+<li>Hubbell, J. H. &amp; Seltzer, S. M. (1995) <em>Tables of X-ray mass attenuation coefficients
+and mass energy-absorption coefficients</em>. NIST Standard Reference Database 126, National
+Institute of Standards and Technology, Gaithersburg. <span class="small">(Source of the elemental
+mass attenuation coefficients at Cu K&alpha; tabulated in
+<span class="kw">absorption.py</span>.)</span></li>
 <li>Ibers, J. A. (1962) Atomic scattering factors. In K. Lonsdale (ed.) <em>International Tables
 for X-Ray Crystallography</em>, Vol. III, Kynoch Press, Birmingham. <span class="small">(The
 scattering factors used in the original refinement of the glycol&ndash;smectite model; ClayQuant
@@ -1886,6 +1946,9 @@ Mineralogical Society, London, 393&ndash;445.</li>
 <em>Zeitschrift f&uuml;r Kristallographie</em> <strong>81</strong>, 285&ndash;297.</li>
 <li>Moore, D. M. &amp; Reynolds, R. C. Jr. (1997) <em>X-Ray Diffraction and the Identification and
 Analysis of Clay Minerals</em>, 2nd edn. Oxford University Press, Oxford.</li>
+<li>O'Connor, B. H. &amp; Raven, M. D. (1988) Application of the Rietveld refinement procedure
+in assaying powdered mixtures. <em>Powder Diffraction</em> <strong>3</strong>, 2&ndash;6.
+<span class="small">(The external-standard method of &sect;<a href="#s2-13">2.13</a>.)</span></li>
 <li>P&eacute;zerat, H. &amp; M&eacute;ring, J. (1954) Influence des substitutions isomorphes sur les
 param&egrave;tres de structure des phyllites. <em>Clay Minerals Bulletin</em> <strong>2</strong>,
 156&ndash;162. <span class="small">(Source of the 2:1 layer coordinates on which the
@@ -3161,8 +3224,197 @@ the crossover falls between 2&theta; = 6&deg; and 12&deg; at a place that depend
 length. That is exactly where the diagnostic basal reflections are &mdash; glycol-smectite 001 at
 5.2&deg;, chlorite 001 at 6.2&deg;, illite 001 at 8.8&deg;, kaolinite 001 at 12.3&deg;. A standard
 measured through the clays' own optics avoids putting a modelled factor of up to two across the very
-peaks the calibration is for, so that is what &sect;<a href="#s2-13">2.13</a> asks for and this
-appendix does not yet report.</p>
+peaks the calibration is for. That standard has since been measured, on these mounts' own settings,
+and &sect;<a href="#a-18">A.18</a> reports what it gives &mdash; including a check on the
+orientation correction that bears directly on the shortfall left open above.</p>
+
+<h3 id="a-18">A.18 A standard through the clays' own optics</h3>
+
+<p><strong>Reasoning.</strong> Everything in &sect;<a href="#a-14">A.14</a> through
+&sect;<a href="#a-17">A.17</a> is either a ratio or a relative proportion. The one number none of
+them reaches is the absolute one: how much mass a fitted coefficient stands for in an oriented mount,
+the <var>k<sub>p</sub></var> of &sect;<a href="#s2-13">2.13</a>. An internal standard cannot supply
+it, because a spike does not orient as the clays do (&sect;<a href="#a-15">A.15</a>). An external
+standard can, because it is never asked to: it is measured on its own, and only the instrument is
+shared. And on a mount of a <em>pure</em> mineral the answer needs no independent analysis at all
+&mdash; the weight fraction is the purity, so (2.28) has a known answer and
+<var>k<sub>p</sub></var> is the amount by which it misses.</p>
+
+<p><strong>Method.</strong> A pressed corundum mount was measured under the settings of the pure clay
+mounts of &sect;<a href="#a-17">A.17</a>, and the agreement is exact rather than approximate
+&mdash; which matters, because the previous corundum available had a 0.25&deg; divergence slit
+against the clays' 0.5&deg;, and with a fixed slit that is a factor of up to two placed across the
+diagnostic low-angle peaks:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Setting</th><th>Corundum</th><th>The four clay mounts</th></tr>
+<tr><td>2&theta; range, step count</td><td class="num">3.008&ndash;39.990&deg;, 2214</td>
+<td class="num">3.008&ndash;39.990&deg;, 2214</td></tr>
+<tr><td>Counting time per step</td><td class="num">19.685 s</td><td class="num">19.685 s</td></tr>
+<tr><td>Divergence / anti-scatter slit</td><td class="num">0.5&deg; / 0.5&deg;</td>
+<td class="num">0.5&deg; / 0.5&deg;</td></tr>
+<tr><td>Mask</td><td class="num">14 mm</td><td class="num">14 mm</td></tr>
+<tr><td>Tube</td><td class="num">45 kV, 40 mA</td><td class="num">45 kV, 40 mA</td></tr>
+</table></div>
+
+<p class="small">All five measured within ten days on the same configuration.
+<span class="kw">ExternalStandard.comparable_with</span> compares these fields and reports nothing to
+flag; on the earlier corundum it named the slit difference.</p>
+
+<p>The mass attenuation coefficients that (2.27) and (2.28) need were computed from each structure's
+mass fractions and checked against published values for the compounds:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num"><var>&mu;</var>/<var>&rho;</var>, cm<sup>2</sup>/g</th>
+<th class="num">Published</th></tr>
+<tr><td>Corundum</td><td class="num">31.14</td><td class="num">31.1</td></tr>
+<tr><td>Quartz</td><td class="num">34.45</td><td class="num">34.4</td></tr>
+<tr><td>Calcite</td><td class="num">74.94</td><td class="num">74.8</td></tr>
+<tr><td>Kaolinite</td><td class="num">29.77</td><td class="num">&asymp; 30</td></tr>
+<tr><td>Illite</td><td class="num">42.12</td><td class="num">&mdash;</td></tr>
+<tr><td>Chlorite</td><td class="num">39.36</td><td class="num">&mdash;</td></tr>
+</table></div>
+
+<p class="small">At Cu K&alpha;, from Hubbell &amp; Seltzer (1995). The elemental table stops where
+its authors' does: an element it does not hold raises rather than being given a plausible value, and
+the discontinuity across the Cu absorption edge is preserved &mdash; iron is 308 cm<sup>2</sup>/g and
+nickel, two places further on, is 49, which is not a typographical error but the reason an iron-rich
+clay and a corundum cannot be compared without this correction.</p>
+
+<p><strong>Result.</strong> Each clay mount was fitted with three-dimensional powder patterns of its
+own mineral spanning the orientation parameter, so that the mount's own hkl-to-basal ratio determines
+<var>r</var> rather than leaving it free (&sect;<a href="#a-14">A.14</a>). The weight fraction each
+mount was credited with is its own purity, from the accompanying phases in the same fit.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th>Fitted as</th><th class="num"><var>W</var></th>
+<th class="num"><var>&mu;</var>/<var>&rho;</var></th><th class="num"><var>R</var><sub>wp</sub></th>
+<th class="num"><var>r</var></th><th class="num"><var>r</var><sup>&minus;3</sup></th>
+<th class="num"><var>k<sub>p</sub></var></th></tr>
+<tr><td>Kaolinite</td><td>kaolinite</td><td class="num">0.86</td><td class="num">29.77</td>
+<td class="num">71 %</td><td class="num">0.16</td><td class="num">244</td><td class="num"><strong>0.245</strong></td></tr>
+<tr><td>Chlorite A</td><td>chlorite</td><td class="num">0.97</td><td class="num">39.36</td>
+<td class="num">94 %</td><td class="num">1.00</td><td class="num">1.0</td><td class="num"><strong>0.216</strong></td></tr>
+<tr><td>Chlorite B</td><td>chlorite</td><td class="num">1.00</td><td class="num">39.36</td>
+<td class="num">94 %</td><td class="num">0.68</td><td class="num">3.2</td><td class="num"><strong>0.281</strong></td></tr>
+<tr><td>Illite</td><td>illite</td><td class="num">0.81</td><td class="num">42.12</td>
+<td class="num">86 %</td><td class="num">0.59</td><td class="num">4.9</td><td class="num"><strong>0.247</strong></td></tr>
+</table></div>
+
+<p class="small">Corundum standard: <var>R</var><sub>wp</sub> 41 % over the whole range, 33 % over
+20&ndash;39&deg;, fitted <var>r</var> = 0.99 as a pressed powder should be.
+<var>K</var> = 2.28 &times; 10<sup>4</sup> in the units of (2.27).</p>
+
+<p>Two things in that table are worth separating. The first is the spread: <strong>0.216 to 0.281,
+mean 0.247, a relative standard deviation of 11 % and a ratio of extremes of 1.30</strong>, across
+four mounts of three chemically different minerals. Texture, microabsorption and structural error
+are the three things <var>k<sub>p</sub></var> lumps together, and all three differ between these
+minerals &mdash; so a factor they share to within 13 % is not mostly any of them. It is a property of
+the comparison between a settled clay film and a pressed powder, which is what these four mounts have
+in common and the corundum does not.</p>
+
+<p>The second is a cross-check that falls out of it, and it is the stronger result. The orientation
+correction <var>r</var><sup>&minus;3</sup> (&sect;<a href="#s2-9">2.9</a>) is the largest single
+factor in an oriented-mount mass, and across these four mounts it ranges over
+<strong>a factor of 244</strong> &mdash; from a near-perfectly plated kaolinite at
+<var>r</var> = 0.16 to a chlorite that behaves as a random powder at <var>r</var> = 1.00. The mass
+inferred for each depends directly on it. If the <var>r</var><sup>&minus;3</sup> scaling of mass were
+wrong, four specimens spanning that range could not land on one factor; they land within 1.30. This
+is the first evidence in the manual that the orientation correction is right in magnitude and not
+merely in shape, and it comes from data rather than from the model.</p>
+
+<h4>What the missing factor of four is not</h4>
+
+<p>The calculation over-produces by 1/0.247 &asymp; 4 per unit mass in these mounts. The first
+suspect is specimen thickness, because (2.28) is derived for a specimen thicker than the beam
+penetrates and a settled clay film need not be. It is refuted twice over.</p>
+
+<p>Refuted by arithmetic: at the packing density of a settled film the penetration depth
+sin<var>&theta;</var>/2<var>&mu;</var> is 3.5 &micro;m at 6&deg; and 20 &micro;m at 35&deg; for
+illite, so a deposit of 50 &micro;m returns 100 % of the infinite-thickness intensity below 12&deg;
+and 88 % at 35&deg;, and 100 &micro;m returns 99 % everywhere. The thinness needed to lose three
+quarters of the intensity is 1.3&ndash;2.2 &micro;m depending on packing &mdash; below a single
+kaolinite booklet's worth of stacking, and far below any mount that survives handling.</p>
+
+<p>Refuted by the data, which is the part that settles it: absorption in a thin film is
+<em>angle-dependent</em>, and in the direction opposite to what is observed. A film thin enough to
+give 0.25 at the illite 001 returns 0.071 at 35&deg;, so the higher basal orders would come in a
+factor of 3.5 <em>low</em> against the first. &sect;<a href="#a-17">A.17</a> measures the higher
+orders of two chlorites coming in 20&ndash;30 % <em>high</em>. A thin film cannot be the explanation
+of the absolute deficit and be absent from the ratios at the same time, and the ratios are the better
+measurement of the two.</p>
+
+<p>What remains, and what would distinguish them:</p>
+
+<dl>
+<dt>The irradiated length</dt>
+<dd>The beam-overflow correction (&sect;<a href="#s2-10">2.10</a>) is applied with an assumed 20 mm
+of specimen, for both the clays and the corundum. With a fixed 0.5&deg; slit the beam is 20 mm long
+at 6&deg; and 30 mm at 4&deg;, so a deposit shorter than the pressed standard loses intensity the
+correction does not restore. This can reach a factor of two, not four, but it is the one candidate
+that is a measurement rather than a hypothesis: <em>the physical length of a clay mount's deposit
+along the beam, against the corundum's</em>.</dd>
+<dt>The deposit's mass per unit area</dt>
+<dd>If the mounts are weighed before and after deposition, the mass in the beam is known outright and
+<var>k<sub>p</sub></var> stops being inferred from a purity at all &mdash; (2.28) can be replaced by
+a direct comparison, and the thickness question above is answered by the same number.</dd>
+<dt>A common factor in the basal calculation</dt>
+<dd>Anything that multiplies a whole basal series by one constant per gram, independent of the
+mineral, is indistinguishable from the above on this data. It would have to leave the ratios of
+&sect;<a href="#a-17">A.17</a> untouched, which most candidates do not.</dd>
+</dl>
+
+<h4>Why r is fixed rather than fitted, restated with numbers</h4>
+
+<p>The same four mounts were run a second way, with the library's own interstratified entries at the
+pure end member &mdash; which carry the crystallite-thickness broadening a powder calculation lacks,
+and fit far better &mdash; leaving <var>r</var> free:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th class="num"><var>R</var><sub>wp</sub>, powder</th>
+<th class="num"><var>R</var><sub>wp</sub>, library</th>
+<th class="num"><var>k<sub>p</sub></var>, <var>r</var> fixed</th>
+<th class="num"><var>k<sub>p</sub></var>, <var>r</var> free</th></tr>
+<tr><td>Kaolinite</td><td class="num">71 %</td><td class="num">71 %</td><td class="num">0.245</td><td class="num">0.245</td></tr>
+<tr><td>Chlorite A</td><td class="num">94 %</td><td class="num">56 %</td><td class="num">0.216</td><td class="num">0.391</td></tr>
+<tr><td>Chlorite B</td><td class="num">94 %</td><td class="num">40 %</td><td class="num">0.281</td><td class="num">0.292</td></tr>
+<tr><td>Illite</td><td class="num">86 %</td><td class="num">54 %</td><td class="num">0.247</td><td class="num">0.100</td></tr>
+<tr><td><strong>Ratio of extremes</strong></td><td></td><td></td>
+<td class="num"><strong>1.30</strong></td><td class="num"><strong>3.90</strong></td></tr>
+</table></div>
+
+<p>The better-fitting route gives the worse calibration, by a factor of three in spread. That is the
+<var>r</var>-degeneracy of &sect;<a href="#a-14">A.14</a> measured rather than argued: a
+basal-dominated pattern does not determine <var>r</var>, so a fit free to choose it will trade
+<var>r</var> against scale at no cost in <var>R</var><sub>wp</sub> and carry the trade straight into
+the mass. A lower residual is not a better calibration, and this is the clearest case of it in the
+manual. <var>r</var> belongs to the hkl reflections, and a calibration should be made where they
+are.</p>
+
+<h4>What this does not license</h4>
+
+<p><strong><var>k<sub>p</sub></var> remains 1 in the code.</strong> Four mounts, one preparation,
+one operator, one instrument and one standard is a result, not a calibration table, and the factor
+is an instrument constant that no other laboratory could adopt. Beyond that:</p>
+
+<ul>
+<li>Every mount is air-dried. The quantitative fit is made on the glycol-solvated mount
+(&sect;<a href="#s2-1">2.1</a>), so none of this bears on the expandable clays, which are the
+phases whose texture is least like a chlorite's.</li>
+<li>The purities used (0.81 to 1.00) come from the accompanying phases in the same fits, so they
+carry the same modelling error they are meant to correct. The illite's 0.81 is the weakest of them.</li>
+<li>The powder-route residuals are 71&ndash;94 %. A three-dimensional powder calculation with one
+orientation parameter is a poor description of an oriented mount, and these masses inherit that. The
+constancy of the factor across four such fits is more informative than any one of them.</li>
+<li>Smectite has no pure mount here at all, and no calibration.</li>
+</ul>
+
+<p>What it does establish: the machinery is complete and checked &mdash; absorption coefficients
+against published compounds, the conditions of two measurements compared rather than assumed, the
+infinite-thickness assumption computed rather than hoped for &mdash; and applied to real data it
+returns one factor, not four unrelated ones. When the glycol and heated mounts are measured, the same
+three commands give <var>k<sub>p</sub></var> for those, and the question of whether it is one factor
+per preparation or one per mineral will be answerable.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 
@@ -3191,6 +3443,13 @@ established; every phase checked against the cell mass and volume its block stat
 <tr><td>Pure-mineral basal ratios</td><td>14 automated; three single-phase mounts;
 eight candidate causes of the chlorite shortfall</td>
 <td>Kaolinite 002/001 = 1.05; one conclusion retracted; the chlorite 004 open</td></tr>
+<tr><td>Absorption</td><td>11 automated; six compound coefficients against published values;
+the Cu edge discontinuity</td>
+<td>Corundum 31.14 vs 31.1; an unlisted element raises</td></tr>
+<tr><td>External standard</td><td>10 automated; four pure mounts against a corundum on the same
+settings</td>
+<td><var>k<sub>p</sub></var> 0.216&ndash;0.281, 11 % relative sd over
+<var>r</var><sup>&minus;3</sup> &times; 244</td></tr>
 <tr><td>Refined structures</td><td>27 automated; against a refinement of one specimen, and
 against a CIF written by TOPAS</td>
 <td><var>R</var><sub>wp</sub> 35.9 &rarr; 31.2 %; adopted for the clays</td></tr>
@@ -3202,7 +3461,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>234 tests</strong> and runs in a few seconds
+<p>The automated suite comprises <strong>258 tests</strong> and runs in about eighty seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

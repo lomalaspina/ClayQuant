@@ -49,6 +49,8 @@ from .nnls import FitResult
 
 __all__ = [
     "PhaseShare",
+    "ExternalStandard",
+    "calibration_factor",
     "Quantification",
     "Calibration",
     "quantify",
@@ -125,6 +127,128 @@ class Calibration:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls(factors={str(k): float(v) for k, v in data.get("factors", {}).items()},
                    source=str(data.get("source", str(path))))
+
+
+@dataclass
+class ExternalStandard:
+    """The instrument constant, from a measurement of a pure standard.
+
+    A weight percent from a fitted scale factor is relative: it divides one
+    mount between its phases and says nothing about whether the calculated
+    pattern accounted for everything a phase contributes.  A standard measured
+    through the same optics fixes the absolute scale, through
+
+        W(p) = S(p) (ZMV)(p) mu_m / K
+
+    (O'Connor & Raven 1988), and ``K`` is what this holds.  For a pure standard
+    of known weight fraction it is simply the fitted mass times the standard's
+    mass attenuation coefficient.
+
+    Everything that differs between the standard's measurement and the
+    specimen's has to be either identical or corrected for, and the list is
+    longer than it looks: the tube, the slits, the mask, the counting time per
+    step, the step size and the detector settings.  A divergence slit of 0.25
+    deg against 0.5 deg is not a constant factor but an angle-dependent one,
+    because a fixed slit overflows the specimen at low angle and not at high.
+    :meth:`comparable_with` checks what can be checked from the files.
+    """
+
+    constant: float
+    phase: str
+    mass_attenuation: float
+    weight_fraction: float = 1.0
+    measurement: str = ""
+    conditions: dict = field(default_factory=dict)
+
+    @classmethod
+    def from_fit(
+        cls,
+        result: FitResult,
+        phase: str,
+        mass_attenuation: float,
+        weight_fraction: float = 1.0,
+        conditions: dict | None = None,
+    ) -> "ExternalStandard":
+        """``K`` from a fit of a measurement of the standard."""
+        if not 0.0 < weight_fraction <= 1.0:
+            raise ValueError(
+                f"the standard's weight fraction must lie in (0, 1], not {weight_fraction}"
+            )
+        mass = _fitted_mass(result, phase)
+        if mass <= 0.0:
+            raise ValueError(
+                f"the fit of {result.metadata.get('measurement', 'the standard')} gives "
+                f"{phase!r} no mass, so there is no constant to take from it"
+            )
+        return cls(
+            constant=mass * mass_attenuation / weight_fraction,
+            phase=phase,
+            mass_attenuation=mass_attenuation,
+            weight_fraction=weight_fraction,
+            measurement=str(result.metadata.get("measurement", "")),
+            conditions=dict(conditions or {}),
+        )
+
+    def comparable_with(self, conditions: dict) -> list[str]:
+        """What differs between the standard's conditions and these, if anything."""
+        if not self.conditions:
+            return ["the standard's measurement conditions were not recorded, so nothing "
+                    "could be checked against them"]
+        differences = []
+        for key, mine in sorted(self.conditions.items()):
+            theirs = conditions.get(key)
+            if theirs is None:
+                differences.append(f"{key} is not recorded for the specimen")
+            elif isinstance(mine, float) and isinstance(theirs, (int, float)):
+                if abs(mine - float(theirs)) > 1e-6 * max(1.0, abs(mine)):
+                    differences.append(f"{key}: standard {mine:g}, specimen {theirs:g}")
+            elif mine != theirs:
+                differences.append(f"{key}: standard {mine}, specimen {theirs}")
+        return differences
+
+
+def _fitted_mass(result: FitResult, phase: str) -> float:
+    """The relative mass the fit gives one phase, summed over its entries."""
+    masses = (
+        result.relative_mass
+        if len(result.relative_mass) == len(result.coefficients)
+        else [0.0] * len(result.coefficients)
+    )
+    return float(sum(
+        mass for name, mass, coefficient in zip(result.phases, masses, result.coefficients)
+        if name == phase and coefficient > 0.0
+    ))
+
+
+def calibration_factor(
+    result: FitResult,
+    phase: str,
+    mass_attenuation: float,
+    standard: ExternalStandard,
+    weight_fraction: float = 1.0,
+) -> float:
+    """The factor ``k`` of Sec. 2.13 for one phase, from a pure-phase mount.
+
+    A mount of the pure mineral has a known weight fraction, so the relation can
+    be read the other way round: whatever it takes to make the fitted mass agree
+    with the weight actually there is the factor by which the calculated pattern
+    fails to describe the phase.  That is texture, microabsorption and any error
+    in the structural model, together, which is what ``k`` is defined to hold.
+
+    ``weight_fraction`` is the phase's weight fraction in the mount, which is 1
+    only for a genuinely pure one; a standard carrying a few per cent of quartz
+    should say so, or its ``k`` absorbs the difference.
+    """
+    if not 0.0 < weight_fraction <= 1.0:
+        raise ValueError(f"a weight fraction must lie in (0, 1], not {weight_fraction}")
+    if standard.constant <= 0.0:
+        raise ValueError("the standard's constant is not positive, so it cannot be divided by")
+    mass = _fitted_mass(result, phase)
+    if mass <= 0.0:
+        raise ValueError(
+            f"the fit gives {phase!r} no mass, so there is no factor to be had from it"
+        )
+    return (mass * mass_attenuation / weight_fraction) / standard.constant
 
 
 @dataclass
