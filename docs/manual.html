@@ -126,6 +126,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-16">A.16 Refined structures</a>
 <a href="#a-17">A.17 Pure minerals</a>
 <a href="#a-18">A.18 External standard</a>
+<a href="#a-19">A.19 Background estimators</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -914,7 +915,8 @@ reporting a clay mineral assemblage.</p>
 <tr><td class="kw">io.py</td><td>readers for XRDML, <span class="kw">.xy</span>, Bruker <span class="kw">.raw</span> and two-column text</td></tr>
 <tr><td class="kw">pairing.py</td><td>recognising the three mounts of one sample from their file names</td></tr>
 <tr><td class="kw">calibration.py</td><td>2&theta; zero error on the quartz 100 reflection, merit profile for the slider</td></tr>
-<tr><td class="kw">background.py</td><td>background components, peak stripping, the non-parametric background</td></tr>
+<tr><td class="kw">background.py</td><td>background components, peak stripping, the
+Sonneveld&ndash;Visser estimator and its noise level, the non-parametric background</td></tr>
 <tr><td class="kw">diagnostics.py</td><td>kaolinite collapse and expandable-clay swelling</td></tr>
 <tr><td class="kw">detection.py</td><td>finding accompanying minerals, by competitive fit or by peak matching</td></tr>
 <tr><td class="kw">nnls.py</td><td>the weighted non-negative least-squares fit and its metrics</td></tr>
@@ -1468,6 +1470,16 @@ very signal being quantified. Peak stripping errs the other way, underestimating
 beneath a broad strong low-angle reflection, which is the safe direction but means the low-angle
 background should always be checked by eye.</p>
 
+<p>Two estimators of that stripped background are offered and they are not interchangeable. Peak
+stripping is the default; Sonneveld &amp; Visser (1975), the method the whole family descends from,
+is the alternative. It puts the baseline higher almost everywhere &mdash; by a tenth of the intensity
+range on a diffuse specimen &mdash; and on this laboratory's mounts it fits worse at every width
+tried, because what sits immediately above the baseline in an oriented mount is the broad basal
+intensity being quantified. Its use is as a check: the difference between the two, on one pattern at
+one width, measures how much of the background is a matter of method rather than of measurement, and
+a specimen where they disagree by more than a few per cent is one whose percentages carry that
+disagreement (&sect;<a href="#a-19">A.19</a>).</p>
+
 <p><em>Apply to all mounts</em> uses the same model for the three mounts, which is appropriate when
 they were measured under identical conditions.</p>
 
@@ -1604,7 +1616,13 @@ is present in the folder.</td></tr>
 <td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
-<tr><td>Peak-stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
+<tr><td>Background estimator</td><td class="kw">bg-estimator</td><td>SNIP</td>
+<td>Which estimate of the background the components are fitted to: peak stripping, or
+Sonneveld&nbsp;&amp;&nbsp;Visser (1975). The width below means the same thing to both, though its
+cutoff is soft for the second. SNIP is the default and fits better on every mount tested; the
+alternative is there to measure how much of the background depends on the method
+(&sect;<a href="#a-19">A.19</a>).</td></tr>
+<tr><td>Stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
 <td>Width of the widest feature the stripping treats as a peak. The components are fitted to the
 stripped estimate and follow it to a few counts, so this control, not the choice of component, is
 what decides where the background lies. Set it just above the width of the broadest reflection to be
@@ -1961,8 +1979,17 @@ the result figures.)</span></li>
 <li>Reynolds, R. C. Jr. (1980) Interstratified clay minerals. In G. W. Brindley &amp; G. Brown (eds)
 <em>Crystal Structures of Clay Minerals and their X-ray Identification</em>, Mineralogical Society,
 London, 249&ndash;303.</li>
+<li>Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. &amp; Cousens, D. R. (1988) SNIP, a
+statistics-sensitive background treatment for the quantitative analysis of PIXE spectra in
+geoscience applications. <em>Nuclear Instruments and Methods in Physics Research B</em>
+<strong>34</strong>, 396&ndash;402. <span class="small">(The peak stripping of
+&sect;<a href="#a-11">A.11</a>.)</span></li>
 <li>Schoen, R. (1962) Semi-quantitative analysis of chlorites by X-ray diffraction. <em>The American
 Mineralogist</em> <strong>47</strong>, 1384&ndash;1392.</li>
+<li>Sonneveld, E. J. &amp; Visser, J. W. (1975) Automatic collection of powder data from
+photographs. <em>Journal of Applied Crystallography</em> <strong>8</strong>, 1&ndash;7.
+<span class="small">(The background estimator and noise level of
+&sect;<a href="#a-19">A.19</a>.)</span></li>
 <li>Virtanen, P., Gommers, R., Oliphant, T. E. <em>et al.</em> (2020) SciPy 1.0: fundamental
 algorithms for scientific computing in Python. <em>Nature Methods</em> <strong>17</strong>,
 261&ndash;272.</li>
@@ -3416,6 +3443,239 @@ returns one factor, not four unrelated ones. When the glycol and heated mounts a
 three commands give <var>k<sub>p</sub></var> for those, and the question of whether it is one factor
 per preparation or one per mineral will be answerable.</p>
 
+<h3 id="a-19">A.19 A second background estimator, and what it changes</h3>
+
+<p><strong>Reasoning.</strong> The background is fitted to a stripped estimate, and
+&sect;<a href="#a-11">A.11</a> establishes that the estimate <em>is</em> the background: the
+components follow it to a few counts, so whatever the estimator decides, the analysis inherits. That
+makes the estimator the single most consequential choice in the workflow and leaves it untested
+against anything but itself. A second, independent estimator is the only way to find out how much of
+the background is measurement and how much is method.</p>
+
+<p>The obvious second choice is the oldest one. Sonneveld &amp; Visser (1975) is the earliest of
+the iterative-erosion baseline estimators, thirteen years ahead of the SNIP paper and built on the
+same idea, and its background algorithm (their &sect;3.1) is four lines: take a coarse subsample of
+the pattern, then repeatedly replace each sample by the mean of its two neighbours wherever it stands
+more than <var>c</var> above that mean,</p>
+
+<div class="eq"><var>m<sub>i</sub></var> =
+(<var>p</var><sub><var>i</var>+1</sub> + <var>p</var><sub><var>i</var>&minus;1</sub>)/2,
+&nbsp;&nbsp; <var>p<sub>i</sub></var> &larr; <var>m<sub>i</sub></var>
+&nbsp; if <var>p<sub>i</sub></var> &gt; <var>m<sub>i</sub></var> + <var>c</var>
+<span class="n">(A.1)</span></div>
+
+<p>and interpolate the eroded samples back onto the measured grid. A peak is a local maximum and is
+pulled down pass by pass; a background is not. Their own settings are a 0.2&deg; subsample (every
+twentieth point of a 0.01&deg; film scan), <var>c</var> &asymp; 0.02 on the eight-bit scale of their
+microdensitometer, and about thirty passes.</p>
+
+<h4>Does it do what the paper says</h4>
+
+<p>Three properties are claimed or implied, and all three hold exactly rather than approximately:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Property</th><th>Test</th><th class="num">Result</th></tr>
+<tr><td>A straight background survives (their Fig. 1<em>a</em>)</td>
+<td>a line of slope &minus;30 counts/&deg;</td><td class="num">2 &times; 10<sup>&minus;13</sup> counts</td></tr>
+<tr><td>A convex background survives</td><td><var>a</var>/<var>x</var><sup>1.5</sup>, the shape of
+the direct-beam tail</td><td class="num">0 counts</td></tr>
+<tr><td>A curved background survives up to a stated limit</td>
+<td>a parabola at 1.1 and at 0.5 times the predicted bound</td>
+<td class="num">kept / eroded</td></tr>
+</table></div>
+
+<p>The convex case is the one that matters here, and it holds for the same reason it holds for SNIP
+(&sect;<a href="#a-11">A.11</a>): where the background is convex, the mean of two neighbours is never
+below the point itself, so (A.1) cannot fire. The direct-beam tail of an oriented mount is returned
+untouched by both estimators, which is the property the whole low-angle analysis rests on.</p>
+
+<p>The third row needs a statement the paper does not make. At the fixed point of (A.1) the second
+difference of the retained background is exactly &minus;2<var>c</var>, so with a sample spacing
+<var>h</var></p>
+
+<div class="eq">d<sup>2</sup><var>p</var>/d<var>x</var><sup>2</sup> &ge;
+&minus;2<var>c</var>/<var>h</var><sup>2</sup>
+<span class="n">(A.2)</span></div>
+
+<p>&mdash; <var>c</var> is neither a tolerance nor a smoothing parameter but precisely the largest
+<em>downward</em> curvature a background is allowed to keep. Two things follow: <var>c</var> scales
+with the intensity, so it is taken here as a fraction of the range of the sampled data rather than in
+counts, and it scales with <var>h</var><sup>2</sup>, so changing the sampling changes
+<var>c</var>. (A.2) is verified by switching the retention of a parabola across the predicted bound.</p>
+
+<h4>Two things the paper's own description gets wrong for modern data</h4>
+
+<p><strong>The reach is diffusive, not linear.</strong> Replacing a point by the mean of its
+neighbours is one explicit step of the diffusion equation, so the passes do not march outwards one
+sample each. Measured on Gaussian peaks, the width at which half the height is removed is</p>
+
+<div class="eq">FWHM = 2.2 &middot; <var>h</var> &middot; &radic;<var>n</var>
+<span class="n">(A.3)</span></div>
+
+<p>for <var>n</var> passes, holding to 2 % from 5 to 120 passes and over a fourfold range of
+<var>h</var>. The consequences are practical. The paper's thirty passes at 0.2&deg; sampling reach
+about <strong>2.4&deg;</strong>, not the 12&deg; a linear reading gives &mdash; well matched to the
+sharp lines of a Guinier film, and deliberately short of the broad features of a clay mount. And the
+cost of a wide window is quadratic, so it is worth knowing before asking for one. ClayQuant inverts
+(A.3) so that this estimator and the stripping can be asked for the same width; unlike SNIP's window
+the cutoff is soft, a feature of exactly the stated width keeping half its height.</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Width asked for</th><th class="num">0.5&deg;</th><th class="num">1&deg;</th>
+<th class="num">2&deg;</th><th class="num">4&deg;</th><th class="num">8&deg;</th></tr>
+<tr><td>Passes</td><td class="num">1</td><td class="num">5</td><td class="num">21</td>
+<td class="num">83</td><td class="num">331</td></tr>
+<tr><td>Width half-removed</td><td class="num">0.33&deg;</td><td class="num">0.97&deg;</td>
+<td class="num">2.02&deg;</td><td class="num">4.03&deg;</td><td class="num">8.06&deg;</td></tr>
+</table></div>
+
+<p><strong><var>c</var> is inert.</strong> The paper introduces <var>c</var> as the thing that lets a
+curved background through, so a reader expects it to be the parameter to tune, and the temptation
+when porting the method is to argue about its value. On a clay pattern of 10<sup>4</sup> counts the
+paper's <var>c</var>, the literal 0.02 taken across unchanged, and <var>c</var> = 0 give baselines
+agreeing to <strong>0.03 % of the intensity range</strong>. The reason is (A.2): the bound scales
+with the range of the data, so a real background's curvature is either far above it &mdash; in which
+case (A.1) fires whatever <var>c</var> is &mdash; or far below, where the erosion is negligible
+anyway. What decides the baseline is the sampling and the number of passes. <var>c</var> is kept for
+fidelity and is documented as inert so that nobody spends time on it.</p>
+
+<p>One implementation question the paper leaves open answers itself. Their loop is in place, so a
+sample already lowered in this pass is what its right-hand neighbour sees, which makes a pass
+asymmetric in the direction of travel. Forming every mean from the previous pass instead gives a
+different answer while the erosion is still relaxing &mdash; 2.8 % of the intensity range after one
+pass &mdash; and an <em>identical</em> one from about 21 passes, where the relaxation reaches its
+fixed point. At the paper's thirty and above the choice does not matter, so the paper's own order is
+kept.</p>
+
+<h4>Against the stripping, on real patterns</h4>
+
+<p>Both estimators were asked for the same thing &mdash; remove everything narrower than 4&deg;,
+keep the rest &mdash; on all 39 real patterns available. The disagreement is one-sided for practical
+purposes: over the whole set Sonneveld&ndash;Visser lies between 0.18 % of the intensity range
+<em>below</em> the stripped estimate and 36 % above it. Where it lies depends on the specimen, and
+systematically:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th class="num">Range, counts</th>
+<th class="num">Largest difference</th><th class="num">% of range</th></tr>
+<tr><td>Prochlorite</td><td class="num">51750</td><td class="num">182</td><td class="num">0.35</td></tr>
+<tr><td>Corundum (background batch)</td><td class="num">8074</td><td class="num">46</td><td class="num">0.56</td></tr>
+<tr><td>Kaolinite</td><td class="num">44899</td><td class="num">288</td><td class="num">0.64</td></tr>
+<tr><td>Corundum (clay settings)</td><td class="num">12199</td><td class="num">171</td><td class="num">1.41</td></tr>
+<tr><td>Chlorite</td><td class="num">6826</td><td class="num">125</td><td class="num">1.83</td></tr>
+<tr><td>Illite</td><td class="num">6981</td><td class="num">167</td><td class="num">2.40</td></tr>
+<tr><td>Illite (clay settings)</td><td class="num">2238</td><td class="num">179</td><td class="num">8.01</td></tr>
+<tr><td>Saponite</td><td class="num">2908</td><td class="num">248</td><td class="num">8.53</td></tr>
+<tr><td>Montmorillonite</td><td class="num">2517</td><td class="num">292</td><td class="num">11.59</td></tr>
+<tr><td>Hectorite</td><td class="num">52619</td><td class="num">6115</td><td class="num">11.62</td></tr>
+<tr><td>Laponite</td><td class="num">680</td><td class="num">97</td><td class="num">14.27</td></tr>
+<tr><td>Bentonite</td><td class="num">2541</td><td class="num">365</td><td class="num">14.35</td></tr>
+</table></div>
+
+<p class="small">Sonneveld&ndash;Visser minus peak-stripped, both at a 4&deg; width. Median over the
+twelve single-phase mounts, 5.2 %.</p>
+
+<p>The ordering is not random. The well-crystallised mounts &mdash; prochlorite, kaolinite, chlorite,
+both corundums &mdash; agree to under 2 %, because a pattern of sharp peaks on a smooth background is
+what both estimators were designed for and there is nothing to disagree about. The disagreement is
+concentrated in the diffuse specimens: the synthetic hectorite that is close to X-ray amorphous, the
+bentonite carrying opal-CT, the laponite, the smectites. There the two estimators are deciding
+whether a broad hump is background or signal, and they decide differently. Of the 11.6 % on
+hectorite, running the erosion on the logarithm rather than on the counts accounts for about a third
+and the softness of the cutoff for the rest.</p>
+
+<h4>What it changes in the answer</h4>
+
+<p>That difference does not stay in the background. Eight glycol-solvated mounts were fitted twice,
+identically except for the estimator:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Mount</th><th class="num">1</th><th class="num">2</th><th class="num">3</th>
+<th class="num">4</th><th class="num">5</th><th class="num">6</th><th class="num">7</th>
+<th class="num">8</th></tr>
+<tr><td><var>R</var><sub>wp</sub>, peak-stripped</td><td class="num"><strong>42.3</strong></td>
+<td class="num"><strong>44.5</strong></td><td class="num"><strong>46.5</strong></td>
+<td class="num"><strong>47.2</strong></td><td class="num"><strong>50.0</strong></td>
+<td class="num"><strong>72.3</strong></td><td class="num"><strong>77.3</strong></td>
+<td class="num"><strong>78.6</strong></td></tr>
+<tr><td><var>R</var><sub>wp</sub>, Sonneveld&ndash;Visser</td><td class="num">49.8</td>
+<td class="num">47.6</td><td class="num">51.0</td><td class="num">50.9</td><td class="num">56.9</td>
+<td class="num">85.5</td><td class="num">83.9</td><td class="num">84.7</td></tr>
+</table></div>
+
+<p class="small">Per cent. Same library, same model, same 4&deg; width, same fitting range.</p>
+
+<p>The stripping fits better on <strong>all eight</strong>, by 2 to 13 points. And the phase
+percentages move with it: the largest change to any one phase's weight percent is a median of
+<strong>20 percentage points</strong> and reaches <strong>38</strong> &mdash; on an illite/smectite,
+a kaolinite or a chlorite/smectite depending on the mount. A change of that size from a choice
+invisible in the reported table is the finding of this section.</p>
+
+<p>The fair objection is that 4&deg; may simply suit one estimator and not the other, so the width
+was swept for both:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Width</th><th class="num">1&deg;</th><th class="num">2&deg;</th>
+<th class="num">3&deg;</th><th class="num">4&deg;</th><th class="num">6&deg;</th>
+<th class="num">8&deg;</th><th class="num">12&deg;</th></tr>
+<tr><td>Mount 1, Sonneveld&ndash;Visser</td><td class="num">53.0</td><td class="num">53.8</td>
+<td class="num">51.8</td><td class="num">49.8</td><td class="num">49.6</td><td class="num">49.6</td>
+<td class="num">49.6</td></tr>
+<tr><td>Mount 1, peak-stripped</td><td class="num">51.8</td><td class="num">43.4</td>
+<td class="num"><strong>42.6</strong></td><td class="num"><strong>42.3</strong></td>
+<td class="num"><strong>42.4</strong></td><td class="num"><strong>42.5</strong></td>
+<td class="num"><strong>42.5</strong></td></tr>
+<tr><td>Mount 4, Sonneveld&ndash;Visser</td><td class="num">64.3</td><td class="num">57.0</td>
+<td class="num">53.2</td><td class="num">50.9</td><td class="num">49.7</td><td class="num">49.7</td>
+<td class="num">49.7</td></tr>
+<tr><td>Mount 4, peak-stripped</td><td class="num">53.9</td><td class="num">48.6</td>
+<td class="num">47.8</td><td class="num"><strong>47.2</strong></td><td class="num"><strong>46.8</strong></td>
+<td class="num"><strong>46.7</strong></td><td class="num"><strong>46.7</strong></td></tr>
+</table></div>
+
+<p><var>R</var><sub>wp</sub> in per cent. At its own best width Sonneveld&ndash;Visser still loses on
+every mount tried, by 2 to 7 points, so the result is not an artefact of the setting. It also
+saturates above about 6&deg;, which (A.1) explains: the erosion reaches a fixed point beyond which
+more passes change nothing, so unlike the stripping it has a floor it cannot go below.</p>
+
+<h4>The noise level that goes with it</h4>
+
+<p>Their &sect;3.2 is implemented too, because a background estimate is only half of what the paper's
+workflow produces: the other half is the level against which a feature of the difference signal
+counts as real. Take the background-subtracted data, compute its mean and standard deviation, reject
+everything above <var>&mu;</var> + 3<var>&sigma;</var>, and repeat until <var>&sigma;</var> settles;
+what is left is noise, and the paper takes its full range to be 6<var>&sigma;</var>.</p>
+
+<p>The one thing to get right is that the clipping is <strong>one-sided</strong>, and the paper's
+step (4) says so explicitly. The contaminating population is the peaks, which lie above the
+background and nowhere below it, so rejecting symmetrically at
+|<var>i</var> &minus; <var>&mu;</var>| &gt; 3<var>&sigma;</var> discards the lower half of the very
+noise being measured and returns a <var>&sigma;</var> too small. Tested against normal noise of known
+width contaminated with peaks two hundred times its height, the plain standard deviation is more than
+ten times too large and the clipped estimate recovers the true value to 10 %. The paper's
+<var>N</var> &asymp; 500 points was a concession to a 1975 computer; all the data is used by default
+and agrees with a 500-point subsample to 12 %.</p>
+
+<h4>Conclusion, and what the second estimator is for</h4>
+
+<p>The method is implemented faithfully, passes every property its paper claims for it, and is
+offered in the interface and on the command line. <strong>Peak stripping remains the
+default</strong>, for a measured reason rather than a preference: Sonneveld&ndash;Visser puts the
+baseline higher, and on an oriented clay mount what lies immediately above the baseline is the broad
+basal intensity of the interstratified phases &mdash; the signal being quantified. Taking it out as
+background is the error &sect;<a href="#s5-4">5.4</a> warns about, arrived at by a different route.
+It is also the reason the disagreement is largest exactly on the expandable clays, which are the
+phases the analysis is least able to check by other means.</p>
+
+<p>What the second estimator is genuinely for is the question that prompted it. The difference between
+two independent estimators, on the same pattern at the same width, is a direct measure of how much of
+the background is a matter of method. On a well-crystallised mount that measure is under 2 % of the
+intensity range and the background can be treated as determined. On a diffuse one it is a tenth of
+the range, and no amount of care with the model will make it better, because the disagreement is
+about what the background <em>is</em> and not about how to fit it. Any specimen where the two
+estimators disagree by more than a few per cent is a specimen whose reported percentages carry that
+disagreement, and running both is now the cheapest way to find out.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -3432,6 +3692,9 @@ established; every phase checked against the cell mass and volume its block stat
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
 <td>Defect found and corrected; 12 automated</td></tr>
+<tr><td>Background estimators</td><td>29 automated; two estimators over 39 real patterns and
+8 fits; the reach law measured</td>
+<td>Sonneveld&ndash;Visser verified and offered; SNIP keeps the default on all 8</td></tr>
 <tr><td>Weight percent</td><td>11 automated, against known masses</td>
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
@@ -3461,7 +3724,7 @@ against a CIF written by TOPAS</td>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>258 tests</strong> and runs in about eighty seconds
+<p>The automated suite comprises <strong>287 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

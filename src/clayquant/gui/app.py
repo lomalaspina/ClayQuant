@@ -36,7 +36,7 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
-from ..background import BackgroundModel
+from ..background import ESTIMATOR_LABELS, BackgroundModel
 from ..bern import is_clay_phase
 from ..detection import detect_phases, screen_phases
 from ..calibration import (
@@ -155,7 +155,7 @@ def working(*children) -> dcc.Loading:
     )
 
 
-def background_report(pattern, fit, background, model) -> str:
+def background_report(pattern, fit, background, model, estimator: str = "snip") -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
     A single R\u00b2 against the stripped estimate is close to 1 for almost any
@@ -180,7 +180,7 @@ def background_report(pattern, fit, background, model) -> str:
 
     text = (
         f"{' + '.join(model.components)}, {model.n_terms} terms. "
-        f"Follows the peak-stripped estimate to {overall:.0f} counts RMS "
+        f"Follows the {ESTIMATOR_LABELS[estimator]} estimate to {overall:.0f} counts RMS "
         f"({low_rms:.0f} counts over the lowest 1\u00b0). "
         f"At {start:.2f}\u00b0 the model reads {model_start:.0f} of {measured_start:.0f} "
         f"measured counts, leaving {left:.0f} ({share:.0f}%) as signal."
@@ -522,7 +522,26 @@ def background_tab() -> html.Div:
                     dcc.Slider(id="bg-offset", min=0.0, max=10.0, step=0.25, value=1.0,
                                marks={0: "0", 5: "5", 10: "10"}),
                     html.Hr(),
-                    label("Peak-stripping width (°2θ)"),
+                    label("Background estimator"),
+                    dcc.Dropdown(
+                        id="bg-estimator",
+                        options=[
+                            {"label": "Peak stripping (SNIP)", "value": "snip"},
+                            {"label": "Sonneveld–Visser (1975)", "value": "sonneveld-visser"},
+                        ],
+                        value="snip",
+                        clearable=False,
+                    ),
+                    html.Div(
+                        "SNIP is the default. Sonneveld–Visser puts the baseline "
+                        "higher almost everywhere — by a tenth of the intensity "
+                        "range on a diffuse pattern — so it takes broad basal "
+                        "intensity out as background, and on this laboratory's "
+                        "mounts it fits worse at every width tried. Use it to see "
+                        "how much of the background is a matter of method.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    label("Stripping width (°2θ)"),
                     dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
                                marks={0.5: "0.5", 5: "5", 10: "10"}),
                     html.Div(
@@ -1111,11 +1130,12 @@ def register_callbacks(app: Dash) -> None:
         Input("bg-inverse", "value"),
         Input("bg-offset", "value"),
         Input("bg-snip", "value"),
+        Input("bg-estimator", "value"),
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
     )
     def update_background(mount, _loaded, _zeroed, kind, degree, decay, inverse, offset,
-                          snip, _apply, _apply_all):
+                          snip, estimator, _apply, _apply_all):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -1128,7 +1148,8 @@ def register_callbacks(app: Dash) -> None:
                                               float(offset))
         pattern = state.corrected()
         try:
-            fit = model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip))
+            fit = model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip),
+                            estimator=estimator)
         except Exception as exc:  # noqa: BLE001
             return empty_figure("Fit failed"), error_message(exc)
 
@@ -1140,7 +1161,8 @@ def register_callbacks(app: Dash) -> None:
                 other_pattern = other_state.corrected()
                 other_state.background_model = model
                 other_state.background_fit = model.fit(
-                    other_pattern.two_theta, other_pattern.intensity, snip_window=float(snip)
+                    other_pattern.two_theta, other_pattern.intensity, snip_window=float(snip),
+                    estimator=estimator,
                 )
             applied = " Applied to all loaded mounts."
         elif any("bg-apply" in prop for prop in triggered):
@@ -1162,14 +1184,16 @@ def register_callbacks(app: Dash) -> None:
         figure.add_scatter(
             x=pattern.two_theta,
             y=fit.target,
-            name=f"peak-stripped estimate (width {float(snip):g}\u00b0)",
+            name=f"{ESTIMATOR_LABELS[estimator]} estimate (width {float(snip):g}\u00b0)",
             line={"color": "#1f77b4", "width": 2, "dash": "dash"},
         )
         figure.add_scatter(x=pattern.two_theta, y=fit.subtract(pattern.two_theta, pattern.intensity),
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
 
-        return figure, html.Div(background_report(pattern, fit, background, model) + applied)
+        return figure, html.Div(
+            background_report(pattern, fit, background, model, estimator) + applied
+        )
 
     @app.callback(
         Output("kao-graph", "figure"),
