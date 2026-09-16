@@ -935,6 +935,10 @@ Sonneveld&ndash;Visser estimator and its noise level, the non-parametric backgro
 <tr><td class="kw">gui/</td><td>the browser interface and its session state</td></tr>
 <tr><td><span class="kw">install.sh</span>, <span class="kw">install.ps1</span></td>
 <td>installers for Linux/macOS/WSL and for Windows: interpreter selection, environment creation, installation and verification</td></tr>
+<tr><td><span class="kw">install.cmd</span>, <span class="kw">clayquant.cmd</span></td>
+<td>the Windows entry points, which start the PowerShell scripts beside them with the execution
+policy bypassed for one invocation &mdash; the default policy refuses a
+<span class="kw">.ps1</span> outright and a <span class="kw">.cmd</span> is exempt from it</td></tr>
 </table></div>
 
 <h3 id="s3-2">3.2 Data flow</h3>
@@ -1057,8 +1061,41 @@ directory:</p>
 <pre><code># Linux, macOS, WSL
 ./install.sh
 
-# Windows PowerShell
-.\install.ps1</code></pre>
+# Windows
+install.cmd</code></pre>
+
+<div class="note"><strong>On Windows, start with <span class="kw">install.cmd</span> and not
+<span class="kw">install.ps1</span>.</strong> Every client installation of Windows ships with
+PowerShell script execution disabled, so running the PowerShell installer directly fails before it
+executes a line:
+
+<pre><code>.\install.ps1 : File ...\install.ps1 cannot be loaded because running
+scripts is disabled on this system.</code></pre>
+
+<p>That is the machine's default and says nothing about the script. A
+<span class="kw">.cmd</span> file is not subject to the policy, so
+<span class="kw">install.cmd</span> starts PowerShell with the policy bypassed for that one
+invocation, passes its arguments through unchanged, and changes no setting on the computer. It can be
+double-clicked, and keeps its window open when it is, so an error can be read. The equivalent typed
+by hand is</p>
+
+<pre><code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code></pre>
+
+<p>and the same applies to running the program: use <span class="kw">clayquant.cmd gui</span> rather
+than <span class="kw">.\clayquant.ps1 gui</span>. The desktop and Start-menu shortcuts are unaffected,
+because they point at the environment's own <span class="kw">clayquant-gui.exe</span> rather than at a
+script.</p>
+
+<p>The alternative, if a permanent change is preferred, is to allow local scripts for your own
+account once &mdash; no administrator rights needed:</p>
+
+<pre><code>Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</code></pre>
+
+<p>A checkout made with <span class="kw">git clone</span> then runs as it stands. Files extracted
+from a downloaded ZIP carry Windows' mark-of-the-web and count as remote, so
+<span class="kw">RemoteSigned</span> still refuses them until the mark is removed with
+<span class="kw">Unblock-File .\install.ps1</span>. Cloning avoids the question
+altogether.</p></div>
 
 <p>It selects an interpreter, builds the virtual environment, installs ClayQuant with its
 dependencies, verifies that the package imports, checks that every command it declares has been
@@ -1138,6 +1175,11 @@ source .venv/bin/activate
 # Windows, cmd.exe
 .venv\Scripts\activate.bat</code></pre>
 
+<p class="small">The PowerShell form is refused on a machine that has not had its execution policy
+changed, for the reason given under the procedure above; <span class="kw">activate.bat</span> from
+cmd.exe is never affected, and neither is <span class="kw">clayquant.cmd</span>, which needs no
+activation at all.</p>
+
 <p>3. Install. The extras select optional components; installing all of them is normal for
 interactive use.</p>
 
@@ -1147,7 +1189,7 @@ interactive use.</p>
 reinstalling. To install only what is needed to compute patterns from a script, omit the extras:
 <span class="kw">pip install -e .</span></p>
 
-<p>4. Verify the installation. The test suite runs in a few seconds.</p>
+<p>4. Verify the installation. The test suite takes about a minute.</p>
 
 <pre><code>pytest -q</code></pre>
 
@@ -3732,9 +3774,14 @@ against a CIF written by TOPAS</td>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
+<tr><td>Published page and Windows entry points</td>
+<td>10 automated; the generated page rendered at two widths; both PowerShell
+scripts parsed</td>
+<td>Standards mode, no overflow, nothing dropped; the <span class="kw">.cmd</span>
+wrappers carry CRLF endings and pass their arguments</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>287 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>299 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

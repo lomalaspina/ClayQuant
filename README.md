@@ -17,12 +17,51 @@ Two things in one program, because the second needs the first:
    squares and report the clay assemblage.
 
 ```bash
-./install.sh                     # Linux, macOS, WSL   (install.ps1 on Windows)
+./install.sh                     # Linux, macOS, WSL
 
 ./clayquant gui                  # the workflow, in a browser
 ./clayquant build-library -o library/clays.npz
 ./clayquant import-structures your_structures.xml -o structures/phases.json
 ```
+
+On Windows, use the `.cmd` files — double-click `install.cmd`, or from a prompt:
+
+```bat
+install.cmd
+
+clayquant.cmd gui
+clayquant.cmd build-library -o library\clays.npz
+```
+
+**Not `.\install.ps1`.** Every client installation of Windows ships with
+PowerShell script execution disabled, so that fails before it runs a line:
+
+```
+.\install.ps1 : File ...\install.ps1 cannot be loaded because running scripts
+is disabled on this system.
+```
+
+That is the machine's default and says nothing about the script. A `.cmd` file is
+exempt from the policy, so `install.cmd` starts PowerShell with the policy
+bypassed for that one invocation and changes no setting on the computer; it also
+keeps its window open when double-clicked, so an error can be read. Typed by
+hand the same thing is
+
+```bat
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+If you would rather change the setting once, this needs no administrator rights:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+A `git clone` checkout then runs as it stands. Files unpacked from a downloaded
+ZIP carry Windows' mark-of-the-web and count as remote, so `RemoteSigned` still
+refuses them until it is removed with `Unblock-File .\install.ps1`; cloning
+avoids the question. The desktop and Start-menu shortcuts are unaffected either
+way — they point at the environment's own `clayquant-gui.exe`, not at a script.
 
 `./clayquant shortcut` puts it on the desktop and in the applications menu, on
 all three platforms; the installer offers to do it for you. Double-clicking the

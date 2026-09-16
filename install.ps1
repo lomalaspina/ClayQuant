@@ -1,6 +1,25 @@
 <#
     ClayQuant installer for Windows PowerShell.
 
+    RUN "install.cmd" INSTEAD OF THIS FILE.  Windows ships with PowerShell
+    script execution disabled, so ".\install.ps1" is refused before it runs a
+    line - "cannot be loaded because running scripts is disabled on this
+    system".  That is the default on every client installation of Windows and
+    says nothing about this script.  install.cmd, beside this file, is a .cmd
+    and so exempt from the policy: it starts PowerShell with the policy
+    bypassed for one invocation, passes these same arguments through, and
+    changes no setting on the computer.  Typed by hand it is
+
+        powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+    To allow local scripts permanently instead, for your own account and
+    without administrator rights:
+
+        Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+    A git clone then runs as it stands; files unpacked from a downloaded ZIP
+    are marked as remote and need Unblock-File first.
+
         .\install.ps1                 set everything up
         .\install.ps1 -Python "C:\Python312\python.exe"
                                       use a particular interpreter
