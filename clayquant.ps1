@@ -19,6 +19,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# PowerShell 7.3 and later turn a native program's non-zero exit into a
+# terminating error when $ErrorActionPreference is Stop.  This script checks
+# $LASTEXITCODE itself and reports what failed; left on, that setting would
+# abort with a raw exception instead, and every "if ($LASTEXITCODE -ne 0)"
+# below would be dead code.  Windows PowerShell has no such variable, so this
+# only matters where the .cmd wrapper has fallen back to PowerShell 7.
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Show-Usage {

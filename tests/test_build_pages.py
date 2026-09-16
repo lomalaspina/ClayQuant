@@ -119,3 +119,51 @@ def test_the_windows_entry_points_exist_and_bypass_the_execution_policy():
         assert "-ExecutionPolicy Bypass" in text
         assert f'"%~dp0{script}"' in text
         assert "%*" in text, f"{name} must pass its arguments through"
+
+
+def test_no_powershell_probe_passes_double_quotes_through_the_and_operator():
+    """The bug that told a machine with Python 3.12 it had no Python 3.10.
+
+    Windows PowerShell hands arguments to a native program through a legacy
+    quoting path that strips embedded double quotes, so
+
+        & $exe -c 'import sys; print("%d.%d" % sys.version_info[:2])'
+
+    reaches the interpreter as print(%d.%d % ...) and dies with a SyntaxError.
+    PowerShell 7 passes it correctly, so the failure appears only where most
+    people run the installer, and it appeared as an installer that could not
+    find an interpreter that was on PATH.
+
+    The rule this fixes in place: no argument passed to a native command
+    through the call operator may contain a double quote.  Where one is
+    unavoidable, drive the process directly and build the command line, which
+    is what install.ps1's Invoke-Probe does.
+    """
+    for name in ("install.ps1", "clayquant.ps1"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        for number, line in enumerate(text.splitlines(), start=1):
+            code = line.split("#", 1)[0]
+            if not re.search(r"&\s*\$\w+", code):
+                continue
+            # Arguments the call operator passes, as single-quoted literals.
+            for literal in re.findall(r"'([^']*)'", code):
+                assert '"' not in literal, (
+                    f"{name}:{number} passes a double quote through the call "
+                    f"operator: {literal!r} - Windows PowerShell will strip it"
+                )
+
+
+def test_the_installer_bounds_and_explains_a_failed_probe():
+    """A probe that hangs must time out, and a rejection must say why.
+
+    Both were absent, and between them they turned a one-line quoting bug into
+    an installer that stopped with the single most misleading message it could
+    have produced.
+    """
+    text = (ROOT / "install.ps1").read_text(encoding="utf-8")
+    assert "WaitForExit" in text, "a probe must not be able to hang the installation"
+    assert "ReadToEndAsync" in text, "read the child's output while waiting, or it deadlocks"
+    assert "why each was rejected" in text
+    assert "$script:LastProbe" in text
+    # PowerShell 7 would otherwise throw past every $LASTEXITCODE check below.
+    assert "PSNativeCommandUseErrorActionPreference" in text

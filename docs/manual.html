@@ -1051,8 +1051,8 @@ directory:</p>
 <pre><code># Linux, macOS, WSL
 ./install.sh
 
-# Windows
-install.cmd</code></pre>
+# Windows, in PowerShell
+.\install.cmd</code></pre>
 
 <div class="note"><strong>On Windows, start with <span class="kw">install.cmd</span> and not
 <span class="kw">install.ps1</span>.</strong> Every client installation of Windows ships with
@@ -1066,13 +1066,17 @@ scripts is disabled on this system.</code></pre>
 <span class="kw">.cmd</span> file is not subject to the policy, so
 <span class="kw">install.cmd</span> starts PowerShell with the policy bypassed for that one
 invocation, passes its arguments through unchanged, and changes no setting on the computer. It can be
-double-clicked, and keeps its window open when it is, so an error can be read. The equivalent typed
-by hand is</p>
+double-clicked, and waits for a keypress before it closes, so an error can be read &mdash; set
+<span class="kw">CLAYQUANT_NO_PAUSE</span> to skip that. The equivalent typed by hand is</p>
 
 <pre><code>powershell -ExecutionPolicy Bypass -File .\install.ps1</code></pre>
 
-<p>and the same applies to running the program: use <span class="kw">clayquant.cmd gui</span> rather
-than <span class="kw">.\clayquant.ps1 gui</span>. The desktop and Start-menu shortcuts are unaffected,
+<p>Keep the <span class="kw">.\</span>: PowerShell does not run a program from the current
+directory unless told to, so a plain <span class="kw">install.cmd</span> is answered with
+&ldquo;the term &lsquo;install.cmd&rsquo; is not recognized&rdquo;, which is about the path and not
+the file. cmd.exe does not mind either way. The same applies to running the program: use
+<span class="kw">.\clayquant.cmd gui</span> rather than
+<span class="kw">.\clayquant.ps1 gui</span>. The desktop and Start-menu shortcuts are unaffected,
 because they point at the environment's own <span class="kw">clayquant-gui.exe</span> rather than at a
 script.</p>
 
@@ -3765,13 +3769,14 @@ against a CIF written by TOPAS</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
 <tr><td>Published page and Windows entry points</td>
-<td>10 automated; the generated page rendered at two widths; both PowerShell
-scripts parsed</td>
-<td>Standards mode, no overflow, nothing dropped; the <span class="kw">.cmd</span>
-wrappers carry CRLF endings and pass their arguments</td></tr>
+<td>12 automated; the generated page rendered at two widths; both PowerShell
+scripts parsed and their probes exercised under both of PowerShell's
+argument-passing modes</td>
+<td>Standards mode, no overflow, nothing dropped; a quoting defect found that
+made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>299 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>301 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

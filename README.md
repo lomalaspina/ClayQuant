@@ -26,12 +26,17 @@ Two things in one program, because the second needs the first:
 
 On Windows, use the `.cmd` files — double-click `install.cmd`, or from a prompt:
 
-```bat
-install.cmd
+```powershell
+.\install.cmd
 
-clayquant.cmd gui
-clayquant.cmd build-library -o library\clays.npz
+.\clayquant.cmd gui
+.\clayquant.cmd build-library -o library\clays.npz
 ```
+
+**Keep the `.\`.** PowerShell does not run programs from the current directory
+unless told to, so plain `install.cmd` gives *"the term 'install.cmd' is not
+recognized"* — which is about the path, not the file. cmd.exe does not mind
+either way.
 
 **Not `.\install.ps1`.** Every client installation of Windows ships with
 PowerShell script execution disabled, so that fails before it runs a line:
