@@ -228,6 +228,33 @@ understood. A fixed library cannot adjust peak positions or widths continuously,
 so a sample whose spacings fall outside the spanned range will fit badly. Read
 the plots, not just the table.
 
+## The manual
+
+The full manual — the physical model, every interface control, the output files
+and the record of verification tests — is published at
+
+**<https://lomalaspina.github.io/ClayQuant/>**
+
+and as a PDF at
+[`docs/ClayQuant-Manual.pdf`](docs/ClayQuant-Manual.pdf), which the site also
+serves at `/ClayQuant/ClayQuant-Manual.pdf`.
+
+`docs/manual.html` is the source; `docs/index.html` is generated from it by
+
+```bash
+python scripts/build_pages.py            # --check to verify it is current
+```
+
+Run that whenever the manual changes and commit the result. The two exist
+separately because GitHub Pages serves a directory's `index.html` and nothing
+else, and because a page served directly needs the `<!doctype>` and `<head>`
+that `manual.html` leaves out (the Artifact service that also publishes it
+supplies its own).
+
+GitHub Pages is configured under *Settings → Pages* as **Deploy from a branch**,
+branch `claude/xray-diffraction-calculator-5dvmfi` (the default branch), folder
+**`/docs`**. `docs/.nojekyll` keeps Jekyll from processing the HTML.
+
 ## Layout
 
 | Module | |
