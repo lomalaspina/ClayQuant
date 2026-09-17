@@ -52,17 +52,24 @@ __all__ = [
     "SONNEVELD_VISSER_CURVATURE",
     "SONNEVELD_VISSER_GRANULARITY",
     "SONNEVELD_VISSER_ITERATIONS",
+    "SONNEVELD_VISSER_CEILING",
+    "SONNEVELD_VISSER_FLOOR",
     "SONNEVELD_VISSER_REACH",
+    "SONNEVELD_VISSER_SAFETY",
     "snip_edge_width",
     "snip_iterations",
     "sonneveld_visser_granularity",
     "sonneveld_visser_reach",
+    "suggest_sonneveld_visser",
     "BackgroundModel",
     "BackgroundFit",
     "NoiseLevel",
+    "PeakGroup",
+    "SonneveldVisserSuggestion",
     "StrippedBackground",
     "baseline_estimate",
     "noise_level",
+    "peak_groups",
     "snip_baseline",
     "sonneveld_visser_baseline",
     "select_background_points",
@@ -899,8 +906,41 @@ def noise_level(
 
     total = values.size
     kept = values
-    sigma = float(np.std(kept))
-    mean = float(np.mean(kept))
+
+    # Seeded from the median and the median absolute deviation rather than from
+    # the mean and the standard deviation, which is the one departure from the
+    # paper's Sec. 3.2 and is there to make its own loop work.
+    #
+    # Their step (2) takes sigma over everything, peaks included, and step (4)
+    # rejects above mu + 3 sigma.  On a film scan of sharp lines that is a small
+    # contamination and the loop tightens from pass to pass.  On a pattern
+    # carrying a broad feature - an amorphous hump, a smectite band, a
+    # poorly crystalline phase - the feature is a fifth of the points, sigma
+    # comes out inflated by two orders of magnitude, mu + 3 sigma lands above
+    # every point in the pattern, and the first pass rejects nothing.  Sigma
+    # then does not move, which their stopping rule reads as convergence, and
+    # the returned noise level is the spread of the feature rather than of the
+    # noise.  Measured on an 8 deg Gaussian: sigma 2924 against a true 22, and a
+    # threshold above the feature's own height, so it was reported as noise.
+    #
+    # The median and the MAD are not moved by a fifth of the points, so the
+    # first threshold engages and the paper's loop proceeds as intended.  It is
+    # left a little conservative rather than made exact: the flanks of a broad
+    # feature stay within three sigma of the median over a long stretch and
+    # survive the clipping, so sigma comes back about a third high in that case.
+    # A threshold slightly too high is slightly less sensitive, which is the
+    # safe direction for deciding what counts as a reflection.  It is
+    # left a little conservative rather than made exact: the flanks of a broad
+    # feature stay within three sigma of the median over a long stretch and
+    # survive the clipping, so sigma comes back about a third high in that case.
+    # A threshold slightly too high is slightly less sensitive, which is the safe
+    # direction for deciding what counts as a reflection.
+    mean = float(np.median(kept))
+    deviation = float(np.median(np.abs(kept - mean)))
+    # 1.4826 makes the MAD an estimate of sigma for normally distributed noise.
+    sigma = 1.4826 * deviation
+    if sigma <= 0.0:
+        sigma = float(np.std(kept))
     used = 0
     converged = False
     for used in range(1, max_iterations + 1):
@@ -960,3 +1000,255 @@ def baseline_estimate(
     if estimator == "snip":
         return snip_baseline(two_theta, intensity, window=window)
     return sonneveld_visser_baseline(two_theta, intensity, window=window)
+
+
+# --------------------------------------------------------------------------
+# Choosing the two parameters from the measurement
+# --------------------------------------------------------------------------
+
+SONNEVELD_VISSER_SAFETY = 2.0
+"""How far the reach must exceed the widest reflection to be kept.
+
+At a reach equal to a feature's width half its height stays in the baseline,
+which is half the signal lost; at twice the width a few per cent stays.  The
+factor follows from the reach law rather than from taste
+(:func:`sonneveld_visser_reach`).
+"""
+
+SONNEVELD_VISSER_CEILING = 0.25
+"""Largest reach the pre-screen will suggest, as a fraction of the fitted range.
+
+Past this the background is being defined by a handful of samples spread across
+the whole pattern, and a feature that wide cannot be told from background by any
+local criterion anyway - a 12 deg feature on a 37 deg scan is a third of the
+pattern.  Where the cap binds, the suggestion says so, because that is the case
+in which the operator has to decide what is background rather than be told.
+"""
+
+SONNEVELD_VISSER_FLOOR = 4.0
+"""Smallest reach in degrees the pre-screen will suggest.
+
+A scan in which no broad reflection rises above the noise is not evidence that
+none is present, and the interstratified phases whose intensity is broad by
+nature are exactly the ones a weak pattern hides.  Four degrees is the width
+eleven mounts supported for the peak stripping (Sec. A.11), and erring towards
+it is the safe direction: it leaves background in the signal rather than taking
+signal out.
+"""
+
+
+@dataclass
+class PeakGroup:
+    """A stretch of a difference signal that rises above the noise.
+
+    Sonneveld & Visser's Sec. 3.3: "a peak group is considered to begin at a
+    point where the signal surpasses this level and ends when the signal becomes
+    lower".  Within one there is at least one reflection.
+    """
+
+    start: int
+    stop: int
+    """Half-open index range into the pattern."""
+
+    centre: float
+    """Angle of the group's maximum, in degrees."""
+
+    height: float
+    width: float
+    """Height above the background, and full width at half that height."""
+
+    @property
+    def points(self) -> int:
+        return self.stop - self.start
+
+
+def peak_groups(
+    two_theta: np.ndarray,
+    difference: np.ndarray,
+    threshold: float,
+    minimum_points: int = 3,
+) -> list[PeakGroup]:
+    """Stretches of ``difference`` above ``threshold``, with their widths.
+
+    The threshold is the one :func:`noise_level` computes, so what comes back is
+    the set of features that differ significantly from the background rather
+    than every wiggle.  Groups shorter than ``minimum_points`` are dropped: a
+    single point over the line is noise that got through, not a reflection.
+    """
+    two_theta = np.asarray(two_theta, dtype=float)
+    difference = np.asarray(difference, dtype=float)
+    step = float(np.mean(np.diff(two_theta))) if len(two_theta) > 1 else 0.0
+    above = difference > threshold
+
+    groups: list[PeakGroup] = []
+    start: int | None = None
+    for index, flag in enumerate(above):
+        if flag and start is None:
+            start = index
+        elif not flag and start is not None:
+            groups.append((start, index))
+            start = None
+    if start is not None:
+        groups.append((start, len(above)))
+
+    found: list[PeakGroup] = []
+    for first, last in groups:
+        if last - first < minimum_points:
+            continue
+        piece = difference[first:last]
+        height = float(piece.max())
+        # Width at half the group's own height, measured inside the group.  A
+        # reflection standing on the shoulder of another is measured against its
+        # own maximum, which is what its width means.
+        over = np.flatnonzero(piece >= 0.5 * height)
+        found.append(
+            PeakGroup(
+                start=first,
+                stop=last,
+                centre=float(two_theta[first + int(np.argmax(piece))]),
+                height=height,
+                width=float((over[-1] - over[0] + 1) * step),
+            )
+        )
+    return found
+
+
+@dataclass
+class SonneveldVisserSuggestion:
+    """Starting values for the two parameters, and what they were read from."""
+
+    granularity: int
+    bending: float
+    reach: float
+    """What the suggested granularity reaches, in degrees."""
+
+    widest_reflection: float
+    """Full width at half maximum of the broadest feature above the noise."""
+
+    groups: int
+    sigma: float
+    step: float
+    floored: bool
+    """Whether the floor decided the answer rather than the measurement."""
+
+    capped: bool = False
+    """Whether the ceiling did, which means the specimen needs a judgement."""
+
+    note: str = ""
+
+
+def suggest_sonneveld_visser(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    range_two_theta: tuple[float, float] | None = (4.0, 39.0),
+    safety: float = SONNEVELD_VISSER_SAFETY,
+    floor: float = SONNEVELD_VISSER_FLOOR,
+    ceiling: float = SONNEVELD_VISSER_CEILING,
+    iterations: int = SONNEVELD_VISSER_ITERATIONS,
+) -> SonneveldVisserSuggestion:
+    """Read starting values for granularity and bending off a measurement.
+
+    The two parameters are settled differently, because only one of them is
+    determined by the data.
+
+    **Granularity** follows from what has to survive.  The erosion removes a
+    feature from the baseline once its reach exceeds the feature's width, so the
+    reach has to clear the broadest reflection that is meant to stay in the
+    signal.  That width is measured rather than assumed: the pattern is stripped
+    generously, the noise of what is left is measured by the paper's own Sec. 3.2
+    (:func:`noise_level`), the stretches standing above it are its Sec. 3.3 peak
+    groups (:func:`peak_groups`), and the broadest of those is the width to
+    clear - by the factor of two the reach law calls for, and never by less than
+    the floor.
+
+    **Bending** is not determined by the data in the same way, and asking the
+    fit which value it prefers is the wrong question for granularity but the
+    right one here.  Asked, over eight glycol mounts at eight granularities, the
+    answer is 0 in 63 of the 64 comparisons, by up to 1.4 points of R_wp.  The
+    reason is (A.2) of the manual: a real clay background's curvature exceeds
+    the bound that any bending factor in HighScore's range can grant, so the
+    allowance cannot do the job the paper introduced it for, and all that is
+    left of it is a baseline sitting slightly higher - which on an oriented
+    mount means slightly more of the broad basal intensity taken out as
+    background.  So 0 is suggested, with the paper's own 1 a defensible choice
+    for a specimen whose background really is gently curved.
+
+    Granularity is deliberately *not* chosen by fit quality, though it would be
+    easy to: R_wp falls almost monotonically as the baseline drops, because a
+    lower background always lets the fit explain more of the pattern whether or
+    not what was removed was background.  It is the same bias that makes the
+    residual of a whole-pattern fit useless as a measure of missing material.
+    """
+    two_theta = np.asarray(two_theta, dtype=float)
+    intensity = np.asarray(intensity, dtype=float)
+    if two_theta.shape != intensity.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if len(two_theta) < 16:
+        raise ValueError("too few points to read a suggestion from")
+
+    if range_two_theta is not None:
+        low, high = range_two_theta
+        inside = (two_theta >= low) & (two_theta <= high)
+        if inside.sum() >= 16:
+            two_theta, intensity = two_theta[inside], intensity[inside]
+
+    step = float(np.mean(np.diff(two_theta)))
+    if step <= 0:
+        raise ValueError("two_theta must be increasing")
+
+    # Strip generously first: the widths are wanted against a background that is
+    # under everything, not against one that has already climbed into the
+    # reflections being measured.
+    difference = intensity - snip_baseline(two_theta, intensity, window=12.0)
+    level = noise_level(difference)
+    groups = peak_groups(two_theta, difference, level.threshold)
+
+    widest = max((group.width for group in groups), default=0.0)
+    limit = ceiling * float(two_theta[-1] - two_theta[0])
+    wanted = max(safety * widest, floor)
+    floored = safety * widest <= floor
+    capped = wanted > limit
+    wanted = min(wanted, limit)
+    granularity = max(1, int(round(
+        wanted / (SONNEVELD_VISSER_REACH * step * math.sqrt(max(1, iterations)))
+    )))
+    reach = sonneveld_visser_reach(granularity, step, iterations)
+
+    if not groups:
+        note = (
+            f"No reflection rose above the noise ({level.sigma:.0f} counts), so the "
+            f"granularity is the floor: {granularity} points, reaching {reach:.1f} deg."
+        )
+    elif floored:
+        note = (
+            f"Widest reflection {widest:.2f} deg, at the noise level of "
+            f"{level.sigma:.0f} counts over {len(groups)} groups. Twice that is under the "
+            f"{floor:.0f} deg floor, so granularity {granularity} ({reach:.1f} deg) is the "
+            f"floor rather than the measurement."
+        )
+    else:
+        note = (
+            f"Widest reflection {widest:.2f} deg of {len(groups)} above the noise "
+            f"({level.sigma:.0f} counts), so granularity {granularity} to reach "
+            f"{reach:.1f} deg - twice the widest, so it keeps all of it."
+        )
+    if capped:
+        note += (
+            f" The widest feature is so broad that twice it would reach past a quarter "
+            f"of the scan, so the reach is capped at {limit:.1f} deg; a feature that wide "
+            f"cannot be told from background by any local test, and the choice is yours."
+        )
+    note += " Bending 0: measured better than 1 on 63 of 64 real fits."
+
+    return SonneveldVisserSuggestion(
+        granularity=granularity,
+        bending=0.0,
+        reach=reach,
+        widest_reflection=widest,
+        groups=len(groups),
+        sigma=level.sigma,
+        step=step,
+        floored=floored,
+        capped=capped,
+        note=note,
+    )

@@ -1539,6 +1539,12 @@ either, and not for want of arithmetic: the erosion returns a convex background 
 it, and the low-angle rise from air scatter and the direct beam is convex, so it is already in the
 curve and a fitted <span class="kw">1/x</span> on top would count it twice.</p>
 
+<p>Both of those are proposed when the patterns are loaded, read off the glycol mount &mdash;
+the granularity from the width of the broadest reflection that stands above the noise, the bending
+factor from which value eight mounts' worth of real fits preferred. The line beneath the sliders says
+what was measured and whether the measurement or a safety limit decided the answer, and a slider
+moved by hand afterwards is left alone (&sect;<a href="#a-19">A.19</a>).</p>
+
 <p>Which to use is a real choice and not a matter of taste. Measured over 39 patterns,
 Sonneveld&ndash;Visser puts the baseline higher almost everywhere &mdash; by a tenth of the intensity
 range on a diffuse specimen &mdash; and on this laboratory's mounts the fitted components on a
@@ -1692,15 +1698,19 @@ is present in the folder.</td></tr>
 <td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
-<tr><td>Granularity (points per interval)</td><td class="kw">bg-granularity</td><td>20</td>
-<td>Sonneveld&ndash;Visser only. Points between the samples the erosion runs on &mdash; the paper's
+<tr><td>Granularity (points per interval)</td><td class="kw">bg-granularity</td>
+<td>read from the glycol scan</td>
+<td>Sonneveld&ndash;Visser only. Its starting value is proposed from the glycol mount when the
+patterns are loaded, from the width of the broadest reflection standing above the noise
+(&sect;<a href="#a-19">A.19</a>); the line beneath the sliders says what was measured and what
+decided the answer. Moving either slider afterwards is not undone. Points between the samples the erosion runs on &mdash; the paper's
 every twentieth point, and HighScore's parameter of the same name, recommended there between 15 and
 30. It is the parameter that decides the baseline, because it sets how wide a feature is removed:
 2.2&nbsp;&times;&nbsp;granularity&nbsp;&times;&nbsp;step&nbsp;&times;&nbsp;&radic;passes, which the
 panel reports in degrees beneath the slider. Counted in points rather than degrees, as both the paper
 and HighScore count it, so the same number reaches further on a coarser scan &mdash; 20 points is
 2.4&deg; on a 0.01&deg; film scan and 4.0&deg; on this laboratory's 0.0167&deg; step.</td></tr>
-<tr><td>Bending factor</td><td class="kw">bg-bending</td><td>1.0</td>
+<tr><td>Bending factor</td><td class="kw">bg-bending</td><td>0, proposed</td>
 <td>Sonneveld&ndash;Visser only. How much <em>downward</em> curvature the background may keep;
 HighScore's slider of the same name, where 0 to 2 is the usual advice. 0 allows only a straight or
 convex background, which is the paper's first form; 1 is the value the paper itself used. On clay
@@ -3753,6 +3763,86 @@ every mount tried, by 2 to 7 points, so the result is not an artefact of the set
 saturates above about 6&deg;, which (A.1) explains: the erosion reaches a fixed point beyond which
 more passes change nothing, so unlike the stripping it has a floor it cannot go below.</p>
 
+<h4>Reading the two parameters off the measurement</h4>
+
+<p>Neither parameter has a value that is right in general, and the interface therefore proposes both
+from the glycol-solvated scan when the patterns are loaded &mdash; that mount, because it is the one
+the quantification is made on (&sect;<a href="#s2-1">2.1</a>) and the one whose broad interstratified
+intensity a background most easily eats. The two are settled differently, because only one of them is
+determined by the data.</p>
+
+<p><strong>Granularity follows from what has to survive.</strong> The erosion removes a feature from
+the baseline once its reach exceeds the feature's width, so the reach has to clear the broadest
+reflection meant to stay in the signal. That width is measured rather than assumed, and measured with
+the paper's own remaining two sections: the pattern is stripped generously, the noise of what is left
+is <var>&sigma;</var><sub>noise</sub> from their &sect;3.2, the stretches standing above
+<var>&mu;</var>+3<var>&sigma;</var> are their &sect;3.3 peak groups, and the broadest of those is the
+width to clear &mdash; by a factor of two, which comes from (A.3) rather than from taste: at a reach
+equal to a feature's width half its height is left in the baseline, and at twice the width a few per
+cent. Two limits are imposed on the answer. It is never below the 4&deg; that eleven mounts supported
+for the stripping, because a scan in which no broad reflection rises above the noise is not evidence
+that none is present, and erring upwards leaves background in the signal rather than taking signal
+out. And it is never above a quarter of the scan, past which the background would be defined by a
+handful of samples; where that cap binds, the suggestion says so, because a feature that wide cannot
+be told from background by any local test and the judgement is the analyst's.</p>
+
+<p><strong>Bending was measured, not chosen.</strong> Asking the fit which value it prefers is the
+wrong question for granularity and the right one here. Asked over eight glycol mounts at eight
+granularities &mdash; 64 comparisons &mdash; <var>R</var><sub>wp</sub> was no worse at bending 0 than
+at the paper's 1 in <strong>63 of them</strong>, by up to 1.4 points. The reason is (A.2): a real
+clay background's downward curvature exceeds the bound any bending factor in HighScore's range can
+grant, so the allowance cannot do the job the paper introduced it for, and all that is left of it is
+a baseline sitting slightly higher &mdash; which on an oriented mount means slightly more of the
+broad basal intensity taken out as background. So <strong>0</strong> is proposed. This disagrees with
+the paper's own advice, and deliberately: they introduced <var>c</var> because a film background on a
+0&ndash;255 scale really was gently curved enough for the bound to bite, which a clay diffractogram
+is not.</p>
+
+<div class="warn"><strong>Granularity is deliberately not chosen by fit quality, though it would
+have been easy to.</strong> Swept against a real fit, <var>R</var><sub>wp</sub> falls almost
+monotonically as granularity rises &mdash; on four of the eight mounts the best value was the largest
+tried &mdash; because a lower baseline always lets the fit explain more of the pattern whether or not
+what was removed was background. It is the same bias that makes the residual of a whole-pattern fit
+useless as a measure of missing material (&sect;<a href="#s2-13">2.13</a>), and a pre-screen built on
+it would have recommended taking out as much as possible.</div>
+
+<p><strong>What it gives on real data.</strong> Over eleven measured patterns the proposal is
+granularity 20&ndash;22 and bending 0, so on these mounts it mostly <em>confirms</em> the default
+rather than changing it &mdash; which is itself worth having, since it says the default is right for
+this specimen rather than in general. It separates the two mounts carrying a genuinely broad 2.07&deg;
+feature, where the measurement rather than the floor decides, from the nine where it does not. On
+synthetic patterns it tracks a planted reflection from 0.2&deg; to 8&deg;, and reports the cap beyond
+that.</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Planted reflection</th><th class="num">0.2&deg;</th><th class="num">2&deg;</th>
+<th class="num">4&deg;</th><th class="num">8&deg;</th><th class="num">12&deg;</th></tr>
+<tr><td>Width measured</td><td class="num">0.20&deg;</td><td class="num">2.00&deg;</td>
+<td class="num">3.96&deg;</td><td class="num">9.27&deg;</td><td class="num">not found</td></tr>
+<tr><td>Granularity proposed</td><td class="num">20</td><td class="num">20</td>
+<td class="num">39</td><td class="num">43</td><td class="num">20</td></tr>
+<tr><td>Decided by</td><td>floor</td><td>floor</td><td>measurement</td><td>cap</td>
+<td>floor</td></tr>
+</table></div>
+
+<p class="small">A 12&deg; feature is a third of a 37&deg; scan, and no local test distinguishes it
+from background; the pre-screen does not find it and falls back to the floor, which is the safe
+direction but is a limit worth knowing.</p>
+
+<p>A defect in the noise level had to be fixed before any of this worked, and it is the paper's own
+algorithm that carries it. Their &sect;3.2 takes <var>&sigma;</var> over everything, peaks included,
+then rejects above <var>&mu;</var>+3<var>&sigma;</var> and repeats until <var>&sigma;</var> settles.
+On a film scan of sharp lines the contamination is small and the loop tightens. On a pattern carrying
+a broad feature the feature is a fifth of the points, <var>&sigma;</var> comes out inflated by two
+orders of magnitude, <var>&mu;</var>+3<var>&sigma;</var> lands above every point in the pattern, and
+the first pass rejects nothing &mdash; whereupon <var>&sigma;</var> not moving satisfies their
+stopping rule. Measured on an 8&deg; Gaussian standing on noise of 18 counts, the returned level was
+<strong>2900</strong>, with a threshold above the feature's own height, so the feature was reported as
+noise and could not set a granularity. Seeding the loop from the median and the median absolute
+deviation instead, which a fifth of the points does not move, returns 24 and finds the feature. The
+residual third of overestimate is left as it is: a threshold slightly too high is slightly less
+sensitive, which is the safe direction here.</p>
+
 <h4>The noise level that goes with it</h4>
 
 <p>Their &sect;3.2 is implemented too, because a background estimate is only half of what the paper's
@@ -3807,10 +3897,11 @@ established; every phase checked against the cell mass and volume its block stat
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
 <td>Defect found and corrected; 12 automated</td></tr>
-<tr><td>Background estimators</td><td>32 automated; two estimators over 39 real patterns and
-8 fits; the reach law measured, and the two parameters' influence compared</td>
-<td>Sonneveld&ndash;Visser verified and offered as a component with HighScore's own parameters;
-granularity decides the baseline and bending barely moves it; the fitted components keep the
+<tr><td>Background estimators</td><td>41 automated; two estimators over 39 real patterns and
+8 fits; the reach law measured, the two parameters' influence compared, and the parameters read back
+off eleven measurements and five synthetics</td>
+<td>Offered as a component with HighScore's own parameters and starting values read from the
+glycol scan; a defect in the paper's noise level found and fixed; the fitted components keep the
 default on all 8</td></tr>
 <tr><td>Weight percent</td><td>11 automated, against known masses</td>
 <td>Exact; needs a texture calibration</td></tr>
@@ -3850,7 +3941,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>319 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>328 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

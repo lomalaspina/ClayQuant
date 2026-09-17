@@ -15,15 +15,18 @@ from clayquant.background import (
     ESTIMATORS,
     SONNEVELD_VISSER_BENDING,
     SONNEVELD_VISSER_CURVATURE,
+    SONNEVELD_VISSER_FLOOR,
     SONNEVELD_VISSER_GRANULARITY,
     BackgroundModel,
     StrippedBackground,
     baseline_estimate,
     noise_level,
+    peak_groups,
     snip_baseline,
     sonneveld_visser_baseline,
     sonneveld_visser_granularity,
     sonneveld_visser_reach,
+    suggest_sonneveld_visser,
 )
 
 STEP = 0.0167
@@ -387,3 +390,124 @@ def test_granularity_is_counted_in_points_not_degrees():
     reaches = [sonneveld_visser_reach(20, float(np.mean(np.diff(g))), 30)
                for g in (fine, coarse)]
     assert reaches[1] == pytest.approx(4.0 * reaches[0], rel=0.05)
+
+
+# --- reading the parameters off a measurement -----------------------------
+
+
+def noisy(x, y, seed=0):
+    rng = np.random.default_rng(seed)
+    return y + rng.normal(0.0, np.sqrt(np.clip(y, 1.0, None)) * 0.5)
+
+
+def test_peak_groups_are_the_stretches_above_the_noise():
+    """The paper's Sec. 3.3, and the measurement the pre-screen is built on."""
+    x = grid()
+    y = gaussian(x, 12.0, 5000.0, 0.30) + gaussian(x, 25.0, 3000.0, 1.20)
+    groups = peak_groups(x, noisy(x, y), threshold=200.0)
+    assert len(groups) == 2
+    first, second = sorted(groups, key=lambda group: group.centre)
+    assert first.centre == pytest.approx(12.0, abs=0.1)
+    assert first.width == pytest.approx(0.30, abs=0.06)
+    assert second.centre == pytest.approx(25.0, abs=0.1)
+    assert second.width == pytest.approx(1.20, abs=0.15)
+    assert all(group.points >= 3 for group in groups)
+
+
+def test_a_single_point_over_the_line_is_not_a_reflection():
+    x = grid()
+    difference = np.zeros_like(x)
+    difference[500] = 10_000.0
+    assert peak_groups(x, difference, threshold=100.0) == []
+
+
+def test_the_noise_level_survives_broad_contamination():
+    """The defect this fixes made the pre-screen blind to what it is for.
+
+    Sonneveld & Visser take sigma over everything, peaks included, then reject
+    above mu + 3 sigma.  On a pattern carrying a broad feature - an amorphous
+    hump, a smectite band - the feature is a fifth of the points, sigma comes
+    out inflated, the first threshold lands above every point, nothing is
+    rejected, and sigma not moving reads as convergence.  The level returned is
+    then the spread of the feature, and a feature that is not detected cannot
+    set a granularity.  Seeding from the median and the MAD engages the paper's
+    own loop instead of stalling it.
+
+    It is left somewhat conservative rather than made exact: with a broad
+    feature present its flanks stay within three sigma of the median over a long
+    stretch and survive the clipping, so the level comes back about a third high
+    - 24 against 18 here, where the unseeded version gave 2900.  A threshold
+    slightly too high is slightly less sensitive, which is the safe direction
+    for deciding what counts as a reflection.
+    """
+    x = grid()
+    truth = 18.0
+    rng = np.random.default_rng(4)
+    difference = rng.normal(0.0, truth, x.size) + gaussian(x, 20.0, 9000.0, 8.0)
+    level = noise_level(difference)
+    assert truth <= level.sigma < 1.5 * truth
+    # And the feature is then found, which is the point of measuring the noise.
+    groups = peak_groups(x, difference, level.threshold)
+    assert max(group.width for group in groups) == pytest.approx(8.0, rel=0.25)
+
+
+def test_the_suggestion_clears_the_widest_reflection():
+    x = grid()
+    for width, expected in ((0.2, 4.0), (2.0, 4.0), (4.0, 8.0)):
+        y = (4.0e4 / x**1.6 + 400.0 + gaussian(x, 20.0, 9000.0, width)
+             + gaussian(x, 26.7, 12000.0, 0.15))
+        suggestion = suggest_sonneveld_visser(x, noisy(x, y))
+        assert suggestion.widest_reflection == pytest.approx(width, rel=0.2)
+        assert suggestion.reach == pytest.approx(expected, rel=0.15)
+        # Twice the width, which is what the reach law says keeps all of it.
+        assert suggestion.reach >= 2.0 * suggestion.widest_reflection - 0.3
+
+
+def test_a_pattern_of_sharp_peaks_falls_back_to_the_floor():
+    """Not evidence that nothing broad is present, so it errs the safe way."""
+    x = grid()
+    y = 4.0e4 / x**1.6 + 400.0 + sum(
+        gaussian(x, centre, 9000.0, 0.15) for centre in (8.8, 12.4, 19.9, 26.7)
+    )
+    suggestion = suggest_sonneveld_visser(x, noisy(x, y))
+    assert suggestion.floored is True
+    assert suggestion.reach == pytest.approx(SONNEVELD_VISSER_FLOOR, rel=0.1)
+    assert "floor" in suggestion.note
+
+
+def test_a_feature_too_broad_to_judge_is_capped_and_says_so():
+    x = grid()
+    y = 4.0e4 / x**1.6 + 400.0 + gaussian(x, 20.0, 9000.0, 8.0)
+    suggestion = suggest_sonneveld_visser(x, noisy(x, y))
+    assert suggestion.capped is True
+    assert suggestion.reach <= 0.25 * float(x[-1] - x[0]) + 0.5
+    assert "yours" in suggestion.note
+
+
+def test_the_suggested_bending_is_zero_and_the_note_says_why():
+    """Measured, not chosen: 63 of 64 real fits preferred it to the paper's 1."""
+    x = grid()
+    y = 4.0e4 / x**1.6 + 400.0 + gaussian(x, 12.4, 9000.0, 0.2)
+    suggestion = suggest_sonneveld_visser(x, noisy(x, y))
+    assert suggestion.bending == 0.0
+    assert "63 of 64" in suggestion.note
+
+
+def test_the_suggestion_is_usable_as_it_stands():
+    x = grid()
+    y = 4.0e4 / x**1.6 + 400.0 + gaussian(x, 8.8, 9000.0, 0.5)
+    suggestion = suggest_sonneveld_visser(x, noisy(x, y))
+    background = StrippedBackground.fit(
+        x, y, granularity=suggestion.granularity, bending=suggestion.bending
+    )
+    assert np.all(background(x) <= y + 1e-9)
+    # The reflection it was told to keep is still there afterwards.
+    kept = background.subtract(x, y)
+    assert kept[np.argmin(np.abs(x - 8.8))] > 0.9 * 9000.0
+
+
+def test_too_little_data_to_read_a_suggestion_from_is_refused():
+    with pytest.raises(ValueError):
+        suggest_sonneveld_visser(np.arange(5.0), np.ones(5))
+    with pytest.raises(ValueError):
+        suggest_sonneveld_visser(grid(), np.ones(10))

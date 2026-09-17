@@ -43,6 +43,7 @@ from ..background import (
     BackgroundModel,
     StrippedBackground,
     sonneveld_visser_reach,
+    suggest_sonneveld_visser,
 )
 from ..bern import is_clay_phase
 from ..detection import detect_phases, screen_phases
@@ -667,6 +668,9 @@ def background_tab() -> html.Div:
                                        marks={0: "0", 1: "1", 2: "2", 4: "4"}),
                             html.Div(id="bg-sv-note",
                                      style={"fontSize": "11px", "color": "#666"}),
+                            html.Div(id="bg-suggestion",
+                                     style={"fontSize": "11px", "color": "#1f77b4",
+                                            "marginTop": "4px"}),
                         ],
                         id="bg-sv-box",
                     ),
@@ -1328,6 +1332,42 @@ def register_callbacks(app: Dash) -> None:
             # it is already in the curve.  A fitted 1/x on top would count it
             # twice, and a control that quietly does nothing reads as a defect.
             hidden if kind == "sonneveld-visser" else shown,
+        )
+
+    @app.callback(
+        Output("bg-granularity", "value"),
+        Output("bg-bending", "value"),
+        Output("bg-suggestion", "children"),
+        Input("load-status", "children"),
+        prevent_initial_call=True,
+    )
+    def suggest_the_starting_values(_loaded):
+        """Read starting values for the two parameters off the glycol mount.
+
+        The glycol mount, because that is the one the quantification is made on
+        (Sec. 2.1) and the one whose broad interstratified intensity the
+        background most easily eats.  Any of the three would do for the
+        arithmetic; this is the one whose answer matters.
+
+        It fires on loading and not afterwards, so an adjustment by hand is not
+        undone by the program a moment later.
+        """
+        loaded = STATE.loaded_mounts()
+        if not loaded:
+            raise PreventUpdate
+        mount = "glycol" if "glycol" in loaded else loaded[0]
+        pattern = STATE.mounts[mount].corrected()
+        try:
+            suggestion = suggest_sonneveld_visser(pattern.two_theta, pattern.intensity)
+        except Exception as exc:  # noqa: BLE001 - a starting value is not worth failing over
+            return no_update, no_update, f"Could not read a starting value: {exc}"
+        source = MOUNT_LABELS[mount]
+        if mount != "glycol":
+            source += " (the glycol mount is not loaded)"
+        return (
+            suggestion.granularity,
+            suggestion.bending,
+            f"Starting values read from the {source} scan. {suggestion.note}",
         )
 
     @app.callback(
