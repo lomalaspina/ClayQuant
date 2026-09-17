@@ -617,10 +617,11 @@ four times their allowance.
 
 That anchoring is a choice, not a conversion: HighScore's slider position is not
 documented as a multiple of anything, so the same number here and there need not
-give the same curve.  It matters less than it sounds, because the parameter is
-weak: across 39 real patterns its whole span moves the baseline by at most
-0.70 % of the intensity range against granularity's 30 %.  The measurement is
-reported under :func:`sonneveld_visser_baseline`.
+give the same curve.  HighScore's slider runs 0 to 100, and so does this one:
+the bottom of that range does almost nothing - 0 to 4 moves a baseline by well
+under 1 % of the intensity range - and it takes the upper part for the parameter
+to bite at all.  The measurements are reported under
+:func:`sonneveld_visser_baseline`.
 """
 
 SONNEVELD_VISSER_CURVATURE = 0.02 / 255.0
@@ -733,16 +734,22 @@ def sonneveld_visser_baseline(
     introduce ``c`` at all; 1 is their own value; HighScore's usual advice is 0
     to 2.
 
-    On real patterns the bending factor turns out to matter very little, and
-    granularity to decide almost everything.  Measured over 39 clay and standard
-    patterns, taking the bending factor across its whole useful span moves the
-    baseline by at most 0.70 % of the intensity range - 0.16 % from 0 to 1 -
-    while taking granularity from 10 to 40 moves it by 30 %.  The reason is the
-    relation above: the bound scales with the range of the data, so a real
-    background's curvature is either far above it, in which case the rule fires
-    whatever the bending, or far below, where the erosion is negligible anyway.
-    Documented here so that nobody spends an afternoon on the bending slider
-    while leaving granularity at whatever it happened to be.
+    The bending factor is weak over the bottom of its range and only becomes
+    useful towards the top, which is worth stating because the bottom is where
+    a reader assumes the interesting values are.  Measured on real patterns, it
+    moves the baseline by 0.08 to 0.16 % of the intensity range going from 0 to
+    1, about 0.4 % by 4, and 2.3 to 12.4 % by 100.  Granularity from 10 to 40
+    moves it by 30 %, so granularity is still the parameter to set first - but
+    "inert", which an earlier version of this note said on the strength of a
+    0-to-4 span, was wrong.
+
+    Which value to prefer is a separate question and the fit answers it
+    consistently: over eight glycol mounts, R_wp is lowest at bending 0 on every
+    one, and rises monotonically to 4.6 to 11.9 points worse at 100.  The reason is
+    the relation above - a real clay background's curvature far exceeds the
+    bound, so raising the allowance cannot help it follow the background, and
+    all it does is let the baseline sit higher and take more of the broad basal
+    intensity out as background.
 
     **What survives.** A convex background - the direct-beam tail of an oriented
     mount, which falls as roughly ``a/x^n`` - has ``m_i >= p_i`` everywhere, so
@@ -754,9 +761,13 @@ def sonneveld_visser_baseline(
     Parameters
     ----------
     granularity:
-        Points between samples.  HighScore's parameter of the same name.
+        Points between samples.  HighScore's parameter of the same name, whose
+        slider runs 0 to 50; 0 and 1 both mean every point.
     bending:
-        Curvature allowance, 1 being the value the paper used.
+        Curvature allowance, 1 being the value the paper used.  HighScore's
+        slider runs 0 to 100, and the span matters: over 0 to 4 the baseline
+        barely moves, and it takes the upper part of the range for the parameter
+        to do anything at all.
     iterations:
         Erosion passes; the paper's about 30, and left alone by the interface so
         that granularity is the single control of reach.
@@ -793,9 +804,9 @@ def sonneveld_visser_baseline(
         raise ValueError("bending must not be negative")
     if window is not None:
         granularity = sonneveld_visser_granularity(window, step, iterations)
-    granularity = int(granularity)
-    if granularity < 1:
-        raise ValueError("granularity must be at least 1 point")
+    # HighScore's slider starts at 0 and 0 can only mean every point, which is
+    # what 1 means here; accepting both keeps a setting transferable.
+    granularity = max(1, int(granularity))
 
     # The last point is sampled as well as the first: the samples are the only
     # evidence the interpolation has, and without the right-hand end it would
@@ -1163,8 +1174,9 @@ def suggest_sonneveld_visser(
 
     **Bending** is not determined by the data in the same way, and asking the
     fit which value it prefers is the wrong question for granularity but the
-    right one here.  Asked, over eight glycol mounts at eight granularities, the
-    answer is 0 in 63 of the 64 comparisons, by up to 1.4 points of R_wp.  The
+    right one here.  Asked, over eight glycol mounts across the whole 0 to 100
+    range, the answer is 0 on every mount, and the penalty for raising it grows
+    monotonically to between 4.6 and 11.9 points of R_wp at 100.  The
     reason is (A.2) of the manual: a real clay background's curvature exceeds
     the bound that any bending factor in HighScore's range can grant, so the
     allowance cannot do the job the paper introduced it for, and all that is
@@ -1238,7 +1250,10 @@ def suggest_sonneveld_visser(
             f"of the scan, so the reach is capped at {limit:.1f} deg; a feature that wide "
             f"cannot be told from background by any local test, and the choice is yours."
         )
-    note += " Bending 0: measured better than 1 on 63 of 64 real fits."
+    note += (
+        " Bending 0: every one of eight real mounts fitted best there, and worse "
+        "by up to 12 points of R_wp at 100."
+    )
 
     return SonneveldVisserSuggestion(
         granularity=granularity,

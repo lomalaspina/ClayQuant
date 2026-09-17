@@ -20,8 +20,12 @@ toolkit may live:
 * A child can be given a deadline, so a dialog left open on someone's desk
   cannot hold a request open for ever.
 
-Nothing is passed on the command line but an optional starting folder, and the
-answer comes back on stdout - one line, empty if the dialog was dismissed.
+Nothing is passed on the command line but an optional starting path and, for a
+file, the patterns to filter on; the answer comes back on stdout - one line,
+empty if the dialog was dismissed.
+
+    folder_dialog.py [initial]
+    folder_dialog.py --file [initial] ["Label|*.ext" ...]
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ import sys
 from pathlib import Path
 
 TITLE = "Select the folder holding the diffraction scans"
+FILE_TITLE = "Select a file"
 
 
 def choose_folder(initial: str | None = None) -> str | None:
@@ -74,10 +79,68 @@ def choose_folder(initial: str | None = None) -> str | None:
     return str(Path(chosen))
 
 
+def choose_file(initial: str | None = None, filetypes: list[str] | None = None) -> str | None:
+    """Open the platform's file chooser and return the chosen path.
+
+    ``filetypes`` are given as ``"label|pattern"`` strings, so they can travel
+    on a command line without quoting: ``"Phase database|*.json"``.  Raises as
+    :func:`choose_folder` does.
+    """
+    import tkinter
+    from tkinter import filedialog
+
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    try:
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.lift()
+        try:
+            root.focus_force()
+        except tkinter.TclError:
+            pass
+
+        start = Path(initial) if initial else None
+        directory = None
+        name = None
+        if start is not None:
+            if start.is_dir():
+                directory = str(start)
+            elif start.parent.is_dir():
+                directory = str(start.parent)
+                name = start.name
+
+        kinds: list[tuple[str, str]] = []
+        for entry in filetypes or []:
+            label, _, pattern = entry.partition("|")
+            if pattern:
+                kinds.append((label, pattern))
+        kinds.append(("All files", "*"))
+
+        chosen = filedialog.askopenfilename(
+            title=FILE_TITLE, initialdir=directory, initialfile=name, filetypes=kinds
+        )
+    finally:
+        try:
+            root.destroy()
+        except tkinter.TclError:
+            pass
+
+    if not chosen:
+        return None
+    return str(Path(chosen))
+
+
 def main(argv: list[str]) -> int:
+    wants_file = bool(argv) and argv[0] == "--file"
+    if wants_file:
+        argv = argv[1:]
     initial = argv[0] if argv else None
     try:
-        chosen = choose_folder(initial)
+        chosen = choose_file(initial, argv[1:]) if wants_file else choose_folder(initial)
     except ImportError as exc:
         print(f"tkinter is not available: {exc}", file=sys.stderr)
         return 2

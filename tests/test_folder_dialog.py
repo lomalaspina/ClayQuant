@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from clayquant.gui import folder_dialog
-from clayquant.gui.app import LOOPBACK, ask_for_folder, served_locally
+from clayquant.gui.app import LOOPBACK, ask_for_file, ask_for_folder, served_locally
 
 SCRIPT = Path(folder_dialog.__file__)
 
@@ -166,3 +166,53 @@ def test_a_browser_on_another_machine_is_not_offered_a_local_dialog():
     assert "127.0.0.1" in LOOPBACK and "::1" in LOOPBACK
     # Outside a request - the command line, a test - there is nobody remote.
     assert served_locally() is True
+
+
+# --- the file chooser, for the database and the library -------------------
+
+
+def test_a_chosen_file_comes_back(tmp_path, monkeypatch):
+    target = tmp_path / "phases.json"
+    target.write_text("{}", encoding="utf-8")
+    fake_chooser(tmp_path, f"print({str(target)!r})", monkeypatch)
+    chosen, problem = ask_for_file(None, ["Phase database|*.json"])
+    assert chosen == str(target)
+    assert problem is None
+
+
+def test_the_filters_and_the_starting_path_reach_the_chooser(tmp_path, monkeypatch):
+    fake_chooser(tmp_path, "import sys; print('|'.join(sys.argv[1:]))", monkeypatch)
+    chosen, _ = ask_for_file("/somewhere/phases.json", ["Phase database|*.json",
+                                                        "Pattern library|*.npz"])
+    parts = chosen.split("|")
+    # --file, the starting path, then each filter as label|pattern.
+    assert parts[0] == "--file"
+    assert parts[1] == "/somewhere/phases.json"
+    assert "Phase database" in chosen and "*.json" in chosen
+    assert "Pattern library" in chosen and "*.npz" in chosen
+
+
+def test_a_dismissed_file_chooser_changes_nothing(tmp_path, monkeypatch):
+    fake_chooser(tmp_path, "pass", monkeypatch)
+    chosen, problem = ask_for_file("/somewhere", ["Phase database|*.json"])
+    assert chosen is None and problem is None
+
+
+def test_the_file_chooser_reports_a_missing_tkinter_too(tmp_path, monkeypatch):
+    fake_chooser(tmp_path, """
+        import sys
+        print('no tkinter', file=sys.stderr)
+        raise SystemExit(2)
+    """, monkeypatch)
+    chosen, problem = ask_for_file(None, ["Phase database|*.json"])
+    assert chosen is None
+    assert "tkinter" in problem
+
+
+def test_the_chooser_module_offers_both_kinds():
+    """One module and one child process for files and folders alike."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "askdirectory" in source and "askopenfilename" in source
+    assert "--file" in source
+    # A filter arrives as "label|pattern", which needs no quoting on a command line.
+    assert 'partition("|")' in source

@@ -1570,7 +1570,9 @@ they were measured under identical conditions.</p>
 
 <h3 id="s5-5">5.5 Step 4 &mdash; Main minerals</h3>
 
-<p>Load the phase database of &sect;<a href="#s4-3">4.3</a> and press <em>Search for main
+<p>Point the box at the phase database of &sect;<a href="#s4-3">4.3</a> &mdash; typed, or with
+<em>Browse</em>, which opens the file chooser of the computer running ClayQuant for the same reason
+the folder button does (&sect;<a href="#s5-2">5.2</a>) &mdash; and press <em>Search for main
 minerals</em>. If a reference library has been loaded, every candidate is calculated and fitted in
 competition with the clay patterns and with each other in a single non-negative least-squares solve,
 and each is ranked by the share of the pattern it takes. Without a library, the program falls back
@@ -1709,7 +1711,7 @@ is present in the folder.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
 <tr><td>Granularity (points per interval)</td><td class="kw">bg-granularity</td>
-<td>read from the glycol scan</td>
+<td>0&ndash;50, read from the glycol scan</td>
 <td>Sonneveld&ndash;Visser only. Its starting value is proposed from the glycol mount when the
 patterns are loaded, from the width of the broadest reflection standing above the noise
 (&sect;<a href="#a-19">A.19</a>); the line beneath the sliders says what was measured and what
@@ -1720,13 +1722,13 @@ every twentieth point, and HighScore's parameter of the same name, recommended t
 panel reports in degrees beneath the slider. Counted in points rather than degrees, as both the paper
 and HighScore count it, so the same number reaches further on a coarser scan &mdash; 20 points is
 2.4&deg; on a 0.01&deg; film scan and 4.0&deg; on this laboratory's 0.0167&deg; step.</td></tr>
-<tr><td>Bending factor</td><td class="kw">bg-bending</td><td>0, proposed</td>
+<tr><td>Bending factor</td><td class="kw">bg-bending</td><td>0&ndash;100, proposed at 0</td>
 <td>Sonneveld&ndash;Visser only. How much <em>downward</em> curvature the background may keep;
 HighScore's slider of the same name, where 0 to 2 is the usual advice. 0 allows only a straight or
 convex background, which is the paper's first form; 1 is the value the paper itself used. On clay
-patterns it is a weak control: across 39 of them its whole span moves the baseline by at most
-0.70 % of the intensity range, against granularity's 30 %
-(&sect;<a href="#a-19">A.19</a>). Set granularity first.</td></tr>
+patterns 0 to 4 moves the baseline by well under 1 % of the intensity range and 0 to 100 by
+2.3&ndash;12.4 %, against granularity's 30 % (&sect;<a href="#a-19">A.19</a>). Set granularity
+first, and note that every mount tested fitted best at 0.</td></tr>
 <tr><td>Stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
 <td>Width of the widest feature the stripping treats as a peak. The components are fitted to the
 stripped estimate and follow it to a few counts, so this control, not the choice of component, is
@@ -1769,6 +1771,15 @@ at 3&deg;.</p>
 <td>Relative cell deviation allowed when matching positions, applied as one <em>coherent</em> scaling of all of a phase's d-spacings. Most accompanying minerals are solid solutions whose cells differ from the database entry. Applied per peak instead of coherently, a 2 % allowance is a window up to 1.6&deg; wide and matches almost anything (&sect;<a href="#a-6">A.6</a>).</td></tr>
 <tr><td>Minimum share (&permil;) or score (%)</td><td class="kw">detect-score</td><td>10</td>
 <td>Reporting threshold. With a library loaded it is read as parts per thousand of the pattern (10 = 1 %); without one, as a percentage score of the peak-matching test.</td></tr>
+<tr><td>Browse&hellip; (database)</td><td class="kw">db-browse</td><td>&mdash;</td>
+<td>Opens the file chooser of the computer running ClayQuant, filtered to
+<span class="kw">.json</span>, and fills the box with what is picked.</td></tr>
+<tr><td>Tick phases above (%)</td><td class="kw">detect-tick</td><td>3.0</td>
+<td>Which phases arrive already ticked in the dialog; every phase found is listed either way. A
+share is not a property of one phase &mdash; it is what is left after every other candidate in the
+database has taken the intensity it can explain &mdash; so a mineral can fall below this line because
+a different candidate was added to the database, with no change in the evidence for it. A phase you
+expect that is listed but unticked is a reason to lower this, not to conclude it was not found.</td></tr>
 <tr><td>Minimum peak S/N</td><td class="kw">detect-snr</td><td>5</td>
 <td>Height above the local noise a predicted line must reach to count as found. Used by the peak-matching fallback and by the per-line evidence shown in the dialog.</td></tr>
 <tr><td>Search range (&deg;2&theta;)</td><td class="kw">detect-range</td><td>4 to 40</td>
@@ -1807,6 +1818,8 @@ at 3&deg;.</p>
 <h3>6.7 Tab 7 &mdash; Fit and results</h3>
 <div class="tablewrap"><table>
 <tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
+<tr><td>Browse&hellip; (library)</td><td class="kw">lib-browse</td><td>&mdash;</td>
+<td>As the database's, filtered to <span class="kw">.npz</span>.</td></tr>
 <tr><td>Library file (.npz)</td><td class="kw">lib-path</td><td class="kw">library/clays.npz</td><td>The stored reference library.</td></tr>
 <tr><td>Load library / Build library now</td><td><span class="kw">lib-load</span>, <span class="kw">lib-build</span></td><td>&mdash;</td>
 <td>Loads a stored library, or builds one with the current instrument settings. Building takes a few minutes.</td></tr>
@@ -3582,10 +3595,11 @@ a setting means the same thing in both:
 
 <div class="tablewrap"><table>
 <tr><th>Parameter</th><th>Paper</th><th>HighScore</th><th>Here</th></tr>
-<tr><td>Granularity</td><td>every twentieth point</td><td>number of intervals, 15&ndash;30
-recommended, literature value 20</td><td class="num">20</td></tr>
-<tr><td>Bending factor</td><td><var>c</var> = 0.02 of 255</td><td>slider, 0&ndash;4, usually
-0&ndash;2</td><td class="num">1</td></tr>
+<tr><td>Granularity</td><td>every twentieth point</td><td>number of intervals, slider
+0&ndash;50, 15&ndash;30 recommended, literature value 20</td><td class="num">0&ndash;50, proposed
+from the scan</td></tr>
+<tr><td>Bending factor</td><td><var>c</var> = 0.02 of 255</td><td>slider, 0&ndash;100</td>
+<td class="num">0&ndash;100, proposed at 0</td></tr>
 <tr><td>Passes</td><td>about 30</td><td>not exposed</td><td class="num">30</td></tr>
 </table></div>
 
@@ -3661,18 +3675,37 @@ window the cutoff is soft: a feature of exactly the stated width keeps half its 
 <td class="num">4.0&deg;</td><td class="num">6.0&deg;</td><td class="num">8.1&deg;</td></tr>
 </table></div>
 
-<p><strong>The bending factor barely matters, and granularity decides everything.</strong> The
-paper introduces <var>c</var> as the thing that lets a curved background through, so a reader expects
-it to be the parameter to tune, and HighScore putting it on a slider invites the same. Measured over
-the 39 real patterns available, moving the bending factor across its whole useful span shifts the
-baseline by at most <strong>0.70 % of the intensity range</strong> &mdash; 0.16 % from 0 to 1, 0.37 %
-from 0 to 2 &mdash; while moving granularity from 10 to 40 shifts it by <strong>30 %</strong>. A
-factor of forty between the two. The reason is (A.2): the bound scales with the range of the data,
-so a real background's curvature is either far above it &mdash; in which case (A.1) fires whatever
-<var>c</var> is &mdash; or far below, where the erosion is negligible anyway. The bending factor is
-kept because it is the paper's parameter and HighScore's, and is documented here as weak so that
-nobody spends an afternoon on that slider while leaving granularity at whatever it happened to
-be.</p>
+<p><strong>The bending factor is weak at the bottom of its range, not inert &mdash; a
+correction.</strong> An earlier version of this section reported it as inert to 0.03 % of the
+intensity range, on the strength of a slider running 0 to 4. The range was the error: HighScore's own
+runs to <strong>100</strong>, and over that span the parameter moves a baseline by
+<strong>2.3 to 12.4 %</strong> of the intensity range on real patterns. The first few units really do
+almost nothing &mdash; 0.08 to 0.16 % from 0 to 1, about 0.4 % by 4 &mdash; which is why a slider
+stopping at 4 made it look like a control that did not work, and why it now runs the full distance.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Bending factor</th><th class="num">1</th><th class="num">4</th><th class="num">10</th>
+<th class="num">25</th><th class="num">50</th><th class="num">100</th></tr>
+<tr><td>Baseline moved, glycol mount</td><td class="num">0.16 %</td><td class="num">0.35 %</td>
+<td class="num">1.4 %</td><td class="num">3.7 %</td><td class="num">4.3 %</td><td class="num">5.4 %</td></tr>
+<tr><td>Baseline moved, hectorite</td><td class="num">0.09 %</td><td class="num">0.52 %</td>
+<td class="num">1.3 %</td><td class="num">2.4 %</td><td class="num">4.7 %</td><td class="num">12.4 %</td></tr>
+<tr><td><var>R</var><sub>wp</sub> penalty, worst of 8 mounts</td><td class="num">0.5</td>
+<td class="num">1.5</td><td class="num">4.2</td><td class="num">7.8</td><td class="num">9.3</td>
+<td class="num">11.9</td></tr>
+</table></div>
+
+<p class="small">Against bending 0, as a percentage of the intensity range; the last row in points of
+<var>R</var><sub>wp</sub>.</p>
+
+<p>Granularity from 10 to 40 still moves the baseline by <strong>30 %</strong>, so it remains the
+parameter to set first. And which bending value to prefer is settled rather than open: over eight
+glycol mounts, <var>R</var><sub>wp</sub> is lowest at <strong>0 on every one</strong> and rises
+monotonically to 4.6&ndash;11.9 points worse at 100. The reason is (A.2) &mdash; a real clay background's
+downward curvature far exceeds the bound, so raising the allowance cannot help the baseline follow
+the background; all it does is let the baseline sit higher and take more of the broad basal intensity
+out. The slider reaches 100 because HighScore's does and because a control should be able to show
+what it does, not because the upper end is a good place to work.</p>
 
 <p>One implementation question the paper leaves open answers itself. Their loop is in place, so a
 sample already lowered in this pass is what its right-hand neighbour sees, which makes a pass
@@ -3798,8 +3831,8 @@ be told from background by any local test and the judgement is the analyst's.</p
 
 <p><strong>Bending was measured, not chosen.</strong> Asking the fit which value it prefers is the
 wrong question for granularity and the right one here. Asked over eight glycol mounts at eight
-granularities &mdash; 64 comparisons &mdash; <var>R</var><sub>wp</sub> was no worse at bending 0 than
-at the paper's 1 in <strong>63 of them</strong>, by up to 1.4 points. The reason is (A.2): a real
+granularities, and again across the whole 0&ndash;100 range, <var>R</var><sub>wp</sub> was lowest at
+bending <strong>0 on every mount</strong>, and worse by up to 11.9 points at 100. The reason is (A.2): a real
 clay background's downward curvature exceeds the bound any bending factor in HighScore's range can
 grant, so the allowance cannot do the job the paper introduced it for, and all that is left of it is
 a baseline sitting slightly higher &mdash; which on an oriented mount means slightly more of the
@@ -3909,10 +3942,11 @@ established; every phase checked against the cell mass and volume its block stat
 <td>Defect found and corrected; 12 automated</td></tr>
 <tr><td>Background estimators</td><td>41 automated; two estimators over 39 real patterns and
 8 fits; the reach law measured, the two parameters' influence compared, and the parameters read back
-off eleven measurements and five synthetics</td>
+off eleven measurements and five synthetics; both sliders over HighScore's full spans</td>
 <td>Offered as a component with HighScore's own parameters and starting values read from the
-glycol scan; a defect in the paper's noise level found and fixed; the fitted components keep the
-default on all 8</td></tr>
+glycol scan; a defect in the paper's noise level found and fixed; an "inert" claim about the
+bending factor retracted once its slider reached 100; the fitted components keep the default on
+all 8</td></tr>
 <tr><td>Weight percent</td><td>11 automated, against known masses</td>
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
@@ -3940,9 +3974,9 @@ against a CIF written by TOPAS</td>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
-<tr><td>Folder chooser</td><td>12 automated; the real dialog opened, cancelled and accepted under a
-virtual display, and driven through the running server</td>
-<td>Pass; the chosen folder reaches the box and is scanned in one click</td></tr>
+<tr><td>File and folder choosers</td><td>17 automated; the real dialogs opened, cancelled and
+accepted under a virtual display, and all three driven through the running server</td>
+<td>Pass; the chosen folder, database and library each reach their box</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's
@@ -3951,7 +3985,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>328 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>335 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

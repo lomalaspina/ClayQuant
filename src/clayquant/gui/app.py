@@ -248,6 +248,12 @@ def background_report(pattern, fit, background) -> str:
 
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"})
 
+REMOTE_CHOOSER = (
+    "This page is open on a different computer from the one running ClayQuant, so "
+    "a chooser here would appear on that other machine. Type the path as the "
+    "computer running ClayQuant sees it."
+)
+
 FOLDER_DIALOG_TIMEOUT = 600.0
 
 
@@ -270,6 +276,12 @@ def served_locally() -> bool:
     return (request.remote_addr or "") in LOOPBACK
 
 
+def ask_for_file(initial: str | None,
+                 filetypes: list[str] | None = None) -> tuple[str | None, str | None]:
+    """Open the operating system's file chooser.  See :func:`ask_for_folder`."""
+    return _ask(["--file"] + ([initial] if initial else [""]) + list(filetypes or []))
+
+
 def ask_for_folder(initial: str | None) -> tuple[str | None, str | None]:
     """Open the operating system's folder chooser.
 
@@ -282,22 +294,25 @@ def ask_for_folder(initial: str | None) -> tuple[str | None, str | None]:
     than with ``-m`` so that the child does not import this module and drag
     numpy, dash and plotly in behind it just to draw a dialog.
     """
+    return _ask([initial] if initial else [])
+
+
+def _ask(arguments: list[str]) -> tuple[str | None, str | None]:
+    """Run the chooser child with these arguments and interpret how it ended."""
     script = Path(folder_dialog.__file__)
-    command = [sys.executable, str(script)]
-    if initial:
-        command.append(initial)
+    command = [sys.executable, str(script)] + [str(item) for item in arguments]
     try:
         finished = subprocess.run(
             command, capture_output=True, text=True, timeout=FOLDER_DIALOG_TIMEOUT
         )
     except subprocess.TimeoutExpired:
         return None, (
-            "The folder chooser was still open after "
+            "The chooser was still open after "
             f"{FOLDER_DIALOG_TIMEOUT / 60:.0f} minutes, so it was closed. "
             "Type the path instead, or press Browse again."
         )
     except OSError as exc:
-        return None, f"Could not start the folder chooser: {exc}"
+        return None, f"Could not start the chooser: {exc}"
 
     if finished.returncode == 0:
         chosen = finished.stdout.strip()
@@ -307,17 +322,17 @@ def ask_for_folder(initial: str | None) -> tuple[str | None, str | None]:
     detail = detail[-1] if detail else f"exit code {finished.returncode}"
     if finished.returncode == 2:
         return None, (
-            "This Python has no tkinter, so it cannot open a folder chooser. "
+            "This Python has no tkinter, so it cannot open a file or folder chooser. "
             "Type the path into the box instead. On Debian or Ubuntu, "
             "installing python3-tk and reinstalling ClayQuant adds the chooser; "
             "the Windows and macOS installers from python.org include it."
         )
     if finished.returncode == 3:
         return None, (
-            "There is no desktop session for a dialog to open on, so the folder "
+            "There is no desktop session for a dialog to open on, so the path "
             f"has to be typed into the box. ({detail})"
         )
-    return None, f"The folder chooser failed: {detail}"
+    return None, f"The chooser failed: {detail}"
 
 
 def gui_instrument(
@@ -661,11 +676,12 @@ def background_tab() -> html.Div:
                     html.Div(
                         [
                             label("Granularity (points per interval)"),
-                            dcc.Slider(id="bg-granularity", min=2, max=60, step=1, value=20,
-                                       marks={2: "2", 20: "20", 40: "40", 60: "60"}),
+                            dcc.Slider(id="bg-granularity", min=0, max=50, step=1, value=20,
+                                       marks={0: "0", 10: "10", 20: "20", 30: "30",
+                                              40: "40", 50: "50"}),
                             label("Bending factor"),
-                            dcc.Slider(id="bg-bending", min=0.0, max=4.0, step=0.1, value=1.0,
-                                       marks={0: "0", 1: "1", 2: "2", 4: "4"}),
+                            dcc.Slider(id="bg-bending", min=0.0, max=100.0, step=1.0, value=0.0,
+                                       marks={0: "0", 25: "25", 50: "50", 75: "75", 100: "100"}),
                             html.Div(id="bg-sv-note",
                                      style={"fontSize": "11px", "color": "#666"}),
                             html.Div(id="bg-suggestion",
@@ -820,8 +836,13 @@ def main_minerals_tab() -> html.Div:
                     label("Phase database (.json)"),
                     dcc.Input(id="db-path", type="text", value="structures/phases.json",
                               style={"width": "100%"}, debounce=True),
-                    html.Button("Load database", id="db-load", n_clicks=0,
-                                style={"marginTop": "6px"}),
+                    html.Div(
+                        [
+                            html.Button("Browse\u2026", id="db-browse", n_clicks=0),
+                            html.Button("Load database", id="db-load", n_clicks=0),
+                        ],
+                        style={"display": "flex", "gap": "6px", "marginTop": "6px"},
+                    ),
                     html.Div(id="db-status", style={"marginTop": "8px", "fontSize": "0.82rem"}),
                     html.Hr(),
                     label("Mount to search"),
@@ -839,6 +860,19 @@ def main_minerals_tab() -> html.Div:
                     label("Minimum peak S/N"),
                     dcc.Slider(id="detect-snr", min=2, max=20, step=1, value=5,
                                marks={2: "2", 10: "10", 20: "20"}),
+                    label("Tick phases above (% of the pattern)"),
+                    dcc.Slider(id="detect-tick", min=0.5, max=10.0, step=0.5, value=3.0,
+                               marks={0.5: "0.5", 3: "3", 10: "10"}),
+                    html.Div(
+                        "Every phase found is listed; this decides only which arrive "
+                        "already ticked. A share depends on what else is in the "
+                        "database competing for the same intensity, so a phase can "
+                        "drop below the line because a different candidate was added, "
+                        "not because the evidence for it changed. If a mineral you "
+                        "expect is listed but unticked, lower this rather than "
+                        "assuming it was not found.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     label("Search range (°2θ)"),
                     dcc.RangeSlider(id="detect-range", min=2.0, max=70.0, step=0.5,
                                     value=[4.0, 40.0]),
@@ -872,8 +906,13 @@ def fit_tab() -> html.Div:
                     label("Library file (.npz)"),
                     dcc.Input(id="lib-path", type="text", value="library/clayquant_library.npz",
                               style={"width": "100%"}, debounce=True),
-                    html.Button("Load library", id="lib-load", n_clicks=0,
-                                style={"marginTop": "6px"}),
+                    html.Div(
+                        [
+                            html.Button("Browse\u2026", id="lib-browse", n_clicks=0),
+                            html.Button("Load library", id="lib-load", n_clicks=0),
+                        ],
+                        style={"display": "flex", "gap": "6px", "marginTop": "6px"},
+                    ),
                     html.Button("Build library now", id="lib-build", n_clicks=0,
                                 style={"marginTop": "6px"}),
                     working(html.Div(id="lib-status",
@@ -1125,13 +1164,7 @@ def register_callbacks(app: Dash) -> None:
         than two.
         """
         if not served_locally():
-            return no_update, error_message(
-                RuntimeError(
-                    "This page is open on a different computer from the one running "
-                    "ClayQuant, so a folder chooser here would appear on that other "
-                    "machine. Type the path as the computer running ClayQuant sees it."
-                )
-            )
+            return no_update, error_message(RuntimeError(REMOTE_CHOOSER))
         chosen, problem = ask_for_folder(current)
         if problem:
             return no_update, error_message(RuntimeError(problem))
@@ -1608,6 +1641,40 @@ def register_callbacks(app: Dash) -> None:
         )
 
     @app.callback(
+        Output("db-path", "value"),
+        Output("db-status", "children", allow_duplicate=True),
+        Input("db-browse", "n_clicks"),
+        State("db-path", "value"),
+        prevent_initial_call=True,
+    )
+    def browse_for_database(_clicks, current):
+        if not served_locally():
+            return no_update, error_message(RuntimeError(REMOTE_CHOOSER))
+        chosen, problem = ask_for_file(current, ["Phase database|*.json"])
+        if problem:
+            return no_update, error_message(RuntimeError(problem))
+        if chosen is None:
+            raise PreventUpdate
+        return chosen, no_update
+
+    @app.callback(
+        Output("lib-path", "value"),
+        Output("lib-status", "children", allow_duplicate=True),
+        Input("lib-browse", "n_clicks"),
+        State("lib-path", "value"),
+        prevent_initial_call=True,
+    )
+    def browse_for_library(_clicks, current):
+        if not served_locally():
+            return no_update, error_message(RuntimeError(REMOTE_CHOOSER))
+        chosen, problem = ask_for_file(current, ["Pattern library|*.npz"])
+        if problem:
+            return no_update, error_message(RuntimeError(problem))
+        if chosen is None:
+            raise PreventUpdate
+        return chosen, no_update
+
+    @app.callback(
         Output("detect-graph", "figure"),
         Output("detect-dialog", "children"),
         Output("detect-status", "children"),
@@ -1617,9 +1684,10 @@ def register_callbacks(app: Dash) -> None:
         State("detect-score", "value"),
         State("detect-snr", "value"),
         State("detect-range", "value"),
+        State("detect-tick", "value"),
         prevent_initial_call=True,
     )
-    def run_detection(_clicks, mount, allowance, min_score, snr, search_range):
+    def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above):
         if not STATE.phase_database:
             return no_update, None, error_message(
                 ValueError("Load a phase database first.")
@@ -1709,14 +1777,23 @@ def register_callbacks(app: Dash) -> None:
                                 }
                                 for evidence in findings[:25]
                             ],
-                            # Ticked by default only where the share is clear.  The
-                            # screen's tail at one or two percent is largely
-                            # least-squares slack rather than real mineralogy, so
-                            # it is listed but left for the analyst to judge.
+                            # Ticked by default only where the share is clear, at a
+                            # level the analyst can move.  The screen's tail at one
+                            # or two percent is largely least-squares slack rather
+                            # than real mineralogy, so it is listed but left to be
+                            # judged - but the level was fixed at 3 %, invisible,
+                            # and a share is not a property of one phase: it is what
+                            # is left after every other candidate in the database has
+                            # taken what it can explain.  Add a candidate that happens
+                            # to cover the same reflections and a real mineral drops
+                            # below the line with no change in the evidence for it.
+                            # A number that decides what the operator sees should not
+                            # be one they cannot see.
                             value=[
                                 evidence.name
                                 for evidence in findings
-                                if evidence.score >= (0.03 if screened else 0.9)
+                                if evidence.score >= (float(tick_above) / 100.0
+                                                      if screened else 0.9)
                             ],
                             style={"maxHeight": "260px", "overflowY": "auto"},
                             labelStyle={"display": "block", "fontSize": "0.85rem"},

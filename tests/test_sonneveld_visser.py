@@ -213,9 +213,44 @@ def test_the_order_of_travel_stops_mattering_once_the_erosion_settles():
 def test_the_parameters_are_checked():
     x = grid()
     with pytest.raises(ValueError):
-        sonneveld_visser_baseline(x, np.ones_like(x), granularity=0)
-    with pytest.raises(ValueError):
         sonneveld_visser_baseline(x, np.ones_like(x), bending=-1.0)
+
+
+def test_granularity_zero_means_every_point():
+    """HighScore's granularity slider starts at 0, and 0 can only mean this.
+
+    Accepted rather than refused so that a setting transfers between the two
+    programs without the reader having to know that one of them counts from 1.
+    """
+    x = grid()
+    y = 4.0e4 / x**1.6 + 600.0 + gaussian(x, 12.4, 9000.0, 0.15)
+    assert np.allclose(
+        sonneveld_visser_baseline(x, y, granularity=0),
+        sonneveld_visser_baseline(x, y, granularity=1),
+    )
+
+
+def test_the_bending_factor_bites_only_at_the_top_of_its_range():
+    """Why the slider needed to run to 100, and what an earlier note got wrong.
+
+    I reported the bending factor as inert on the strength of a 0-to-4 span,
+    which was the span I had given it.  Over HighScore's actual 0 to 100 it
+    moves a baseline by several per cent of the intensity range - on real
+    patterns 2.3 to 12.4 % - so it is weak at the bottom rather than inert, and
+    a reader who only ever saw 0 to 4 would conclude the parameter did nothing.
+    """
+    x = grid()
+    y = (4.0e4 / x**1.6 + 400.0 + gaussian(x, 6.5, 30000.0, 5.0)
+         + gaussian(x, 22.0, 6000.0, 14.0) + gaussian(x, 26.7, 12000.0, 0.15))
+    span = float(np.ptp(y))
+    zero = sonneveld_visser_baseline(x, y, granularity=20, bending=0.0)
+
+    def moved(bending):
+        other = sonneveld_visser_baseline(x, y, granularity=20, bending=bending)
+        return float(np.max(np.abs(other - zero))) / span
+
+    assert moved(4.0) < 0.02, "the bottom of the range barely moves it"
+    assert moved(100.0) > 3.0 * moved(4.0), "the top of the range does"
 
 
 def test_mismatched_shapes_are_refused():
@@ -485,12 +520,12 @@ def test_a_feature_too_broad_to_judge_is_capped_and_says_so():
 
 
 def test_the_suggested_bending_is_zero_and_the_note_says_why():
-    """Measured, not chosen: 63 of 64 real fits preferred it to the paper's 1."""
+    """Measured, not chosen: all eight real mounts fitted best at 0."""
     x = grid()
     y = 4.0e4 / x**1.6 + 400.0 + gaussian(x, 12.4, 9000.0, 0.2)
     suggestion = suggest_sonneveld_visser(x, noisy(x, y))
     assert suggestion.bending == 0.0
-    assert "63 of 64" in suggestion.note
+    assert "eight real mounts" in suggestion.note
 
 
 def test_the_suggestion_is_usable_as_it_stands():
