@@ -82,6 +82,16 @@ class SessionState:
     selected_main: list[str] = field(default_factory=list)
     fit_result: object | None = None
     quantification: object | None = None
+    instrument: object | None = None
+    """Taken from the first mount loaded; see ``instrument_from_measurement``.
+
+    Held on the session rather than derived at each call site so that the
+    library, the mineral search and the fit all calculate with one instrument.
+    A library built with one set of widths and fitted with another is wrong in a
+    way that shows up as missing intensity and has no other symptom.
+    """
+
+    instrument_note: str = ""
 
     def load_phase_database(self, path: str | Path) -> int:
         """Load the accompanying-mineral phase database, returning its size."""
@@ -137,13 +147,32 @@ class SessionState:
             raise ValueError("no data directory has been selected")
         pattern = read_pattern(self.directory / filename)
         self.mounts[mount] = MountState(raw=pattern)
+        self.take_instrument_from(pattern)
         return pattern
+
+    def take_instrument_from(self, pattern, background=None) -> str:
+        """Derive the calculating instrument from a measurement.
+
+        Called when a mount is loaded and again once its background has been
+        fitted, because the width model is measured on the peaks and reads them
+        better with the background gone.  The three mounts of one specimen are
+        measured on one diffractometer at one setting, so the instrument is the
+        session's and not the mount's.
+        """
+        from .app import instrument_from_measurement
+
+        self.instrument, self.instrument_note = instrument_from_measurement(
+            pattern, background=background
+        )
+        return self.instrument_note
 
     def loaded_mounts(self) -> list[str]:
         return [name for name in MOUNTS if self.mounts[name].is_loaded]
 
     def reset(self) -> None:
         self.mounts = {name: MountState() for name in MOUNTS}
+        self.instrument = None
+        self.instrument_note = ""
 
 
 STATE = SessionState()

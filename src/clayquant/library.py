@@ -60,6 +60,7 @@ __all__ = [
     "CHLORITE_SMECTITE_FRACTIONS",
     "CSDS_MEANS",
     "HOST_THICKNESSES",
+    "describe_instrument_mismatch",
     "CONTINUUM_WINDOW",
     "scaled_to_d001",
     "NORMALIZATION_FLOOR",
@@ -133,19 +134,27 @@ NORMALIZATION_FLOOR = 4.0
 """Patterns are normalised on their maximum above this 2theta, in degrees."""
 
 HOST_THICKNESSES: dict[str, tuple[float, ...]] = {
-    "illite": (9.95, 10.02, 10.10),
-    "chlorite": (14.20, 14.35),
+    "illite": (9.90, 9.95, 10.02, 10.10),
+    "chlorite": (14.05, 14.15, 14.25, 14.35),
 }
 """Layer repeat distances in A spanned for each interstratification host.
 
-The basal spacing of illite is not a constant: it runs from about 9.95 to
-10.10 A with interlayer potassium content and hydration, and the value that
-comes out of any single refined structure is only one point in that range.
-Measured here, ICSD 90144 gives 10.022 A while a real sample's 001 and 002 both
-put it at 9.95 A - a difference of 0.066 deg at the 001 reflection, half a peak
-width, which for a fixed library is the difference between fitting that peak and
-missing it almost entirely.  Spanning the range lets the fit pick the spacing
-instead of being told it.
+Neither spacing is a constant.  Illite runs from about 9.90 to 10.10 A with
+interlayer potassium content and hydration, and chlorite from about 14.0 to
+14.4 A with its octahedral composition; the value that comes out of any one
+refined structure is a single point in that range.  Measured here, ICSD 90144
+gives 10.022 A while a real sample's 001 and 002 both put it at 9.95 A, and
+ICSD 164234 gives 14.278 A where the same sample's 002 and 004 put its chlorite
+at 14.15 A.
+
+What that costs when the library does not span it is out of proportion to the
+numbers.  A chlorite 0.13 A away is 0.11 deg off at the 002 reflection and
+0.24 deg at the 004 - one and two peak widths - so the calculated peaks stand
+beside the measured ones rather than on them, and a fit of scale factors cannot
+move them.  On M_26_1041 the fit responded by using a chlorite/smectite entry at
+14.2 A as a stand-in for chlorite, which is worse than a bad fit: it reports an
+expandable component that is not there.  Widening this table to reach 14.05 A
+recovered the chlorite as itself and took Rwp from 36.9 to 33.3 per cent.
 """
 
 CSDS_MEANS: tuple[float, ...] = (5.0, 15.0, 50.0)
@@ -573,6 +582,26 @@ def build_library(
         metadata={
             "emission": instrument.emission.name,
             "lp_mode": instrument.lp_mode,
+            # The width model and the geometry the patterns were calculated with.
+            # Recorded because a library built with one instrument and fitted
+            # against a measurement calculated with another is wrong in a way
+            # that has no symptom of its own: the peaks are the wrong width and
+            # the wrong height, the fit absorbs it into the scale factors, and
+            # the only trace is intensity missing at every strong peak.  With
+            # this here, describe_instrument can say so.
+            "peak_shape": {
+                "u": instrument.peak_shape.u,
+                "v": instrument.peak_shape.v,
+                "w": instrument.peak_shape.w,
+                "eta": instrument.peak_shape.eta,
+                "size_c": instrument.peak_shape.size_c,
+                "size_ab": instrument.peak_shape.size_ab,
+            },
+            "geometry": None if instrument.divergence is None else {
+                "specimen_length": instrument.divergence.specimen_length,
+                "goniometer_radius": instrument.divergence.goniometer_radius,
+                "divergence": instrument.divergence.divergence,
+            },
             "orientations": list(orientations),
             "illite_smectite": list(illite_smectite),
             "chlorite_smectite": list(chlorite_smectite),
@@ -904,3 +933,63 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+
+
+def describe_instrument_mismatch(library, instrument) -> str:
+    """Say whether a library was calculated with the instrument now in use.
+
+    A library holds finished patterns, so the width model and the geometry that
+    made them are fixed at build time.  Fitting those patterns against a
+    measurement whose own instrument differs is not a small inconsistency: the
+    reference peaks are then the wrong width and so the wrong height, the fit
+    absorbs the difference into its scale factors, and what comes out is
+    intensity missing at every strong peak and a weight percent quietly wrong.
+    It has no symptom that distinguishes it from a missing phase, which is why
+    it is worth a sentence in the interface rather than a comment in the code.
+
+    Returns an empty string when they agree, or when the library is too old to
+    record what it was built with - in which case nothing can be said, and
+    saying nothing is better than guessing agreement.
+    """
+    stored_shape = library.metadata.get("peak_shape")
+    stored_geometry = library.metadata.get("geometry")
+    if not stored_shape:
+        return (
+            "This library does not record the instrument it was calculated with, "
+            "so ClayQuant cannot check it against this measurement. Rebuild it to "
+            "be sure the reference peaks have the width of your diffractometer."
+        )
+
+    complaints: list[str] = []
+    wavelength = np.array([26.0])
+    built = PeakShape(
+        u=float(stored_shape.get("u", 0.0)),
+        v=float(stored_shape.get("v", 0.0)),
+        w=float(stored_shape.get("w", 0.01)),
+        eta=float(stored_shape.get("eta", 0.5)),
+        size_c=stored_shape.get("size_c"),
+        size_ab=stored_shape.get("size_ab"),
+    )
+    built_width = float(built.fwhm(wavelength, 1.540596)[0])
+    now_width = float(instrument.peak_shape.fwhm(wavelength, 1.540596)[0])
+    if abs(built_width - now_width) > 0.02 * max(built_width, now_width):
+        complaints.append(
+            f"peak width at 26 deg is {built_width:.3f} deg in the library and "
+            f"{now_width:.3f} deg for this measurement"
+        )
+    if stored_geometry and instrument.divergence is not None:
+        for key, label in (("goniometer_radius", "goniometer radius"),
+                           ("divergence", "divergence slit"),
+                           ("specimen_length", "specimen length")):
+            built_value = float(stored_geometry[key])
+            now_value = float(getattr(instrument.divergence, key))
+            if abs(built_value - now_value) > 1e-6 * max(1.0, abs(built_value)):
+                complaints.append(f"{label} {built_value:g} in the library, {now_value:g} here")
+    if not complaints:
+        return ""
+    return (
+        "This library was calculated with a different instrument than this "
+        "measurement: " + "; ".join(complaints) + ". Rebuild the library so the "
+        "reference peaks have the right width, or the fit will be short of "
+        "intensity at every strong peak."
+    )

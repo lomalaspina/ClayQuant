@@ -20,11 +20,19 @@ should be left at ``None`` there to avoid counting it twice.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
-__all__ = ["PeakShape", "pseudo_voigt", "accumulate_peaks", "convolve_variable_fwhm"]
+__all__ = [
+    "MeasuredWidths",
+    "PeakShape",
+    "accumulate_peaks",
+    "convolve_variable_fwhm",
+    "fit_peak_shape",
+    "measure_peak_widths",
+    "pseudo_voigt",
+]
 
 _GAUSS_NORM = 2.0 * math.sqrt(math.log(2.0) / math.pi)
 _LORENTZ_NORM = 2.0 / math.pi
@@ -160,3 +168,216 @@ def convolve_variable_fwhm(
         if total > 0:
             result[start:stop] += value * kernel / total
     return result
+
+
+@dataclass(frozen=True)
+class MeasuredWidths:
+    """The isolated peaks a width model was fitted to, and how well it fits.
+
+    Attributes
+    ----------
+    shape:
+        The fitted :class:`PeakShape`.  Its ``eta`` is whichever of the
+        candidates fitted the peak *shapes* best, and its ``u``, ``v``, ``w``
+        come from the widths.
+    two_theta, fwhm:
+        The peaks used and their measured full widths at half maximum, in
+        degrees.
+    residual:
+        Root mean square difference between the measured widths and the model,
+        in degrees.  A value much above the step size means the peaks were not
+        all from one specimen broadening - mixed phases with different
+        crystallite sizes, say - and the model is a compromise.
+    note:
+        What happened, for the record: how many peaks were found and whether
+        the default was kept.
+    """
+
+    shape: "PeakShape"
+    two_theta: np.ndarray
+    fwhm: np.ndarray
+    residual: float
+    note: str
+
+
+def measure_peak_widths(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    minimum_height: float = 0.02,
+    separation: float = 0.45,
+    maximum_width: float = 0.6,
+    tolerance: float = 0.05,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Positions and full widths at half maximum of well-separated peaks.
+
+    Deliberately conservative about which peaks count.  A width is only usable
+    if the peak stands alone: the half-maximum crossing has to be found on both
+    flanks inside ``separation`` degrees, the profile has to fall monotonically
+    to each crossing, and the result has to be narrower than ``maximum_width``.
+    An overlapped doublet read as one peak reports the width of the pair, and a
+    width model fitted to that is broader than the instrument everywhere, which
+    is precisely the error this exists to avoid.
+
+    ``intensity`` should already have its background removed.  ``minimum_height``
+    is a fraction of the strongest point, and ``tolerance`` is how much of the
+    peak's own height a point on the flank may rise by before it is taken as the
+    next peak beginning.
+    """
+    two_theta = np.asarray(two_theta, dtype=float)
+    intensity = np.asarray(intensity, dtype=float)
+    if two_theta.size < 5:
+        return np.array([]), np.array([])
+    step = float(np.median(np.diff(two_theta)))
+    reach = max(2, int(round(separation / step)))
+    threshold = minimum_height * float(np.max(intensity))
+
+    positions: list[float] = []
+    widths: list[float] = []
+    for index in range(reach, intensity.size - reach):
+        height = intensity[index]
+        if height < threshold:
+            continue
+        window = intensity[index - reach:index + reach + 1]
+        if height < window.max():
+            continue
+        half = height / 2.0
+        # Walk out to the half-maximum crossing, refusing to cross a minimum on
+        # the way: a rise on the flank means the neighbour peak has taken over.
+        edges = []
+        for direction in (-1, 1):
+            previous = height
+            crossing = None
+            for step_count in range(1, reach + 1):
+                value = intensity[index + direction * step_count]
+                # A rise has to be a real one.  Counting every upward wiggle as
+                # the next peak taking over loses almost every width on a sharp,
+                # well counted pattern, where the flanks are noisy in relative
+                # terms precisely because they are low.
+                if value > previous + tolerance * height:
+                    break
+                if value <= half:
+                    before = intensity[index + direction * (step_count - 1)]
+                    span = before - value
+                    fraction = (before - half) / span if span > 0 else 0.0
+                    crossing = two_theta[index + direction * (step_count - 1)] + (
+                        direction * fraction * step
+                    )
+                    break
+                previous = value
+            if crossing is None:
+                break
+            edges.append(crossing)
+        if len(edges) != 2:
+            continue
+        width = abs(edges[1] - edges[0])
+        # Three steps is the fewest that can describe a width rather than a
+        # spike: two points above half maximum say only that the peak is
+        # narrower than the step, and a single hot channel satisfies every other
+        # test here.  On a 0.0167 deg step this rejects anything under 0.05 deg.
+        if not 3.0 * step <= width <= maximum_width:
+            continue
+        positions.append(float(two_theta[index]))
+        widths.append(float(width))
+    return np.array(positions), np.array(widths)
+
+
+def fit_peak_shape(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    wavelength: float,
+    default: "PeakShape | None" = None,
+    etas: tuple[float, ...] = (0.3, 0.5, 0.7, 0.9, 1.0),
+    minimum_peaks: int = 3,
+    envelope: float = 0.4,
+) -> MeasuredWidths:
+    """Scale a width model to a measurement, and pick its mixing parameter.
+
+    Why this is worth doing rather than carrying a default.  The calculated
+    pattern's peak height is set by its width: a profile ten per cent too broad
+    is ten per cent too short, and a fit of scale factors alone cannot recover
+    that, so it leaves the fit short of intensity at every strong peak at once -
+    which looks exactly like a missing phase and is not one.  The width belongs
+    to the diffractometer and the specimen, not to the software.
+
+    What is fitted is one number: the factor by which ``default``'s whole width
+    curve is stretched, taken from the measured widths as
+    ``k = median(measured / modelled)`` over the peaks used.  Fitting all three
+    Caglioti coefficients instead was tried first and abandoned - a real pattern
+    yields between two and a dozen usable isolated peaks, three coefficients
+    from three peaks fit exactly and so say nothing about whether the form is
+    right, and the extrapolations that came out of it reached ``U`` near 2, half
+    a degree of width at the top of the scan.  The angular *trend* of the
+    instrumental width is generic; what differs between machines and
+    configurations is its size, and that is the one thing estimated here.
+
+    The peaks used are the lower envelope, not all of them.  On a clay mount the
+    measured widths belong to two things at once: the instrument, which every
+    phase shares, and the crystallite size of each phase, which the library
+    spans separately through its thickness and CSDS axes.  Averaging over all
+    peaks lands between the sharp quartz and the broad clay, double-counting the
+    clay broadening and leaving quartz too wide - both errors together.  So the
+    narrowest ``envelope`` fraction of the peaks is used, which is the part of
+    the width that is not specimen broadening.
+
+    ``eta`` is chosen by how well each candidate reproduces the *shape* of the
+    strongest peak used, at the width the scaled model gives, because a width
+    alone cannot tell a Gaussian from a Lorentzian of the same half width.
+
+    With fewer than ``minimum_peaks`` usable peaks the ``default`` comes back
+    unchanged and ``note`` says so.
+    """
+    default = default or PeakShape()
+    positions, widths = measure_peak_widths(two_theta, intensity)
+    if positions.size < minimum_peaks:
+        return MeasuredWidths(
+            shape=default, two_theta=positions, fwhm=widths, residual=float("nan"),
+            note=(f"{positions.size} isolated peaks found, fewer than the "
+                  f"{minimum_peaks} needed; kept the default width model"),
+        )
+
+    modelled = default.fwhm(positions, wavelength)
+    ratio = widths / np.clip(modelled, 1e-9, None)
+    order = np.argsort(ratio)
+    keep = order[:max(minimum_peaks, int(round(envelope * positions.size)))]
+    factor = float(np.median(ratio[keep]))
+    if not np.isfinite(factor) or factor <= 0.0:
+        return MeasuredWidths(
+            shape=default, two_theta=positions, fwhm=widths, residual=float("nan"),
+            note="the measured widths gave no usable scale; kept the default width model",
+        )
+
+    scaled = replace(
+        default,
+        u=default.u * factor**2,
+        v=default.v * factor**2,
+        w=default.w * factor**2,
+        size_c=None if default.size_c is None else default.size_c / factor,
+        size_ab=None if default.size_ab is None else default.size_ab / factor,
+    )
+
+    strongest = positions[keep][int(np.argmax([
+        intensity[int(np.argmin(np.abs(np.asarray(two_theta) - position)))]
+        for position in positions[keep]
+    ]))]
+    best_eta, best_cost = default.eta, float("inf")
+    window = np.abs(np.asarray(two_theta) - strongest) < 0.7
+    x = np.asarray(two_theta)[window]
+    y = np.asarray(intensity)[window]
+    if y.size > 4 and y.max() > 0:
+        y = y / y.max()
+        width = float(scaled.fwhm(np.array([strongest]), wavelength)[0])
+        for eta in etas:
+            model = pseudo_voigt(x - strongest, width, eta)
+            model = model / model.max() if model.max() > 0 else model
+            cost = float(np.mean((y - model) ** 2))
+            if cost < best_cost:
+                best_eta, best_cost = eta, cost
+    shape = replace(scaled, eta=best_eta)
+
+    final = shape.fwhm(positions[keep], wavelength)
+    return MeasuredWidths(
+        shape=shape, two_theta=positions, fwhm=widths,
+        residual=float(np.sqrt(np.mean((widths[keep] - final) ** 2))),
+        note=(f"width model scaled by {factor:.3f} to the {keep.size} narrowest "
+              f"of {positions.size} isolated peaks"),
+    )

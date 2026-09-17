@@ -31,6 +31,7 @@ import sys
 import threading
 import time
 import webbrowser
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -65,6 +66,7 @@ from ..library import (
     PREFERRED_ORIENTATIONS,
     PatternLibrary,
     build_library,
+    describe_instrument_mismatch,
 )
 from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, random_transition
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
@@ -358,21 +360,84 @@ def _ask(arguments: list[str]) -> tuple[str | None, str | None]:
     return None, f"The chooser failed: {detail}"
 
 
+DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
+"""Width model used until a measurement is loaded to take one from."""
+
+
 def gui_instrument(
     specimen_length: float = 20.0,
     goniometer_radius: float = 280.0,
     divergence_slit: float = 0.5,
     size_ab: float = 400.0,
 ) -> Instrument:
+    """The instrument to calculate with.
+
+    Once a mount has been loaded this returns the one derived from it by
+    :func:`instrument_from_measurement`, so the calculated patterns, the library
+    and the fit all use the same geometry and the same widths.  The arguments
+    are the fallback for before that, and are also how a caller can override the
+    derived values deliberately.
+
+    That it used to return the defaults unconditionally was a real defect, and
+    the first one to look for when a fit is short of intensity at every strong
+    peak at once: the goniometer radius and the divergence slit are recorded in
+    the data file, and calculating with 280 mm on a 240 mm instrument mis-states
+    how much of the beam the specimen intercepts at low angle, which lands
+    directly on the 001 reflections that the whole method rests on.
+    """
+    if STATE.instrument is not None:
+        return STATE.instrument
     return Instrument(
         emission=CU_KA_5LINE,
-        peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=size_ab),
+        peak_shape=replace(DEFAULT_PEAK_SHAPE, size_ab=size_ab),
         lp_mode="powder",
         divergence=Divergence(
             specimen_length=specimen_length,
             goniometer_radius=goniometer_radius,
             divergence=divergence_slit,
         ),
+    )
+
+
+def instrument_from_measurement(
+    pattern,
+    background=None,
+    specimen_length: float = 20.0,
+) -> tuple[Instrument, str]:
+    """An instrument taken from a measurement: its geometry and its peak widths.
+
+    The geometry comes from the file, which records the goniometer radius and
+    the divergence slit; only the specimen length has to be supplied, because
+    nothing in a data file knows how long the smear was.  The width model is
+    scaled to the pattern's own isolated peaks by
+    :func:`~clayquant.profile.fit_peak_shape`, over the background-subtracted
+    intensity when a background has been fitted.
+
+    Returns the instrument and a sentence saying what was taken from where, for
+    the status line: a value silently guessed is a value nobody checks.
+    """
+    from ..profile import fit_peak_shape
+
+    metadata = getattr(pattern, "metadata", {}) or {}
+    radius = float(metadata.get("goniometer_radius", 280.0))
+    slit = float(metadata.get("divergence_slit", 0.5))
+    wavelength = float(metadata.get("wavelength", 1.540596))
+    intensity = pattern.intensity
+    if background is not None:
+        intensity = background.subtract(pattern.two_theta, pattern.intensity)
+    widths = fit_peak_shape(pattern.two_theta, intensity, wavelength,
+                            default=DEFAULT_PEAK_SHAPE)
+    instrument = Instrument(
+        emission=CU_KA_5LINE,
+        peak_shape=widths.shape,
+        lp_mode="powder",
+        divergence=Divergence(specimen_length=specimen_length,
+                              goniometer_radius=radius, divergence=slit),
+    )
+    return instrument, (
+        f"Geometry from the file: {radius:.0f} mm goniometer radius, "
+        f"{slit:g} deg divergence slit, specimen taken as {specimen_length:g} mm. "
+        f"{widths.note}"
     )
 
 
@@ -1283,6 +1348,8 @@ def register_callbacks(app: Dash) -> None:
                 )
         except Exception as exc:  # noqa: BLE001
             return no_update, error_message(exc)
+        if STATE.instrument_note:
+            messages.append(STATE.instrument_note)
 
         figure = go.Figure()
         for mount in STATE.loaded_mounts():
@@ -1517,6 +1584,13 @@ def register_callbacks(app: Dash) -> None:
             state.background_model = model
             state.background_fit = fit
             applied = f" Applied to {MOUNT_LABELS[mount]}."
+        if applied:
+            # Re-measure the peak widths now that the background is gone.  A
+            # width read off a pattern that still carries its background is read
+            # at a half maximum that is too high up the peak, so it comes out
+            # too narrow, and a calculated pattern too narrow is one the fit
+            # cannot match at the peak top either.
+            STATE.take_instrument_from(pattern, background=fit)
 
         background = fit(pattern.two_theta)
         figure = go.Figure()
@@ -1946,7 +2020,16 @@ def register_callbacks(app: Dash) -> None:
             return error_message(exc)
         STATE.library = library
         STATE.library_path = Path(path)
-        return html.Pre(library.describe(), style={"fontSize": "0.75rem", "margin": 0})
+        children = [html.Pre(library.describe(), style={"fontSize": "0.75rem", "margin": 0})]
+        if STATE.instrument is not None:
+            warning = describe_instrument_mismatch(library, STATE.instrument)
+            if warning:
+                children.append(html.Div(warning, style={
+                    "marginTop": "8px", "padding": "8px",
+                    "background": "#fff4e5", "border": "1px solid #f0ad4e",
+                    "borderRadius": "6px", "fontSize": "0.8rem",
+                }))
+        return html.Div(children)
 
     @app.callback(
         Output("fit-graph", "figure"),
