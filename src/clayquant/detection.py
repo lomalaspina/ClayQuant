@@ -133,6 +133,13 @@ class PhaseEvidence:
     cell_scale: float = 1.0
     presence: float = 0.0
     intensity_agreement: float = 0.0
+    position_offset: float = 0.0
+    """Bodily shift in degrees the screen gave this phase to line it up.
+
+    Distinct from :attr:`mean_offset`, which is what is left over *after* the
+    shift.  The same shift on every phase at once is a zero error that has not
+    been applied.
+    """
 
     @property
     def cell_deviation_percent(self) -> float:
@@ -162,10 +169,20 @@ class PhaseEvidence:
         return float(np.mean(offsets)) if offsets else 0.0
 
     def summary(self) -> str:
+        """One line per phase, with the number that can contradict the others.
+
+        The line count and the signal-to-noise can both look like confirmation
+        for a phase that is absent: in a crowded pattern a candidate's lines
+        land on peaks whether or not they are its peaks.  ``intensity
+        agreement`` is the one figure here that can say no - it compares the
+        measured heights at those positions against the phase's own relative
+        intensities - so it is shown beside them rather than left in the object.
+        """
         return (
             f"{self.name}: {100.0 * self.score:.1f}% "
             f"({self.n_matched}/{self.n_expected} expected lines found, "
-            f"best S/N {self.best_signal_to_noise:.0f})"
+            f"best S/N {self.best_signal_to_noise:.0f}, "
+            f"intensity agreement {self.intensity_agreement:.2f})"
         )
 
 
@@ -392,6 +409,75 @@ def detect_phases(
     return findings
 
 
+def _weighted_design(library, two_theta: np.ndarray, selection: np.ndarray,
+                     root: np.ndarray) -> np.ndarray:
+    """The library's patterns on the measured points, weighted, as columns."""
+    return (library.matrix(two_theta[selection]).T) * root[:, None]
+
+
+def _shifted_bank(
+    grid: np.ndarray,
+    patterns: list[np.ndarray],
+    points: np.ndarray,
+    root: np.ndarray,
+    offsets: np.ndarray,
+) -> np.ndarray:
+    """Each candidate's weighted column at each trial offset.
+
+    Shape ``(n_points, n_candidates, n_offsets)``.  Shifting the calculated
+    pattern bodily is the right shape of freedom to allow: a residual zero error
+    and a coherent cell difference both move every reflection of a phase the
+    same way, to first order, and nothing else is permitted here - the relative
+    intensities and the spacings within a phase stay as calculated.
+
+    It matters most for the sharpest phases, which is why it exists.  Quartz has
+    a handful of reflections 0.09 deg wide; a 0.06 deg zero error that has not
+    been applied moves them two thirds of a width and the fit then prefers
+    almost anything else, including a two-line phase whose 002 happens to sit
+    near the quartz 101.  A phase with fifty reflections is barely affected by
+    the same offset.  So without this the screen quietly favours the phases it
+    can least distinguish, and loses the one mineral nobody doubts is there.
+    """
+    return np.stack([
+        np.stack([np.interp(points - offset, grid, column) for offset in offsets], axis=1)
+        for column in patterns
+    ], axis=1) * root[:, None, None]
+
+
+def _best_shift_gain(bank: np.ndarray, residual: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each candidate, its best gain over the trial offsets, and which one."""
+    inner = np.einsum("ipo,i->po", bank, residual)
+    norm = np.einsum("ipo,ipo->po", bank, bank)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gain = np.where((inner > 0.0) & (norm > 0.0), inner**2 / np.maximum(norm, 1e-30), 0.0)
+    gain = np.nan_to_num(gain)
+    chosen = np.argmax(gain, axis=1)
+    return gain[np.arange(gain.shape[0]), chosen], chosen
+
+
+def _matched_filter_gain(columns: np.ndarray, residual: np.ndarray) -> np.ndarray:
+    """Weighted least-squares gain of adding each column alone to the fit.
+
+    For one column ``q`` and residual ``r``, the scale that best reduces the sum
+    of squares is ``a = <q, r> / <q, q>`` and the reduction it achieves is
+    ``<q, r>**2 / <q, q>``.  A negative ``a`` would mean subtracting the phase,
+    which a non-negative fit cannot do, so those score zero.
+
+    This is the first step of forward selection, and it is the whole reason for
+    using it: it asks what each phase explains *that nothing already in the fit
+    explains*, which is a question with one answer.  Ranking by a share taken
+    from a single joint solve asks a question with many answers, because a
+    library of a thousand broad clay patterns and two hundred minerals over two
+    thousand points can distribute one peak among several columns in ways that
+    fit equally well and rank quite differently.
+    """
+    inner = columns.T @ residual
+    norm = np.einsum("ij,ij->j", columns, columns)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gain = np.where((inner > 0.0) & (norm > 0.0), inner**2 / np.maximum(norm, 1e-30), 0.0)
+    return np.nan_to_num(gain)
+
+
 def screen_phases(
     pattern: Pattern,
     crystals: dict[str, Crystal],
@@ -403,83 +489,140 @@ def screen_phases(
     max_phases: int = 25,
     cell_allowance: float = DEFAULT_CELL_ALLOWANCE,
     include_clays: bool = False,
+    align: float = 0.12,
 ) -> list[PhaseEvidence]:
-    """Rank accompanying minerals by how much of the pattern each explains.
+    """Rank accompanying minerals by what each explains that nothing else does.
 
-    Every candidate is calculated onto the library grid and fitted *in
-    competition* with the clay library and with each other in one non-negative
-    least-squares solve.  A phase only takes a share if it accounts for
-    intensity nothing else can, which is a far sharper test than matching peak
-    positions: measured on a real clay separate, position matching ranked quartz
-    56th out of 205, behind ilmenite, pyrite, cementite and faujasite, while this
-    puts quartz and albite first and second with a clean gap to everything below
-    them.
+    The clay library is fitted first, on its own.  Then, in rounds, every
+    remaining candidate is scored by how much of the *current residual* it can
+    account for, the best one is taken into the fit, everything active is
+    refitted together, and the residual is recomputed.  A phase's reported score
+    is the share of the pattern's weighted sum of squares that its entry into
+    the fit removed.
+
+    Why it is done in rounds rather than in one solve.  The obvious method - put
+    all two hundred candidates into one non-negative least squares beside the
+    clay library and read off the shares - was what this did, and it is not
+    identifiable: with a thousand clay patterns and two hundred minerals over a
+    couple of thousand points, the columns span the data many times over, and
+    which phase is credited with a peak depends on conditioning rather than on
+    evidence.  Measured on one real clay separate it ranked quartz first; on
+    another, with a library differing only in how many layer spacings it spanned,
+    quartz took no share at all and graphite - two reflections, one of which
+    lands on the quartz 101 peak - was credited with 8.9% of the pattern.  That
+    is not a tuning problem, it is the wrong question.
+
+    Selection in rounds cannot make that mistake, and the reason is worth
+    stating: a phase with two reflections can win the first round only if it
+    explains the residual better than everything else, and it can never win a
+    later one, because once the phase that owns the peak is in the fit there is
+    nothing left under those two lines.  A short line list stops being an
+    advantage.
 
     The per-line evidence of :func:`detect_phases` is still attached to each
-    result, so the analyst can see which reflections carry the phase.
+    result, so the analyst can see which reflections carry the phase, and
+    ``intensity_agreement`` says whether the measured heights at those positions
+    are in the phase's own proportions - which is what distinguishes a phase
+    that is present from one whose lines merely have company.
 
     Parameters
     ----------
     clay_library:
-        The clay :class:`~clayquant.library.PatternLibrary` the candidates
-        compete against.  Restricting it to a few orientation parameters keeps
-        the screen fast without changing which accompanying minerals win.
+        The clay :class:`~clayquant.library.PatternLibrary` the candidates are
+        fitted against.  Restricting it to a few orientation parameters keeps
+        the screen fast.
     min_share:
-        Smallest share of the pattern a phase must take to be reported.
+        Smallest share of the weighted sum of squares a phase must remove to be
+        reported.  The rounds stop when nothing reaches it.
     max_phases:
-        Most phases to return.
-
-    Returns
-    -------
-    Evidence per phase, largest share first, with ``score`` set to the share of
-    the pattern the phase accounts for.
+        Most rounds to run, and so the most phases to return.
+    align:
+        Half-width in degrees of the bodily shift each candidate is allowed, to
+        absorb a residual zero error or a coherent cell difference.  Zero fixes
+        every phase at its calculated positions.  The shift taken is reported as
+        each finding's ``mean_offset``; the same shift on every phase at once is
+        a zero error that has not been applied, and is worth applying.
     """
-    from .library import PatternLibrary
-    from .nnls import nnls_fit
+    from scipy.optimize import nnls
 
     reference = instrument or Instrument()
     grid = clay_library.two_theta
-    library = PatternLibrary(
-        two_theta=grid,
-        entries=list(clay_library.entries),
-        metadata=dict(clay_library.metadata),
-    )
     candidates: list[str] = []
+    calculated: list[np.ndarray] = []
     for name, crystal in crystals.items():
         if is_clay_phase(name) and not include_clays:
             continue
         try:
-            calculated = powder_pattern(crystal, grid, reference, r_march_dollase=1.0, name=name)
+            one = powder_pattern(crystal, grid, reference, r_march_dollase=1.0, name=name)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the screen
             continue
-        if float(np.max(calculated.intensity)) <= 0.0:
+        if float(np.max(one.intensity)) <= 0.0:
             continue
-        library.add(calculated, phase=name)
         candidates.append(name)
+        calculated.append(one.intensity)
     if not candidates:
         return []
 
-    result = nnls_fit(
-        pattern, library, background=background, range_two_theta=two_theta_range
-    )
-    shares = result.by_phase()
-
     two_theta = pattern.two_theta
-    intensity = pattern.intensity.astype(float)
-    if background is not None:
-        intensity = background.subtract(two_theta, intensity)
-    wavelength = reference.emission.principal_wavelength
+    raw = pattern.intensity.astype(float)
+    observed = background.subtract(two_theta, raw) if background is not None else raw
+    low, high = two_theta_range
+    selection = (two_theta >= low) & (two_theta <= high)
+    selection &= (two_theta >= grid[0]) & (two_theta <= grid[-1])
+    if selection.sum() < 10:
+        return []
 
+    # Counting statistics, as in nnls_fit: the variance of a point is the number
+    # of photons recorded there, which background subtraction does not reduce.
+    root = np.sqrt(1.0 / np.clip(raw[selection], 1.0, None))
+    target = observed[selection] * root
+    clays = _weighted_design(clay_library, two_theta, selection, root)
+    step = float(np.median(np.diff(grid))) if grid.size > 1 else 0.02
+    offsets = (np.array([0.0]) if align <= 0.0
+               else np.arange(-align, align + 0.5 * step, step))
+    bank = _shifted_bank(grid, calculated, two_theta[selection], root, offsets)
+
+    total = float(target @ target)
+    if total <= 0.0:
+        return []
+
+    def refit(active: list[tuple[int, int]]) -> np.ndarray:
+        design = (clays if not active else np.column_stack(
+            [clays, *(bank[:, index, shift] for index, shift in active)]))
+        coefficients, _ = nnls(design, target)
+        return target - design @ coefficients
+
+    residual = refit([])
+    remaining = set(range(len(candidates)))
+    active: list[tuple[int, int]] = []
+    gains: dict[int, float] = {}
+    shifts: dict[int, float] = {}
+    for _ in range(max_phases):
+        if not remaining:
+            break
+        gain, chosen = _best_shift_gain(bank, residual)
+        best = max(remaining, key=lambda index: gain[index])
+        before = float(residual @ residual)
+        trial = refit([*active, (best, int(chosen[best]))])
+        removed = (before - float(trial @ trial)) / total
+        if removed < min_share:
+            break
+        active.append((best, int(chosen[best])))
+        remaining.discard(best)
+        gains[best] = removed
+        shifts[best] = float(offsets[int(chosen[best])])
+        residual = trial
+
+    intensity = observed
+    wavelength = reference.emission.principal_wavelength
     findings: list[PhaseEvidence] = []
-    for name in candidates:
-        share = float(shares.get(name, 0.0))
-        if share < min_share:
-            continue
+    for index, _shift in active:
+        name = candidates[index]
         matches: list[PeakMatch] = []
         presence = agreement = 0.0
-        scale = 1.0
         try:
             positions, heights = peak_list(crystals[name], two_theta_range, reference)
+            positions = positions + shifts[index]
             if len(positions):
                 strongest = np.sort(np.argsort(heights)[::-1][:12])
                 _, presence, agreement, matches = _score_at_scale(
@@ -498,14 +641,14 @@ def screen_phases(
             PhaseEvidence(
                 name=name,
                 is_clay=is_clay_phase(name),
-                score=share,
+                score=gains[index],
                 matches=matches,
                 cell_allowance=cell_allowance,
-                cell_scale=scale,
+                cell_scale=1.0,
                 presence=presence,
                 intensity_agreement=agreement,
+                position_offset=shifts[index],
             )
         )
-
     findings.sort(key=lambda evidence: evidence.score, reverse=True)
-    return findings[:max_phases]
+    return findings

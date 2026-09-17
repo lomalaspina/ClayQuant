@@ -162,9 +162,10 @@ def test_a_shortcut_with_no_module_falls_back_to_the_interface():
 class Finding:
     """Just enough of a PhaseEvidence for the ticking rule."""
 
-    def __init__(self, name, score):
+    def __init__(self, name, score, intensity_agreement=0.8):
         self.name = name
         self.score = score
+        self.intensity_agreement = intensity_agreement
 
 
 def test_the_competitive_screen_ticks_by_the_share_asked_for():
@@ -174,6 +175,33 @@ def test_the_competitive_screen_ticks_by_the_share_asked_for():
     assert phases_to_tick(findings, screened=True, tick_above=3.0) == ["Albite"]
     assert phases_to_tick(findings, screened=True, tick_above=1.0) == ["Albite", "Quartz"]
     assert phases_to_tick(findings, screened=True, tick_above=10.0) == []
+
+
+def test_a_share_without_intensity_agreement_is_not_ticked():
+    """The graphite case, from a real run on a clay separate.
+
+    Graphite has two reflections in range and its 002 sits within a tenth of a
+    degree of the quartz 101.  It took 8.9 % of the pattern, reported two of two
+    lines found and a signal-to-noise of 153, and its intensity agreement was
+    zero: the pattern holds nothing where its other line belongs.  Every figure
+    on that row reads as confirmation except the one that can contradict them.
+    """
+    from clayquant.gui.app import phases_to_tick
+
+    findings = [
+        Finding("Quartz", 0.05, intensity_agreement=0.54),
+        Finding("Graphite", 0.089, intensity_agreement=0.0),
+    ]
+    assert phases_to_tick(findings, screened=True, tick_above=1.0) == ["Quartz"]
+
+
+def test_an_overlapped_mineral_is_still_ticked():
+    # The threshold has to admit a real mineral whose lines have company; it is
+    # only the flat contradiction that is excluded.
+    from clayquant.gui.app import phases_to_tick
+
+    findings = [Finding("Rutile", 0.02, intensity_agreement=0.30)]
+    assert phases_to_tick(findings, screened=True, tick_above=1.0) == ["Rutile"]
 
 
 def test_position_matching_ticks_nothing_however_high_it_scores():

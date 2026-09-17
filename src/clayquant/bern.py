@@ -198,6 +198,59 @@ def _value(text: str) -> float | None:
     return None
 
 
+def _explain_missing_mass(crystal, deficit: float) -> str:
+    """Name the element the missing mass belongs to, when one accounts for it.
+
+    "Sites are probably missing" is true and nearly useless: it does not say
+    what to add, and the item reads as complete because the deficit is
+    invisible site by site.  The deficit almost always belongs to one element -
+    a hand-edited item drops a run of like sites - so each element already
+    present is tried in turn, and the one whose atomic mass divides the deficit
+    into a whole number of atoms is named, with the count.
+
+    Sekaninaite is the case this was written for, and it is worth the detail.
+    Its item carries every cation - aluminium 16 of 16, silicon 20 of 20, iron
+    8 of 8 - and one oxygen site of the six that cordierite has.  So reading the
+    item finds nothing wrong with it, and reading the arithmetic finds 16 oxygen
+    atoms where 72 are needed: 56 x 15.999 = 895.97, which is the whole
+    shortfall to the last decimal.  Saying "56 oxygen atoms" instead of "sites
+    are probably missing" is the difference between a warning and an
+    instruction.
+    """
+    from collections import Counter
+
+    from .masses import atomic_weight
+
+    present = Counter()
+    for site in crystal.expanded_sites():
+        element = site.species.rstrip("+-0123456789")
+        present[element] += site.occupancy
+    best: tuple[float, str, int] | None = None
+    for element in present:
+        try:
+            mass = atomic_weight(element)
+        except Exception:  # noqa: BLE001 - an unknown species simply cannot be blamed
+            continue
+        if mass <= 0.0:
+            continue
+        count = deficit / mass
+        error = abs(count - round(count)) * mass / deficit if deficit else 1.0
+        if round(count) >= 1 and (best is None or error < best[0]):
+            best = (error, element, int(round(count)))
+    if best is None or best[0] > 0.02:
+        return (
+            f"sites are probably missing, accounting for {deficit:.3f} of mass, "
+            f"and no single element divides it evenly"
+        )
+    _, element, count = best
+    have = present.get(element, 0.0)
+    return (
+        f"the shortfall is {deficit:.3f}, which is exactly {count} more {element} "
+        f"atoms: the cell holds {have:.0f} and should hold {have + count:.0f}, so "
+        f"{element} sites are missing from the item"
+    )
+
+
 @dataclass
 class PhaseDefinition:
     """One phase read from a TOPAS structure library."""
@@ -257,12 +310,13 @@ class PhaseDefinition:
             if stated is None or stated <= 0.0:
                 continue
             if abs(computed - stated) / stated > tolerance:
+                detail = ""
+                if label == "mass" and computed < stated:
+                    detail = "; " + _explain_missing_mass(crystal, stated - computed)
                 notes.append(
                     f"{self.name}: cell {label} works out to {computed:.3f} from the sites and "
                     f"cell given, but the block states {stated:.3f} "
-                    f"({100 * computed / stated:.0f} % of it)"
-                    + ("; sites are probably missing" if label == "mass" and computed < stated
-                       else "")
+                    f"({100 * computed / stated:.0f} % of it)" + detail
                 )
         return notes
 

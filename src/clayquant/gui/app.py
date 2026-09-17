@@ -192,6 +192,16 @@ def working(*children) -> dcc.Loading:
     )
 
 
+MIN_TICK_AGREEMENT = 0.25
+"""Least intensity agreement a phase needs to arrive ticked.
+
+Low enough to admit a genuinely overlapped mineral and high enough to exclude a
+phase whose line set the pattern contradicts.  Measured on one clay separate the
+phases it excludes are graphite at 0.00 and gypsum at 0.25; the ones it admits
+include quartz at 0.54, microcline at 0.76 and albite at 0.78.
+"""
+
+
 def phases_to_tick(findings, screened: bool, tick_above: float) -> list[str]:
     """Which found phases arrive already ticked in the main-mineral dialog.
 
@@ -204,14 +214,27 @@ def phases_to_tick(findings, screened: bool, tick_above: float) -> list[str]:
     clay separate, one click from entering the fit.
 
     With a library loaded the score is the share of the pattern the phase
-    accounts for, fitted in competition with the clays and the other candidates,
-    and ``tick_above`` is that share in per cent.
+    accounts for, chosen in rounds against what the clays and the phases already
+    chosen explain, and ``tick_above`` is that share in per cent.
+
+    A share is still not sufficient on its own, and ``min_agreement`` is the
+    second condition.  ``intensity_agreement`` asks whether the measured heights
+    at a phase's own line positions stand in that phase's own proportions; a
+    phase can take a share of the pattern without that being true, and the case
+    that forced this is graphite, whose two reflections include an 002 within a
+    tenth of a degree of the quartz 101.  It takes a share, it reports two of
+    two lines found and a signal-to-noise of 153, and its intensity agreement is
+    zero, because the pattern has nothing at all where its other line should be.
+    Every number in that row reads as confirmation except the one that matters.
+    Such a phase is still listed - it is the analyst's call, and a real mineral
+    can have an overlapped line set - but it does not arrive ticked.
     """
     if not screened:
         return []
     return [
         evidence.name for evidence in findings
         if evidence.score >= float(tick_above) / 100.0
+        and evidence.intensity_agreement >= MIN_TICK_AGREEMENT
     ]
 
 
