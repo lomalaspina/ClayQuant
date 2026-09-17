@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import argparse
 import socket
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -73,6 +75,7 @@ from ..plots import (
 )
 from ..profile import PeakShape
 from ..quantification import quantify
+from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
 COLORS = {"air": "#1f77b4", "glycol": "#2ca02c", "heated": "#d62728"}
@@ -195,6 +198,80 @@ def background_report(pattern, fit, background, model, estimator: str = "snip") 
     if above > 0.02:
         text += f" Warning: the model sits above the data at {100.0 * above:.0f}% of points."
     return text
+
+
+LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"})
+
+FOLDER_DIALOG_TIMEOUT = 600.0
+
+
+def served_locally() -> bool:
+    """Whether the page asking is on the same computer as this process.
+
+    The folder chooser opens on the *server*, so offering it to a browser
+    somewhere else would pop a dialog on an empty desk and hang the request
+    until it timed out.  ClayQuant is started by the analyst on their own
+    machine, so this is normally true; it is checked rather than assumed
+    because the alternative fails in a way nobody could diagnose from the
+    browser.
+    """
+    try:
+        from flask import has_request_context, request
+    except ImportError:  # pragma: no cover - Dash brings Flask with it
+        return True
+    if not has_request_context():
+        return True
+    return (request.remote_addr or "") in LOOPBACK
+
+
+def ask_for_folder(initial: str | None) -> tuple[str | None, str | None]:
+    """Open the operating system's folder chooser.
+
+    Returns the chosen path and ``None``, or ``None`` and something to tell the
+    analyst.  Both being ``None`` means the dialog was dismissed, which needs no
+    message.
+
+    The chooser runs as a child process - see
+    :mod:`clayquant.gui.folder_dialog` for why - started by file path rather
+    than with ``-m`` so that the child does not import this module and drag
+    numpy, dash and plotly in behind it just to draw a dialog.
+    """
+    script = Path(folder_dialog.__file__)
+    command = [sys.executable, str(script)]
+    if initial:
+        command.append(initial)
+    try:
+        finished = subprocess.run(
+            command, capture_output=True, text=True, timeout=FOLDER_DIALOG_TIMEOUT
+        )
+    except subprocess.TimeoutExpired:
+        return None, (
+            "The folder chooser was still open after "
+            f"{FOLDER_DIALOG_TIMEOUT / 60:.0f} minutes, so it was closed. "
+            "Type the path instead, or press Browse again."
+        )
+    except OSError as exc:
+        return None, f"Could not start the folder chooser: {exc}"
+
+    if finished.returncode == 0:
+        chosen = finished.stdout.strip()
+        return (chosen or None), None
+
+    detail = finished.stderr.strip().splitlines()
+    detail = detail[-1] if detail else f"exit code {finished.returncode}"
+    if finished.returncode == 2:
+        return None, (
+            "This Python has no tkinter, so it cannot open a folder chooser. "
+            "Type the path into the box instead. On Debian or Ubuntu, "
+            "installing python3-tk and reinstalling ClayQuant adds the chooser; "
+            "the Windows and macOS installers from python.org include it."
+        )
+    if finished.returncode == 3:
+        return None, (
+            "There is no desktop session for a dialog to open on, so the folder "
+            f"has to be typed into the box. ({detail})"
+        )
+    return None, f"The folder chooser failed: {detail}"
 
 
 def gui_instrument(
@@ -406,7 +483,19 @@ def load_tab() -> html.Div:
                         style={"width": "100%"},
                         debounce=True,
                     ),
-                    html.Button("Scan folder", id="scan", n_clicks=0, style={"marginTop": "8px"}),
+                    html.Div(
+                        [
+                            html.Button("Browse\u2026", id="browse", n_clicks=0),
+                            html.Button("Scan folder", id="scan", n_clicks=0),
+                        ],
+                        style={"display": "flex", "gap": "6px", "marginTop": "8px"},
+                    ),
+                    html.Div(
+                        "Browse opens the folder chooser of this computer, and scans "
+                        "what you pick. The path can also be typed or pasted; press "
+                        "Enter to scan it.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Hr(),
                     *[
                         html.Div(
@@ -934,11 +1023,15 @@ def register_callbacks(app: Dash) -> None:
         [Output(f"file-{mount}", "options") for mount in MOUNTS],
         Output("load-status", "children", allow_duplicate=True),
         Input("scan", "n_clicks"),
-        State("directory", "value"),
+        Input("directory", "value"),
         prevent_initial_call=True,
     )
     def scan_directory(_clicks, directory):
         if not directory:
+            # An empty box is someone clearing it to type or paste something
+            # else, not a request to scan nothing; only the button complains.
+            if callback_context.triggered_id == "directory":
+                raise PreventUpdate
             return [], [], [], error_message(ValueError("Type the folder holding the scans."))
         try:
             files = STATE.list_files(directory)
@@ -951,6 +1044,35 @@ def register_callbacks(app: Dash) -> None:
             options,
             html.Div(f"Found {len(files)} files in {STATE.directory}."),
         )
+
+    @app.callback(
+        Output("directory", "value"),
+        Output("load-status", "children", allow_duplicate=True),
+        Input("browse", "n_clicks"),
+        State("directory", "value"),
+        prevent_initial_call=True,
+    )
+    def browse_for_folder(_clicks, current):
+        """Put the operating system's folder chooser in front of the analyst.
+
+        Setting the path also scans it, because ``scan_directory`` listens to
+        the box rather than only to its button - so Browse is one click rather
+        than two.
+        """
+        if not served_locally():
+            return no_update, error_message(
+                RuntimeError(
+                    "This page is open on a different computer from the one running "
+                    "ClayQuant, so a folder chooser here would appear on that other "
+                    "machine. Type the path as the computer running ClayQuant sees it."
+                )
+            )
+        chosen, problem = ask_for_folder(current)
+        if problem:
+            return no_update, error_message(RuntimeError(problem))
+        if chosen is None:
+            raise PreventUpdate  # dismissed; leave everything as it was
+        return chosen, no_update
 
     @app.callback(
         *[Output(f"file-{mount}", "value", allow_duplicate=True) for mount in MOUNTS],

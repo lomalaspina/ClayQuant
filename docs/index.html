@@ -932,7 +932,8 @@ Sonneveld&ndash;Visser estimator and its noise level, the non-parametric backgro
 <tr><td class="kw">nnls.py</td><td>the weighted non-negative least-squares fit and its metrics</td></tr>
 <tr><td class="kw">quantification.py</td><td>grouping by phase, the two normalisation bases, CSV export</td></tr>
 <tr><td class="kw">plots.py</td><td>the four result figures and the report writer</td></tr>
-<tr><td class="kw">gui/</td><td>the browser interface and its session state</td></tr>
+<tr><td class="kw">gui/</td><td>the browser interface, its session state, and the native folder
+chooser it opens on the computer running it</td></tr>
 <tr><td><span class="kw">install.sh</span>, <span class="kw">install.ps1</span></td>
 <td>installers for Linux/macOS/WSL and for Windows: interpreter selection, environment creation, installation and verification</td></tr>
 <tr><td><span class="kw">install.cmd</span>, <span class="kw">clayquant.cmd</span></td>
@@ -1452,8 +1453,9 @@ is useful context but is not required by the program.</p>
 
 <h3 id="s5-2">5.2 Step 1 &mdash; Load</h3>
 
-<p>Enter the folder holding the measurements and press <em>Scan folder</em>. The readable files are
-listed in the three drop-down menus. Choose <em>one</em> of the three mounts: the other two are then
+<p>Press <em>Browse</em> and pick the folder holding the measurements, or type or paste the path and
+press Enter; either way the folder is scanned at once and the readable files are listed in the three
+drop-down menus. <em>Scan folder</em> re-reads a folder whose contents have changed since. Choose <em>one</em> of the three mounts: the other two are then
 filled in automatically, because the three scans of a sample normally differ in a single token of the
 file name, so <span class="kw">DBB_17_PW_air.xrdml</span> identifies
 <span class="kw">DBB_17_PW_eg.xrdml</span> and <span class="kw">DBB_17_PW_heat.xrdml</span>. It works
@@ -1476,6 +1478,18 @@ name an air-dried mount &mdash; and the rest of the name must agree exactly, so
 both XRDML and <span class="kw">.xy</span> exports of everything does not yield one of each. Any
 assignment can be overridden by hand, and a box already holding a mount of the same sample is left
 untouched.</p>
+
+<div class="note"><strong>Why <em>Browse</em> opens a dialog and not a web page's file picker.</strong>
+A browser cannot tell a page where a folder is. Its file input element reports the names and contents
+of what is chosen and never the location, which is a deliberate part of the sandbox rather than an
+oversight, and no amount of scripting gets a path out of it. What makes a chooser possible here is
+that ClayQuant's server is the analyst's own computer: the process answering the page opens the
+operating system's own dialog and reads the answer directly. Two consequences follow. The dialog is
+the one belonging to the machine <em>running</em> ClayQuant, so where the page has been opened from
+another computer the button says so and declines rather than opening a dialog on an empty desk. And
+it needs tkinter, which the Windows and macOS installers from python.org include but many Linux
+distributions package separately as <span class="kw">python3-tk</span>; without it the button reports
+that and the path is typed instead. Nothing else in ClayQuant depends on it.</div>
 
 <div class="note"><strong>Paths under WSL.</strong> If ClayQuant runs inside WSL while the
 measurements sit on the Windows side, a path copied from Explorer such as
@@ -1628,9 +1642,16 @@ its default, and its meaning. Sliders show their current value; range sliders ha
 <div class="tablewrap"><table>
 <tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
 <tr><td>Data folder</td><td class="kw">directory</td><td>&mdash;</td>
-<td>Folder searched for measurement files. Sub-folders are not searched.</td></tr>
+<td>Folder searched for measurement files. Sub-folders are not searched. Setting it &mdash; by
+browsing, or by typing a path and pressing Enter &mdash; scans it, so the button below is for
+re-reading a folder that has changed rather than for the first look.</td></tr>
+<tr><td>Browse&hellip;</td><td class="kw">browse</td><td>&mdash;</td>
+<td>Opens the folder chooser of the computer running ClayQuant, fills the box with what is picked and
+scans it. Dismissing the dialog leaves everything as it was. Where the interface has been opened from
+a different computer, or where tkinter is missing, the button explains that instead
+(&sect;<a href="#s5-2">5.2</a>).</td></tr>
 <tr><td>Scan folder</td><td class="kw">scan</td><td>&mdash;</td>
-<td>Lists the readable files and offers them in the three drop-downs. Sub-folders are not searched.</td></tr>
+<td>Re-lists the readable files and offers them in the three drop-downs. Sub-folders are not searched.</td></tr>
 <tr><td>Air-dried / Ethylene glycol / Heated</td><td><span class="kw">file-air</span>, <span class="kw">file-glycol</span>, <span class="kw">file-heated</span></td><td>&mdash;</td>
 <td>Assignment of a file to each mount. Choosing one fills the other two from the file names
 (&sect;<a href="#s5-2">5.2</a>); either can then be changed by hand. The glycol mount is the one
@@ -3778,6 +3799,9 @@ against a CIF written by TOPAS</td>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
+<tr><td>Folder chooser</td><td>12 automated; the real dialog opened, cancelled and accepted under a
+virtual display, and driven through the running server</td>
+<td>Pass; the chosen folder reaches the box and is scanned in one click</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's
@@ -3786,7 +3810,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>301 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>314 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>
