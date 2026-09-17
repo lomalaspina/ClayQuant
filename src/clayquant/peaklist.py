@@ -78,6 +78,8 @@ from .pattern import two_theta_grid
 
 __all__ = [
     "PeakList",
+    "PeakListComparison",
+    "compare_with_calculated",
     "build_peaklist_library",
     "peaklist_pattern",
     "peaklist_reflections",
@@ -410,3 +412,109 @@ def build_peaklist_library(
     library.metadata["unindexed"] = unindexed
     library.metadata["n_phases"] = len({entry.phase for entry in library.entries})
     return library
+
+
+@dataclass
+class PeakListComparison:
+    """How a peak list and a calculated pattern agree, line by line."""
+
+    name: str
+    source: str
+    matched: int
+    total: int
+    worst_deviation: float
+    mean_absolute_deviation: float
+    intensity_agreement: float
+    lines: list[tuple[float, float, float | None, float | None, float]]
+    """``(d_obs, I_obs, d_calc, I_calc, deviation in degrees)`` per line."""
+
+    unexplained_calculated: list[tuple[float, float]]
+    """Calculated lines above 10 % that no line of the entry accounts for."""
+
+    def summary(self) -> str:
+        return (
+            f"{self.name}: {self.matched} of {self.total} lines matched, "
+            f"worst {self.worst_deviation:.3f} deg, mean |dev| "
+            f"{self.mean_absolute_deviation:.3f} deg, intensity agreement "
+            f"{self.intensity_agreement:.2f}"
+        )
+
+
+def compare_with_calculated(
+    peaks: PeakList,
+    calculated: tuple[np.ndarray, np.ndarray],
+    instrument: Instrument | None = None,
+    tolerance: float = 0.20,
+    minimum_intensity: float = 0.10,
+) -> PeakListComparison:
+    """Score a measured peak list against a calculated peak list.
+
+    ``calculated`` is ``(two_theta, relative intensity)`` as
+    :func:`~clayquant.pattern.peak_list` returns it, so the comparison is
+    against the same merged, Lorentz-corrected quantity a file entry reports
+    rather than against bare structure factors.
+
+    What the numbers mean.  The positions are compared in degrees rather than in
+    angstrom, because that is where a disagreement matters and because an
+    angstrom at 5 degrees and an angstrom at 35 are not the same thing at all.
+    ``intensity_agreement`` is one minus the mean absolute difference of the two
+    intensity sets, each normalised to its own strongest matched line, so 1 is
+    perfect and 0 is no relation; it is computed over matched lines only, and
+    ``unexplained_calculated`` carries what the entry has no line for, which is
+    the half of the comparison an agreement number hides.
+    """
+    instrument = instrument or Instrument()
+    wavelength = instrument.emission.principal_wavelength
+    observed_angle = peaks.two_theta(wavelength)
+    calculated_angle, calculated_intensity = (
+        np.asarray(calculated[0], dtype=float),
+        np.asarray(calculated[1], dtype=float),
+    )
+
+    lines: list[tuple[float, float, float | None, float | None, float]] = []
+    deviations: list[float] = []
+    pairs: list[tuple[float, float]] = []
+    used: set[int] = set()
+    for spacing, height, angle in zip(peaks.d, peaks.intensity, observed_angle):
+        if not np.isfinite(angle) or calculated_angle.size == 0:
+            lines.append((float(spacing), float(height), None, None, float("nan")))
+            continue
+        index = int(np.argmin(np.abs(calculated_angle - angle)))
+        deviation = float(calculated_angle[index] - angle)
+        if abs(deviation) > tolerance:
+            lines.append((float(spacing), float(height), None, None, float("nan")))
+            continue
+        used.add(index)
+        matched_d = float(wavelength / (2.0 * np.sin(np.radians(calculated_angle[index] / 2.0))))
+        lines.append((float(spacing), float(height), matched_d,
+                      float(calculated_intensity[index]), deviation))
+        deviations.append(deviation)
+        pairs.append((float(height), float(calculated_intensity[index])))
+
+    if pairs:
+        observed = np.array([pair[0] for pair in pairs], dtype=float)
+        expected = np.array([pair[1] for pair in pairs], dtype=float)
+        observed = observed / (observed.max() or 1.0)
+        expected = expected / (expected.max() or 1.0)
+        agreement = float(max(0.0, 1.0 - np.mean(np.abs(observed - expected))))
+    else:
+        agreement = 0.0
+
+    unexplained = [
+        (float(wavelength / (2.0 * np.sin(np.radians(angle / 2.0)))), float(height))
+        for index, (angle, height) in enumerate(zip(calculated_angle, calculated_intensity))
+        if index not in used and height >= minimum_intensity
+    ]
+
+    return PeakListComparison(
+        name=peaks.name,
+        source=peaks.source,
+        matched=len(pairs),
+        total=int(peaks.d.size),
+        worst_deviation=float(np.max(np.abs(deviations))) if deviations else float("nan"),
+        mean_absolute_deviation=float(np.mean(np.abs(deviations))) if deviations
+        else float("nan"),
+        intensity_agreement=agreement,
+        lines=lines,
+        unexplained_calculated=sorted(unexplained, key=lambda item: -item[1]),
+    )

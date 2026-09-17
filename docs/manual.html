@@ -1525,6 +1525,22 @@ relative intensity, and optionally the indices, either as three columns or as on
 &mdash; a peak list silently one row short is a pattern wrong in a way nothing downstream can
 notice.</p>
 
+<h4>Scoring an entry against the structure in use</h4>
+
+<p><span class="kw">compare_with_calculated</span> puts a file entry beside the calculated peak list
+of a structure and reports, line by line, the nearest calculated line, the difference in position and
+the difference in intensity, with three summary numbers: how many lines matched, the worst and mean
+position deviation, and an intensity agreement between 0 and 1. Positions are compared in
+<em>degrees</em> rather than &aring;ngstr&ouml;m, because an &aring;ngstr&ouml;m at 5&deg; and an
+&aring;ngstr&ouml;m at 35&deg; are not remotely the same disagreement.</p>
+
+<p>The comparison also reports what the <em>entry</em> has no line for &mdash; calculated reflections
+above a tenth of the strongest that the file does not list. That is the half of such a comparison an
+agreement number hides, and it is where the interesting answer usually is: an entry can match every
+line it has and still be missing the reflection that distinguishes the mineral from its neighbour.
+Checked against a stand-in built from a structure's own lines, where the right answer is known: eight
+of eight matched, worst deviation 0.007&deg;, agreement 1.00.</p>
+
 <div class="warn"><strong>A powder diffraction file is licensed data.</strong> A library built from
 one is a derived work of it and belongs with your own files &mdash; not in a repository and not in
 anything shared, which is the same position the ICSD structures are in
@@ -4065,10 +4081,10 @@ against a CIF written by TOPAS</td>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
-<tr><td>Peak-list patterns</td><td>21 automated; integrated intensities against the entry they came
-from</td>
-<td>Reproduced to 0.5 %; a clipped arcsin found, which had put an unreachable spacing at
-180&deg;</td></tr>
+<tr><td>Peak-list patterns</td><td>26 automated; integrated intensities against the entry they came
+from, and the comparison against a stand-in whose answer is known</td>
+<td>Reproduced to 0.5 %; 8 of 8 lines matched to 0.007&deg;; a clipped arcsin found, which had put an
+unreachable spacing at 180&deg;</td></tr>
 <tr><td>Setup windows and icons</td><td>13 automated; both windows opened under a virtual display,
 both jobs run on real files</td>
 <td>209 phases imported and 1751 patterns built from the windows' own code paths</td></tr>
@@ -4083,7 +4099,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>374 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>379 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

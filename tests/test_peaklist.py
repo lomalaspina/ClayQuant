@@ -5,12 +5,15 @@ is tested too: an entry with no indices cannot be oriented, and an entry with no
 structure has no mass and so no weight percent.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from clayquant.pattern import Instrument
 from clayquant.peaklist import (
     PeakList,
+    compare_with_calculated,
     build_peaklist_library,
     peaklist_pattern,
     peaklist_reflections,
@@ -217,3 +220,87 @@ def test_the_entries_carry_no_mass_so_no_weight_percent_is_implied(entries):
     library = build_peaklist_library(entries, grid(), Instrument())
     for entry in library.entries:
         assert getattr(entry, "unit_mass", None) in (None, 0.0)
+
+
+# --- scoring an entry against a structure ---------------------------------
+
+
+def calculated_kaolinite():
+    from clayquant.models import load_crystal
+    from clayquant.pattern import peak_list
+
+    return load_crystal("kaolinite_1M"), peak_list(
+        load_crystal("kaolinite_1M"), (3.0, 40.0), Instrument(), r_march_dollase=1.0
+    )
+
+
+@pytest.mark.skipif(
+    not Path(__file__).resolve().parent.parent.joinpath("structures").is_dir(),
+    reason="needs the licensed clay structures",
+)
+def test_an_entry_taken_from_the_structure_scores_perfectly():
+    """A comparison with a known right answer, so the scoring can be trusted.
+
+    The stand-in entry is the structure's own strongest lines, rounded as a file
+    would round them.  Anything other than a near-exact match would mean the
+    comparison is measuring something else.
+    """
+    _, calculated = calculated_kaolinite()
+    wavelength = Instrument().emission.principal_wavelength
+    spacings = wavelength / (2.0 * np.sin(np.radians(calculated[0] / 2.0)))
+    order = np.argsort(-calculated[1])[:8]
+    entry = PeakList(
+        name="Kaolinite (stand-in)",
+        d=np.round(spacings[order], 3),
+        intensity=np.round(100.0 * calculated[1][order]),
+    )
+    result = compare_with_calculated(entry, calculated, Instrument())
+    assert result.matched == result.total == 8
+    assert result.worst_deviation < 0.02
+    assert result.intensity_agreement > 0.98
+    # The other half of the comparison: what the entry has no line for.
+    assert result.unexplained_calculated, "the structure has more lines than the entry"
+
+
+def test_a_line_too_far_off_is_left_unmatched():
+    entry = PeakList(name="X", d=[7.15, 5.00], intensity=[100.0, 50.0])
+    # A calculated list holding only the first of them.
+    angles = np.array([12.36])
+    result = compare_with_calculated(entry, (angles, np.array([1.0])), Instrument())
+    assert result.matched == 1
+    assert result.total == 2
+    unmatched = [line for line in result.lines if line[2] is None]
+    assert len(unmatched) == 1 and unmatched[0][0] == 5.00
+
+
+def test_an_entry_with_the_wrong_spacing_is_scored_as_such():
+    """The case that matters: an 18 A entry against a 16.9 A model.
+
+    A montmorillonite entry for a different solvation state sits over a degree
+    away at low angle, which is what the deviation is there to show.
+    """
+    ours = PeakList(name="glycol smectite", d=[16.86], intensity=[100.0])
+    theirs = PeakList(name="Montmorillonite-18A", d=[18.0], intensity=[100.0])
+    wavelength = Instrument().emission.principal_wavelength
+    calculated = (ours.two_theta(wavelength), np.array([1.0]))
+    result = compare_with_calculated(theirs, calculated, Instrument(), tolerance=2.0)
+    assert result.matched == 1
+    assert abs(result.lines[0][4]) > 0.3, "over a third of a degree apart at 5 deg"
+
+
+def test_the_agreement_falls_when_the_intensities_disagree():
+    wavelength = Instrument().emission.principal_wavelength
+    entry = PeakList(name="X", d=[7.15, 3.58], intensity=[100.0, 60.0])
+    angles = entry.two_theta(wavelength)
+    same = compare_with_calculated(entry, (angles, np.array([1.0, 0.6])), Instrument())
+    swapped = compare_with_calculated(entry, (angles, np.array([0.6, 1.0])), Instrument())
+    assert same.intensity_agreement > 0.98
+    assert swapped.intensity_agreement < same.intensity_agreement
+    assert "matched" in same.summary()
+
+
+def test_an_empty_calculated_list_matches_nothing():
+    entry = PeakList(name="X", d=[7.15], intensity=[100.0])
+    result = compare_with_calculated(entry, (np.array([]), np.array([])), Instrument())
+    assert result.matched == 0
+    assert result.intensity_agreement == 0.0
