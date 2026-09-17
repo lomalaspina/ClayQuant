@@ -67,6 +67,7 @@ the next ``PHASE`` or at the end of the file.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -83,7 +84,9 @@ __all__ = [
     "build_peaklist_library",
     "peaklist_pattern",
     "peaklist_reflections",
+    "read_highscore_card",
     "read_peak_lists",
+    "write_peak_lists",
 ]
 
 
@@ -518,3 +521,462 @@ def compare_with_calculated(
         lines=lines,
         unexplained_calculated=sorted(unexplained, key=lambda item: -item[1]),
     )
+
+
+def _rtf_to_text(raw: str) -> str:
+    """Flatten an RTF document to the text a reader sees.
+
+    Not an RTF implementation and not trying to be one.  A reference card is a
+    single-level document of paragraphs and tabs, so the four control words that
+    carry its layout are translated, the escaped characters are decoded, and
+    every other control word is dropped along with the group braces.  Anything
+    more elaborate in the file is ignored, which for a card is the right
+    outcome: the text is what matters and the fonts are not.
+    """
+    text = re.sub(
+        r"\\u(-?\d+)\\?'?[0-9a-fA-F]{0,2}",
+        lambda match: chr(int(match.group(1)) % 65536),
+        raw,
+    )
+    for control, replacement in (
+        (r"\pard", ""),
+        (r"\tab", "\t"),
+        (r"\par", "\n"),
+        (r"\line", "\n"),
+    ):
+        text = text.replace(control, replacement)
+    text = re.sub(r"\\'([0-9a-fA-F]{2})", lambda match: chr(int(match.group(1), 16)), text)
+    text = re.sub(r"\\[a-zA-Z]+-?\d* ?", "", text)
+    text = text.replace("{", "").replace("}", "")
+    return re.sub(r"[ \t]+\n", "\n", text)
+
+
+def _lines(text: str) -> list[str]:
+    """Split on the three line endings a file actually uses.
+
+    Not ``str.splitlines``, which also breaks at the vertical tab, the form
+    feed and - the one that matters here - ``U+0085``.  A card written in UTF-8
+    and decoded as a single-byte code page turns every angstrom sign into
+    ``\xc3\x85``, and that second byte made ``str.splitlines`` cut the peak
+    table's header in half, so the table could not be found at all.  Being
+    explicit about the three endings costs nothing and removes the whole class.
+    """
+    return re.split(r"\r\n|\r|\n", text)
+
+
+_FIELD = re.compile(r"^\s*([A-Za-z][^:]*?)\s*:+\s*(.*)$")
+_CELL_LENGTH = re.compile(r"^([abc])\s*\(")
+_CELL_ANGLE = re.compile(r"^(alpha|beta|gamma)\s*\(")
+
+
+def _card_fields(text: str) -> dict[str, str]:
+    """Every ``label: value`` line of a card, keyed by its lowercased label.
+
+    A card repeats some labels - ``Color`` and the calculated-pattern remarks
+    appear more than once - and the repeats are joined with ``"; "`` rather than
+    overwritten, because the second remark is as much of the provenance as the
+    first.
+    """
+    fields: dict[str, str] = {}
+    for line in _lines(text):
+        found = _FIELD.match(line)
+        if found is None:
+            continue
+        label, value = found.group(1).strip().lower(), found.group(2).strip()
+        if not value:
+            continue
+        if label in fields:
+            if value not in fields[label]:
+                fields[label] = f"{fields[label]}; {value}"
+        else:
+            fields[label] = value
+    return fields
+
+
+def _card_cell(fields: dict[str, str]) -> tuple[float, float, float, float, float, float] | None:
+    """The six cell parameters of a card, or ``None`` if any is missing.
+
+    A card writes an unknown quantity as ``-1.00`` rather than leaving it out,
+    so a non-positive parameter is treated as absent; that is what keeps a cell
+    that cannot be a cell from reaching :class:`PeakList` and being used for
+    orientation.
+    """
+    lengths: dict[str, float] = {}
+    angles: dict[str, float] = {}
+    for label, value in fields.items():
+        head = value.split()
+        try:
+            magnitude = float(head[0]) if head else float("nan")
+        except ValueError:
+            continue
+        if _CELL_LENGTH.match(label):
+            lengths[label[0]] = magnitude
+        elif _CELL_ANGLE.match(label):
+            angles[label.split()[0]] = magnitude
+    if len(lengths) != 3 or len(angles) != 3:
+        return None
+    if any(value <= 0.0 for value in (*lengths.values(), *angles.values())):
+        return None
+    return (
+        lengths["a"], lengths["b"], lengths["c"],
+        angles["alpha"], angles["beta"], angles["gamma"],
+    )
+
+
+def _table_blob(text: str) -> str:
+    """The run-together peak table of a card, header and trailer removed.
+
+    A card's table arrives as one unbroken line - ``No.hkld [A]2th [deg]I
+    [%]10017.0201412.599100.0`` and on - because the export writes the columns
+    with tabs that the RTF's paragraph structure does not keep.  The header ends
+    at its last bracket and no number in the table holds one, so that is where
+    the digits start.
+    """
+    for line in _lines(text):
+        stripped = line.strip()
+        if stripped.startswith("No.") and "]" in stripped:
+            return stripped[stripped.rindex("]") + 1:].strip()
+    raise ValueError("no peak table: expected a line beginning 'No.'")
+
+
+def _written_plainly(integer_part: str) -> bool:
+    """Whether this is how a formatter writes the whole part of a number.
+
+    Digits, at least one, and no redundant leading zero: ``4``, ``17`` and ``0``
+    but not ``04``.  It reads like pedantry and it is the whole of what keeps
+    the index column and the spacing column apart, because ``4.45298`` and
+    ``04.45298`` are the same number, so without this rule the reading that
+    takes a zero out of the indices and gives it to the spacing is admissible
+    and indistinguishable - and it turns ``020`` into ``02``, which is no longer
+    three indices.
+    """
+    return integer_part.isdigit() and (len(integer_part) == 1 or integer_part[0] != "0")
+
+
+def _row_splits(
+    blob: str, start: int, number: int, wavelength: float, tolerance: float
+) -> list[tuple[tuple[int, int, int], int, str, float, float]]:
+    """Every reading of one table line that Bragg's law and the next index allow.
+
+    A candidate is ``(decimal signature, where it ends, the index token, d,
+    intensity)``.  The signature is the number of decimal places the reading
+    implies for the spacing, the angle and the intensity, and it is what
+    :func:`_card_rows` uses to tie the whole table to one reading.
+    """
+    dots = [index for index, character in enumerate(blob[start:], start=start)
+            if character == "."][:3]
+    if len(dots) < 3:
+        return []
+    first, second, third = dots
+    found: list[tuple[tuple[int, int, int], int, str, float, float]] = []
+    for lead in range(start, first):
+        if not _written_plainly(blob[lead:first]):
+            continue
+        token = blob[start:lead]
+        if token and not all(character.isdigit() or character == "-" for character in token):
+            continue
+        for d_places in range(1, second - first):
+            spacing_text = blob[lead:first + 1 + d_places]
+            if not _written_plainly(blob[first + 1 + d_places:second]):
+                continue
+            for angle_places in range(1, third - second):
+                angle_text = blob[first + 1 + d_places:second + 1 + angle_places]
+                if not _written_plainly(blob[second + 1 + angle_places:third]):
+                    continue
+                for height_places in range(1, len(blob) - third):
+                    end = third + 1 + height_places
+                    if not blob[third + 1:end].isdigit():
+                        break
+                    if end != len(blob) and not blob.startswith(str(number + 1), end):
+                        continue
+                    spacing = float(spacing_text)
+                    height = float(blob[second + 1 + angle_places:end])
+                    if spacing <= 0.0 or not 0.0 <= height <= 100.0:
+                        continue
+                    argument = wavelength / (2.0 * spacing)
+                    if argument >= 1.0:
+                        continue
+                    if abs(math.degrees(2.0 * math.asin(argument)) - float(angle_text)) > tolerance:
+                        continue
+                    found.append((
+                        (d_places, angle_places, height_places),
+                        end, token, spacing, height,
+                    ))
+    return found
+
+
+def _card_rows(
+    blob: str, wavelength: float, tolerance: float = 0.03
+) -> list[tuple[str, float, float]]:
+    """Split the run-together table into ``(index token, d, intensity)`` a line.
+
+    The table has no separators at all, so on the characters alone the split is
+    genuinely ambiguous: ``10017.0201412.599100.0`` reads as line 1, ``001``,
+    *d* = 7.02014 A, 12.599 deg, 100 %, and reads equally well, as far as digits
+    go, as *d* = 17.02014 at the same angle, or as 12.5991 deg at 0.0 %.  Three
+    things together settle it, and each is needed:
+
+    *Bragg's law.*  The card prints the spacing and the angle both, and at a
+    known wavelength they determine each other, which disposes of every reading
+    that moves a digit across the first decimal point.
+
+    *One signature for the whole table.*  A card is written by one formatter and
+    does not change its column widths part way down, so the reading is required
+    to use the same number of decimal places on every line and to consume the
+    table exactly.  This is what disposes of readings that borrow the
+    intensity's leading digit for the angle, which Bragg's law cannot see: an
+    angle of 12.5991 agrees with *d* = 7.02014 quite as well as 12.599 does,
+    and better, because the borrowed digit adds precision the card never
+    printed.
+
+    *A strongest line of 100 %.*  Intensities in a powder diffraction file are
+    relative to the strongest reflection of the entry, so exactly that reading
+    which puts a 100 in the table is the reading in which the intensity column
+    is the intensity column.  On the cards tested this is the constraint that
+    decides it, the other two having each left a handful of candidates.
+
+    A table no reading satisfies raises rather than being guessed at, naming the
+    line where the reading broke down.  Index tokens come back as text because
+    ``0012`` is three indices in more than one way and it takes the cell to say
+    which; :func:`_indices_from_token` does that afterwards.
+
+    ``tolerance`` is loose on purpose.  A card rounds its angle to the decimals
+    it prints but computed it from its own wavelength, which for an entry
+    indexed decades ago need not be the one in use here to the last digit.
+    """
+    signatures: list[tuple[int, int, int]] = []
+    for candidate in _row_splits(blob, len("1"), 1, wavelength, tolerance):
+        if candidate[0] not in signatures:
+            signatures.append(candidate[0])
+    if not blob.startswith("1"):
+        raise ValueError(f"peak table line 1: expected the index 1 at {blob[:24]!r}")
+    if not signatures:
+        raise ValueError(f"peak table line 1: cannot read a line from {blob[:32]!r}")
+
+    complete: list[list[tuple[str, float, float]]] = []
+    furthest, reason, furthest_reason = -1, "", ""
+    for signature in signatures:
+        rows: list[tuple[str, float, float]] = []
+        position, number = 0, 1
+        while position < len(blob):
+            label = str(number)
+            if not blob.startswith(label, position):
+                reason = (f"peak table line {number}: expected the index {label} at "
+                          f"{blob[position:position + 24]!r}")
+                break
+            matching = [
+                candidate
+                for candidate in _row_splits(
+                    blob, position + len(label), number, wavelength, tolerance
+                )
+                if candidate[0] == signature
+            ]
+            if not matching:
+                reason = (f"peak table line {number}: cannot read a line from "
+                          f"{blob[position:position + 32]!r}")
+                break
+            _, end, token, spacing, height = matching[0]
+            rows.append((token, spacing, height))
+            position, number = end, number + 1
+        else:
+            complete.append(rows)
+            continue
+        # Keep the complaint from the reading that got furthest down the table.
+        # Any other is an early reading of a line that was never the right one,
+        # and pointing at it sends the reader to a line that is not the problem.
+        if number > furthest:
+            furthest, furthest_reason = number, reason
+    if not complete:
+        raise ValueError(furthest_reason or f"peak table: cannot read {blob[:32]!r}")
+
+    scaled = [rows for rows in complete
+              if any(abs(row[2] - 100.0) < 0.05 for row in rows)]
+    if not scaled:
+        raise ValueError(
+            "peak table: no reading of it has a strongest line of 100 %, so the "
+            "intensity column cannot be identified"
+        )
+    if len(scaled) > 1:
+        lengths = {len(rows) for rows in scaled}
+        if len(lengths) > 1 or any(rows != scaled[0] for rows in scaled[1:]):
+            raise ValueError(
+                f"peak table: {len(scaled)} readings of it are equally consistent"
+            )
+    return scaled[0]
+
+
+def _indices_from_token(token: str, spacing: float, crystal: Crystal | None) -> tuple[
+    tuple[float, float, float] | None, float
+]:
+    """Read a card's index token into three indices, with the cell to decide.
+
+    ``0012`` is ``0 0 12`` and is also ``0 1 2`` with a leading zero and is also
+    ``00 1 2``; the card writes the indices with no separator and leaves it at
+    that.  What decides is the spacing printed beside them: every way of
+    cutting the token into three signed integers is enumerated, the spacing each
+    would have in this cell is computed, and the one that matches the printed
+    spacing is the indexing meant.  That is a check as much as a choice - a
+    token whose best split is off by more than a few per mille is reported, not
+    accepted - and it needs no convention about how the card pads its columns.
+
+    Returns the indices and the relative spacing error of the split chosen, so
+    the caller can say how well the card's own indexing holds together.  With no
+    cell the single-digit reading is taken where there is one, which is what a
+    three-character token always is, and otherwise nothing.
+    """
+    splits = _token_splits(token)
+    if not splits:
+        return None, float("nan")
+    if crystal is None:
+        single = [item for item in splits
+                  if all(abs(value) < 10 for value in item)]
+        return (single[0] if len(single) == 1 else None), float("nan")
+    candidates = np.array(splits, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        computed = crystal.d_spacing(candidates)
+    error = np.abs(computed - spacing) / spacing
+    best = int(np.nanargmin(np.where(np.isfinite(error), error, np.inf)))
+    return tuple(float(value) for value in candidates[best]), float(error[best])
+
+
+def _token_splits(token: str) -> list[tuple[float, float, float]]:
+    """Every way of cutting an index token into three signed integers.
+
+    A part is an optional minus sign and then one or more digits, and a lone
+    minus sign is not a part, so ``-1-11`` cuts one way and ``0012`` four.
+    """
+    if not token:
+        return []
+    parts: list[list[str]] = []
+
+    def walk(rest: str, taken: list[str]) -> None:
+        if len(taken) == 3:
+            if not rest:
+                parts.append(list(taken))
+            return
+        for length in range(1, len(rest) + 1):
+            piece = rest[:length]
+            if piece.lstrip("-").isdigit() and piece.count("-") <= 1 and (
+                "-" not in piece[1:]
+            ):
+                walk(rest[length:], [*taken, piece])
+
+    walk(token, [])
+    return [(float(one), float(two), float(three)) for one, two, three in parts]
+
+
+def _card_text(path: Path) -> str:
+    """Decode a card, which may be UTF-8, may be a Windows code page, or ASCII.
+
+    RTF is seven-bit and carries its accented characters as escapes, so it
+    decodes either way; a plain-text export does not, and getting its encoding
+    wrong is not merely cosmetic - see :func:`_lines`.  UTF-8 is tried first
+    because it is what a modern export writes and because it fails loudly on
+    anything that is not UTF-8, and CP1252 is the fallback because it decodes
+    every byte and is what a Windows tool writes when it is not writing UTF-8.
+    """
+    data = path.read_bytes()
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("cp1252", errors="replace")
+
+
+def read_highscore_card(path: str | Path, name: str = "") -> PeakList:
+    """Read one reference card as a powder-file front end exports it.
+
+    This is the format that comes out of a local installation when a single
+    entry is printed or saved from the reference-pattern view, in RTF or as
+    plain text: a block of ``label: value`` header lines, then the peak table.
+    It is read here rather than converted by hand because the alternative -
+    retyping a hundred and forty-five lines - is where the errors would come
+    from.
+
+    The entry's name is its mineral name where it has one, falling back to the
+    compound name and then to the file's stem, and ``source`` records the
+    reference code, which is what makes a fit traceable to the entry.  Every
+    header field is kept in ``metadata`` under its lowercased label, including
+    the ones nothing here reads: the quality mark and the sample-preparation
+    line decide whether an entry means anything for oriented work, and whoever
+    reads the fit has to be able to see them.
+
+    Unindexed entries are common in this format - a card marked *Indexed (I)*
+    may print no indices at all - and come back with ``hkl`` as ``None``, so
+    :attr:`PeakList.can_orient` is false and the entry can enter a fit only as a
+    random powder.
+    """
+    path = Path(path)
+    raw = _card_text(path)
+    text = _rtf_to_text(raw) if raw.lstrip().startswith("{\\rtf") else raw
+    fields = _card_fields(text)
+    try:
+        blob = _table_blob(text)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+    if not blob:
+        raise ValueError(f"{path}: the peak table is empty")
+    try:
+        rows = _card_rows(blob, Instrument().emission.principal_wavelength)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+
+    label = name or fields.get("mineral name") or fields.get("compound name") or path.stem
+    code = fields.get("reference code", "")
+    cell = _card_cell(fields)
+    crystal = (
+        Crystal(a=cell[0], b=cell[1], c=cell[2], alpha=cell[3], beta=cell[4],
+                gamma=cell[5], sites=[], name=label)
+        if cell is not None
+        else None
+    )
+    indexed = [_indices_from_token(row[0], row[1], crystal) for row in rows]
+    hkl = (
+        None if any(item[0] is None for item in indexed)
+        else np.array([item[0] for item in indexed], dtype=float)
+    )
+    errors = np.array([item[1] for item in indexed], dtype=float)
+    return PeakList(
+        name=label,
+        d=np.array([row[1] for row in rows], dtype=float),
+        intensity=np.array([row[2] for row in rows], dtype=float),
+        hkl=hkl,
+        cell=cell,
+        source=f"ICDD PDF {code}" if code else path.name,
+        metadata={
+            **fields,
+            "indexing_worst_error": float(np.nanmax(errors)) if np.any(np.isfinite(errors))
+            else float("nan"),
+        },
+    )
+
+
+def write_peak_lists(peak_lists: list[PeakList], path: str | Path) -> Path:
+    """Write entries out in the plain-text format :func:`read_peak_lists` reads.
+
+    The bridge from cards to a library: export the entries wanted, read them
+    here, write one file, and that file is the input to
+    :func:`build_peaklist_library` and is editable by hand, which a card is not.
+    It carries the reference code and the cell and drops the rest of the header,
+    so the written file is the data and the card stays the record.
+    """
+    path = Path(path)
+    lines = [
+        "# Peak lists for ClayQuant, written by clayquant.peaklist.",
+        "# Derived from licensed powder diffraction data - keep it with your own",
+        "# files; it belongs neither in a repository nor in anything shared.",
+    ]
+    for peaks in peak_lists:
+        lines.append("")
+        lines.append(f"PHASE   {peaks.name}")
+        if peaks.source:
+            lines.append(f"SOURCE  {peaks.source}")
+        if peaks.cell is not None:
+            lines.append("CELL    " + " ".join(f"{value:g}" for value in peaks.cell))
+        lines.append("#       d(A)      I    hkl")
+        for index in range(peaks.d.size):
+            row = f"  {peaks.d[index]:10.5f} {peaks.intensity[index]:6.1f}"
+            if peaks.hkl is not None:
+                row += "    " + "".join(f"{int(value):d}" for value in peaks.hkl[index])
+            lines.append(row)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path

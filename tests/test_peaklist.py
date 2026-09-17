@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from clayquant import peaklist
+
 from clayquant.pattern import Instrument
 from clayquant.peaklist import (
     PeakList,
@@ -304,3 +306,173 @@ def test_an_empty_calculated_list_matches_nothing():
     result = compare_with_calculated(entry, (np.array([]), np.array([])), Instrument())
     assert result.matched == 0
     assert result.intensity_agreement == 0.0
+
+
+# --- Reference cards as a powder-file front end exports them -----------------
+
+CARD = """Name and formula
+
+Reference code:\t 00-052-1044
+
+Mineral name:\t Chlorite-serpentine
+Compound name:\t Magnesium Aluminum Silicate Hydroxide
+
+Crystallographic parameters
+
+Crystal system:\t Hexagonal
+
+a (Å):\t 5.3400
+b (Å):\t 5.3400
+c (Å):\t 14.1090
+Alpha (°):\t 90.0000
+Beta (°):\t 90.0000
+Gamma (°):\t 120.0000
+
+Measured density (g/cm3):\t -1.00
+
+Subfiles and quality
+
+Quality:\t Indexed (I)
+
+Comments
+
+Sample Source or Locality:\t Only 00l reflections are recorded.
+
+Peak list
+No.hkld [Å]2θ [°]I [%]100114.150006.24132.020027.0400012.563100.030034.7000018.86620.0
+Stick Pattern
+"""
+
+
+def _card(tmp_path, text=CARD, name="card.txt"):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_reads_a_plain_text_card(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    assert entry.name == "Chlorite-serpentine"
+    assert entry.source == "ICDD PDF 00-052-1044"
+    assert entry.d.size == 3
+    assert entry.d[0] == pytest.approx(14.15)
+    assert entry.intensity.tolist() == [32.0, 100.0, 20.0]
+
+
+def test_a_card_gives_its_cell_and_can_be_oriented(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    assert entry.cell == pytest.approx((5.34, 5.34, 14.109, 90.0, 90.0, 120.0))
+    assert entry.can_orient
+
+
+def test_a_card_keeps_the_header_fields_that_decide_what_it_means(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    # The quality mark and the locality note are what say this entry is basal
+    # only and indexed rather than refined; a reader of a fit needs both.
+    assert entry.metadata["quality"] == "Indexed (I)"
+    assert "00l" in entry.metadata["sample source or locality"]
+
+
+def test_a_cards_negative_density_is_not_read_as_a_cell_parameter(tmp_path):
+    # A card writes an unknown quantity as -1.00, which must not become a cell.
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    assert entry.cell is not None and all(value > 0.0 for value in entry.cell)
+
+
+def test_indices_come_back_as_the_spacing_says_not_as_the_digits_suggest(tmp_path):
+    # 0010 is 0 0 10 and is also 0 1 0 with a leading zero; only the cell says
+    # which, and this table's own spacing of 1.41200 A settles it at 0 0 10.
+    text = CARD.replace(
+        "100114.150006.24132.020027.0400012.563100.030034.7000018.86620.0",
+        "100114.150006.24132.0200101.4120066.123100.0",
+    )
+    entry = peaklist.read_highscore_card(_card(tmp_path, text))
+    assert entry.hkl is not None
+    assert entry.hkl[1].tolist() == [0.0, 0.0, 10.0]
+
+
+def test_the_index_column_does_not_lose_a_zero_to_the_spacing(tmp_path):
+    # 020 and d = 4.45298 read equally well as 02 and d = 04.45298 on the
+    # digits alone.  Only the rule that a formatter writes no leading zero
+    # keeps three indices in the index column.
+    text = CARD.replace(
+        "100114.150006.24132.020027.0400012.563100.030034.7000018.86620.0",
+        "10204.4529819.923100.0",
+    ).replace("c (Å):\t 14.1090", "c (Å):\t 7.2600").replace(
+        "a (Å):\t 5.3400", "a (Å):\t 5.1400"
+    ).replace("b (Å):\t 5.3400", "b (Å):\t 8.9100").replace(
+        "Gamma (°):\t 120.0000", "Gamma (°):\t 90.0000"
+    )
+    entry = peaklist.read_highscore_card(_card(tmp_path, text))
+    assert entry.hkl is not None
+    assert entry.hkl[0].tolist() == [0.0, 2.0, 0.0]
+    assert entry.d[0] == pytest.approx(4.45298)
+
+
+def test_the_intensity_column_is_not_robbed_of_its_leading_digit(tmp_path):
+    # Reading 12.5991 degrees and 00.0 % instead of 12.599 and 100.0 % agrees
+    # with Bragg's law quite as well, and better; the strongest line being
+    # 100 % is what rules it out.
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    assert entry.intensity.max() == pytest.approx(100.0)
+
+
+def test_a_card_whose_table_has_no_hundred_per_cent_line_is_refused(tmp_path):
+    text = CARD.replace("12.563100.0", "12.56390.0")
+    with pytest.raises(ValueError, match="100 %"):
+        peaklist.read_highscore_card(_card(tmp_path, text))
+
+
+def test_a_card_with_no_peak_table_says_so(tmp_path):
+    text = CARD.split("Peak list")[0]
+    with pytest.raises(ValueError, match="no peak table"):
+        peaklist.read_highscore_card(_card(tmp_path, text))
+
+
+def test_a_card_whose_table_breaks_names_the_line(tmp_path):
+    text = CARD.replace("30034.7000018.86620.0", "30034.7000018.866")
+    with pytest.raises(ValueError, match="line 3"):
+        peaklist.read_highscore_card(_card(tmp_path, text))
+
+
+def test_rtf_is_flattened_to_the_text_a_reader_sees(tmp_path):
+    body = CARD.replace("\n", r"\par ").replace("\t", r"\tab ")
+    rtf = r"{\rtf1\deff0{\fonttbl{\f0 Calibri;}}\pard\plain\fs22 " + body + "}"
+    entry = peaklist.read_highscore_card(_card(tmp_path, rtf, "card.rtf"))
+    assert entry.name == "Chlorite-serpentine"
+    assert entry.d.size == 3
+
+
+def test_repeated_card_labels_are_joined_rather_than_overwritten(tmp_path):
+    text = CARD.replace(
+        "Quality:\t Indexed (I)",
+        "Color:\t White\nQuality:\t Indexed (I)\nColor:\t green",
+    )
+    entry = peaklist.read_highscore_card(_card(tmp_path, text))
+    assert entry.metadata["color"] == "White; green"
+
+
+def test_a_card_round_trips_through_the_plain_text_format(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    written = peaklist.write_peak_lists([entry], tmp_path / "peaks.txt")
+    again = peaklist.read_peak_lists(written)
+    assert len(again) == 1
+    assert again[0].name == entry.name
+    assert again[0].source == entry.source
+    assert again[0].d == pytest.approx(entry.d)
+    assert again[0].intensity == pytest.approx(entry.intensity)
+    assert again[0].cell == pytest.approx(entry.cell)
+    assert again[0].hkl == pytest.approx(entry.hkl)
+
+
+def test_the_written_file_warns_that_it_is_licensed_data(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    written = peaklist.write_peak_lists([entry], tmp_path / "peaks.txt")
+    assert "licensed" in written.read_text()
+
+
+def test_a_card_reports_how_well_its_own_indexing_holds(tmp_path):
+    entry = peaklist.read_highscore_card(_card(tmp_path))
+    # 14.150, 7.040 and 4.700 A against c = 14.1090: a rational series to a few
+    # parts per thousand, which is what a basal-only entry should look like.
+    assert entry.metadata["indexing_worst_error"] < 0.01
