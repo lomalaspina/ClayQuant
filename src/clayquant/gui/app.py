@@ -50,6 +50,7 @@ from ..bern import is_clay_phase
 from ..detection import detect_phases, screen_phases
 from ..calibration import (
     QUARTZ_100_D,
+    QUARTZ_101_D,
     estimate_zero_error,
     reference_two_theta,
     zero_error_profile,
@@ -82,7 +83,7 @@ from ..plots import (
     save_report,
 )
 from ..profile import PeakShape
-from ..quantification import quantify
+from ..quantification import Calibration, quantify
 from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
@@ -1053,6 +1054,16 @@ def fit_tab() -> html.Div:
                         options=[{"label": "  Subtract the fitted background", "value": "on"}],
                         value=["on"],
                     ),
+                    label("Weight % calibration"),
+                    dcc.Dropdown(
+                        id="fit-calibration",
+                        options=[
+                            {"label": "As calculated (every factor 1)", "value": "none"},
+                            {"label": "Clayfit family calibration", "value": "clayfit"},
+                        ],
+                        value="none",
+                        clearable=False,
+                    ),
                     html.Button("Run NNLS fit", id="fit-run", n_clicks=0,
                                 style={"marginTop": "10px"}),
                     html.Div(id="fit-status", style={"marginTop": "10px"}),
@@ -1738,13 +1749,53 @@ def register_callbacks(app: Dash) -> None:
                 figure.add_vline(x=metrics.position, line={"color": color, "dash": "dash"},
                                  annotation_text=f"{name}: {metrics.d_spacing:.2f} Å")
         figure.add_vrect(x0=window[0], x1=window[1], fillcolor="#a5d6a7", opacity=0.2, line_width=0)
-        figure.update_xaxes(range=[air.two_theta[0], min(air.two_theta[-1], window[1] + 10.0)])
+        # The whole collected range, not the search window and a margin.  What
+        # the eye needs here is a reflection that cannot move between the two
+        # treatments: if every peak in view has shifted, that is a zero error
+        # and not swelling, and there is no way to tell the two apart without
+        # something invariant in the picture.  Quartz is that something, and its
+        # 101 at 26.6 deg was outside the old range.
+        low = min(air.two_theta[0], glycol.two_theta[0])
+        high = max(air.two_theta[-1], glycol.two_theta[-1])
+        figure.update_xaxes(range=[low, high])
+        marks = []
+        for spacing, label_text in ((QUARTZ_100_D, "quartz 100"), (QUARTZ_101_D, "quartz 101")):
+            position = reference_two_theta(spacing)
+            if not low <= position <= high:
+                continue
+            figure.add_vline(x=position, line={"color": "#777777", "dash": "dot", "width": 1},
+                             annotation_text=label_text, annotation_position="top")
+            found = []
+            for mount, pattern in (("air", air), ("glycol", glycol)):
+                near = np.abs(pattern.two_theta - position) < 0.35
+                if not near.any() or pattern.intensity[near].max() <= 0:
+                    continue
+                peak = float(pattern.two_theta[near][int(np.argmax(pattern.intensity[near]))])
+                found.append((mount, peak))
+            if len(found) == 2:
+                marks.append(
+                    f"{label_text}: air {found[0][1]:.3f}\u00b0, glycol {found[1][1]:.3f}\u00b0, "
+                    f"difference {found[1][1] - found[0][1]:+.3f}\u00b0"
+                )
         style_axes(figure, "Counts")
 
         verdict = (
             "Expandable clay present." if result.expandable_detected else "No expansion detected."
         )
-        return figure, html.Div([html.B(verdict), html.Div(result.summary())])
+        note = (
+            html.Div(
+                [html.Div(line) for line in marks]
+                + [html.Div(
+                    "Quartz does not respond to glycol, so a difference here is a zero error "
+                    "between the two scans and not swelling. Correct it in step 2 before "
+                    "reading the 001 shift.",
+                    style={"color": "#666"},
+                )],
+                style={"marginTop": "8px", "fontSize": "0.8rem"},
+            )
+            if marks else None
+        )
+        return figure, html.Div([html.B(verdict), html.Div(result.summary()), note])
 
     @app.callback(
         Output("db-status", "children"),
@@ -2066,9 +2117,10 @@ def register_callbacks(app: Dash) -> None:
         State("fit-range", "value"),
         State("fit-orientations", "value"),
         State("fit-subtract", "value"),
+        State("fit-calibration", "value"),
         prevent_initial_call=True,
     )
-    def run_fit(_clicks, mount, fit_range, orientations, subtract):
+    def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2099,7 +2151,10 @@ def register_callbacks(app: Dash) -> None:
                 background=state.background_fit if use_background else None,
                 range_two_theta=tuple(fit_range),
             )
-            quantification = quantify(result)
+            calibration = (
+                Calibration.from_clayfit(library) if calibration_choice == "clayfit" else None
+            )
+            quantification = quantify(result, calibration=calibration)
         except Exception as exc:  # noqa: BLE001
             return (*blank, error_message(exc))
 

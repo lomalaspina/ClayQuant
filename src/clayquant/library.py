@@ -508,6 +508,7 @@ def build_library(
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
+    smectite_orientation: float = 1.0,
     progress: bool = False,
 ) -> PatternLibrary:
     """Calculate the full reference library.
@@ -532,6 +533,14 @@ def build_library(
     smectite_thickness:
         Layer repeat of the glycolated smectite in A; defaults to the 16.86 A
         measured by Reynolds (1965).
+    smectite_orientation:
+        March-Dollase parameter the pure smectite pattern is calculated at.  It
+        does not change the pattern's shape - every reflection is basal, so the
+        factor is one constant - and it does set the basis its weight percent is
+        on, because a basal series scales as ``r ** -3``.  The default of 1 is a
+        random powder, which is not what an oriented mount of a glycolated
+        smectite is; set it to the orientation the fit gives the other platy
+        clays if the clay percentages are to be compared with each other.
     chlorite_iron:
         Octahedral iron fractions to calculate chlorite for, as
         ``(2:1 sheet, hydroxide sheet)`` pairs; see :data:`CHLORITE_IRON`.
@@ -610,6 +619,7 @@ def build_library(
             "csds_beta": csds_beta,
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
             "smectite_source": "Reynolds (1965) Am. Mineral. 50, 990-1001",
+            "smectite_orientation": float(smectite_orientation),
             "cif_sources": {
                 key: f"ICSD {source.icsd}: {source.description}"
                 for key, source in CIF_SOURCES.items()
@@ -647,22 +657,40 @@ def build_library(
                     library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
                                 unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
 
-    # Pure glycolated smectite.  All its reflections are basal, so the
-    # orientation parameter only scales the pattern and one entry suffices.
+    # Pure glycolated smectite.  One entry, and the reason is worth setting out
+    # because the consequence is not obvious.  Every reflection of this phase is
+    # basal, so the March-Dollase factor is one constant for the whole series and
+    # the orientation parameter scales the pattern without changing its shape.
+    # Ten entries would therefore be ten identical columns once stored at unit
+    # maximum, and a non-negative fit would divide the phase among them
+    # arbitrarily - which is worse than one entry, not better.
+    #
+    # What the single entry does decide is the basis its weight percent is on.
+    # A basal series is enhanced by r to the power -3, so the mass behind a
+    # given fitted coefficient depends entirely on the orientation assumed, and
+    # ``smectite_orientation`` is that assumption.  It used to be fixed at 1, a
+    # random powder, while illite, chlorite and the kaolinites had their
+    # orientation spanned and chosen by the fit from their non-basal
+    # reflections.  A smectite reported as a random powder beside an illite
+    # fitted at r = 0.2 is not on the same basis as that illite - the two differ
+    # by a factor of 125 per gram - so the clay percentages could not be
+    # compared with each other.  Set it to the orientation the fit gives the
+    # other platy clays in the same mount, which is the assumption that makes
+    # them comparable; the value used is recorded in the library's metadata.
     smectite = eg_smectite_layer(
         smectite_thickness if smectite_thickness is not None else eg_smectite_layer().thickness
     )
-    announce("smectite_EG: 1 pattern")
+    announce(f"smectite_EG: 1 pattern at r = {smectite_orientation:g}")
     library.add(
         basal_pattern(
             MixedLayerStack(smectite, smectite, 1.0, csds=csds, name="smectite_EG"),
             extended,
             instrument,
-            r_march_dollase=1.0,
+            r_march_dollase=smectite_orientation,
             name="smectite_EG",
         ),
         phase="smectite_EG",
-        march_dollase=1.0,
+        march_dollase=smectite_orientation,
         fraction=0.0,
         unit_mass=smectite.mass,
         # A layer occupies the area of the (001) face of the host cell times its
@@ -760,6 +788,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--csds-beta", type=float, default=0.35, help="width of the lognormal CSDS in ln(N)"
+    )
+    parser.add_argument(
+        "--smectite-orientation",
+        type=float,
+        default=1.0,
+        help="March-Dollase parameter for the pure smectite pattern; it sets the "
+             "basis its weight percent is on, not its shape (default: 1, a random powder)",
     )
     parser.add_argument(
         "--smectite-thickness",
@@ -922,6 +957,7 @@ def main(argv: list[str] | None = None) -> int:
         csds_means=tuple(arguments.csds_means),
         csds_beta=arguments.csds_beta,
         smectite_thickness=arguments.smectite_thickness,
+        smectite_orientation=arguments.smectite_orientation,
         progress=not arguments.quiet,
     )
     path = library.save(arguments.out)

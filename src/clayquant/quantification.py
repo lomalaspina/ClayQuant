@@ -55,6 +55,9 @@ __all__ = [
     "Calibration",
     "quantify",
     "CLAY_LIBRARY_PHASES",
+    "CLAYFIT_ANCHOR_ORIENTATION",
+    "CLAYFIT_SCALE_FACTORS",
+    "clayfit_weight_fractions",
 ]
 
 CLAY_LIBRARY_PHASES = frozenset(
@@ -111,6 +114,86 @@ class Calibration:
         return cls(
             factors={phase: value / mean for phase, value in factors.items()},
             source=source or "measured against a known composition",
+        )
+
+    @classmethod
+    def from_clayfit(
+        cls, library, scale_factors: dict[str, float] | None = None
+    ) -> "Calibration":
+        """Clayfit's family calibration, as factors on ClayQuant's computed mass.
+
+        See :data:`CLAYFIT_SCALE_FACTORS` for where the numbers come from and
+        what carrying them over does and does not buy.  The arithmetic is the
+        same as :func:`clayfit_weight_fractions`, expressed as one factor per
+        phase so it goes through :func:`quantify` with everything else:
+
+            k = (anchor / K) / (unit mass x unit volume)
+
+        The right-hand denominator is what ClayQuant would compute for that
+        phase from first principles; the numerator is what Clayfit's calibration
+        says the amount is instead.  So ``k`` is the ratio between the two, and a
+        ``k`` far from 1 is a statement that the calculation and the calibrated
+        measurement disagree about that phase by that much - worth reading as a
+        result and not only as a correction.
+
+        The factors depend on the library, because both the anchor and the unit
+        mass do, so this is computed and not tabulated.  A phase the library
+        holds and Clayfit does not calibrate keeps ``k = 1``, which leaves it on
+        the computed basis; that is the honest treatment for the
+        interstratified series, which Clayfit calibrates per composition rather
+        than per family and so has no single factor for.
+        """
+        factors = CLAYFIT_SCALE_FACTORS if scale_factors is None else scale_factors
+        most_oriented: dict[str, float] = {}
+        for entry in library.entries:
+            r = float(entry.march_dollase)
+            if entry.phase not in most_oriented or r < most_oriented[entry.phase]:
+                most_oriented[entry.phase] = r
+        result: dict[str, float] = {}
+        skipped: list[str] = []
+        for entry in library.entries:
+            phase = entry.phase
+            if phase in result or phase in skipped or phase not in factors:
+                continue
+            if abs(float(entry.march_dollase) - most_oriented[phase]) > 1e-9:
+                continue
+            # Clayfit anchors every factor on its PO_01 profile, so a family
+            # whose most oriented pattern here is at some other r is not
+            # comparable and must not be calibrated as though it were.  A pure
+            # basal series scales as r**-3, so accepting a mismatch would import
+            # the factor multiplied by a thousand: the glycol smectite, which
+            # this library holds only as a random powder, came out at k = 0.0003
+            # before this check, and that number is the orientation mismatch and
+            # nothing else.
+            if abs(float(entry.march_dollase) - CLAYFIT_ANCHOR_ORIENTATION) > 1e-9:
+                skipped.append(phase)
+                continue
+            anchor = float(entry.normalization or 0.0)
+            mass = float(entry.unit_mass or 0.0)
+            volume = float(entry.unit_volume or 0.0)
+            if anchor <= 0.0 or mass <= 0.0 or volume <= 0.0:
+                continue
+            result[phase] = (anchor / factors[phase]) / (mass * volume)
+        if not result:
+            raise ValueError(
+                "none of the phases Clayfit calibrates is in this library with an "
+                "absolute scale, a unit mass and a unit volume, so its factors cannot "
+                "be re-anchored"
+            )
+        mean = sum(result.values()) / len(result)
+        note = (
+            "Clayfit family calibration (Clayfit4 measurements), re-anchored on this "
+            "library; the interstratified series stay on the computed basis"
+        )
+        if skipped:
+            note += (
+                f"; {', '.join(sorted(skipped))} left uncalibrated because this library "
+                f"holds no pattern for it at r = {CLAYFIT_ANCHOR_ORIENTATION:g}, which is "
+                f"where Clayfit's factors are anchored"
+            )
+        return cls(
+            factors={phase: value / mean for phase, value in result.items()},
+            source=note,
         )
 
     def to_json(self, path: str | Path) -> Path:
@@ -683,3 +766,136 @@ def quantify(
         absolute_scale=scale,
         unaccounted=(100.0 - sum(share.absolute_weight for share in shares)) if scale else 0.0,
     )
+
+
+# --- Clayfit's family calibration, carried over ------------------------------
+
+CLAYFIT_ANCHOR_ORIENTATION = 0.1
+"""March-Dollase parameter Clayfit's scale factors are anchored on (its PO_01)."""
+
+CLAYFIT_SCALE_FACTORS: dict[str, float] = {
+    "chlorite": 358.0343993649871,
+    "illite": 113.15656786986817,
+    "kaolinite_1M": 180.223981959315,
+    "kaolinite_2M": 104.678273593158,
+    "smectite_EG": 754.5132206968542,
+}
+"""Per-family intensity calibration taken from Clayfit5, by ClayQuant phase name.
+
+These are the ``calibration_scale_factor`` values of Clayfit5's
+``oriented_clay.py``, determined offline against measurements held in the older
+Clayfit4 database.  In Clayfit each family's calculated profile is multiplied by
+its factor before the fit, and the fitted coefficient is then read as
+proportional to the amount of that family - so the factors are what put the five
+families on one scale of counts per unit amount.
+
+What carries over and what does not.  The *ratios* between these numbers are a
+calibration of real mixtures and are worth having; the numbers themselves are
+tied to Clayfit's own profiles, whose absolute scale comes from TOPAS
+conventions ClayQuant does not share.  So they cannot be used as they stand and
+are re-anchored in :func:`clayfit_weight_fractions` against ClayQuant's own
+calculated pattern for the same family at the same orientation, which is the one
+place the two can be made to agree.
+
+The assumption this rests on, stated plainly because it is not a small one:
+that ClayQuant's calculated pattern for a family stands in the same relation to
+the amount of that family as Clayfit's TOPAS profile does, up to the single
+constant being re-anchored.  Where the two calculations differ in more than
+scale - and they do; Clayfit's illite and chlorite profiles come from structures
+refined against one specimen, ClayQuant's from the published entries - the
+calibration carries that difference with it.  It is a family-to-family
+correction, and it does not make the absolute weight percent right.
+
+C/S and I/S are absent on purpose.  Clayfit calibrates its mixed-layer profiles
+individually, one factor per composition, not one per family, so there is no
+single number to carry over for an interstratified series.
+"""
+
+
+def clayfit_weight_fractions(
+    result,
+    library,
+    scale_factors: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Weight fractions on Clayfit's family calibration.
+
+    Clayfit's arithmetic is that a family's fitted coefficient is proportional to
+    its amount once its profile has been multiplied by ``K``, with the profile
+    anchored at its own maximum for the most strongly oriented variant it holds
+    (``PO_01``, ``r = 0.1``).  Reproducing it here needs both halves of that:
+
+    * the amount-proportional quantity per entry, which is
+      ``coefficient / normalization`` - the library stores its patterns at unit
+      maximum, so the coefficient alone has the orientation dependence divided
+      out of it and is not proportional to anything;
+    * the same anchor, which is ClayQuant's own raw maximum for that family's
+      most strongly oriented pattern, standing in for Clayfit's 10 000.
+
+    "Most strongly oriented" is how Clayfit's own anchor is reproduced without
+    naming a number that is only right for some of the families.  Clayfit
+    anchors its chlorite, illite and two kaolinite families on ``PO_01``, which
+    is ``r = 0.1`` and is the smallest orientation parameter they span; its
+    smectite family it does not orient at all, spanning basal spacing and width
+    instead, so there is no ``PO_01`` to anchor on and its factor belongs to the
+    first profile in that family.  Taking each family's smallest
+    ``march_dollase`` gives the first in both cases.
+
+    So each family's amount comes out as
+    ``sum(c / normalization) * anchor / K``, and the results are renormalised.
+    A family with no factor and no entries in the fit is simply absent from the
+    answer; a family that was fitted and has no factor raises, because silently
+    dropping a mineral that is present renormalises the rest to 100 per cent
+    between them and the answer then looks complete while something is missing
+    from it.
+
+    Returns a mapping of phase to weight fraction, summing to 1 over the phases
+    it covers.
+    """
+    factors = CLAYFIT_SCALE_FACTORS if scale_factors is None else scale_factors
+    most_oriented: dict[str, float] = {}
+    for entry in library.entries:
+        r = float(entry.march_dollase)
+        if entry.phase not in most_oriented or r < most_oriented[entry.phase]:
+            most_oriented[entry.phase] = r
+    anchors: dict[str, float] = {}
+    for entry in library.entries:
+        if abs(float(entry.march_dollase) - most_oriented[entry.phase]) > 1e-9:
+            continue
+        divisor = float(entry.normalization or 0.0)
+        if divisor > anchors.get(entry.phase, 0.0):
+            anchors[entry.phase] = divisor
+
+    units: dict[str, float] = {}
+    for entry, coefficient in zip(library.entries, result.coefficients):
+        if coefficient <= 0.0:
+            continue
+        divisor = float(entry.normalization or 1.0)
+        if divisor <= 0.0:
+            continue
+        units[entry.phase] = units.get(entry.phase, 0.0) + float(coefficient) / divisor
+
+    fitted = {phase for phase, value in units.items() if value > 0.0}
+    missing = sorted(phase for phase in fitted if phase not in factors)
+    if missing:
+        raise KeyError(
+            f"no Clayfit scale factor for {missing}; give one in scale_factors or "
+            f"quantify without this calibration, because leaving a fitted phase out "
+            f"renormalises the rest to 100 % between them"
+        )
+    amounts: dict[str, float] = {}
+    for phase in fitted:
+        anchor = anchors.get(phase)
+        if not anchor:
+            raise KeyError(
+                f"the library records no absolute scale for {phase}, so Clayfit's factor "
+                f"for it cannot be re-anchored; rebuild the library so its entries carry "
+                f"their normalization"
+            )
+        amounts[phase] = units[phase] * anchor / factors[phase]
+    total = sum(amounts.values())
+    if total <= 0.0:
+        return {phase: 0.0 for phase in amounts}
+    return {
+        phase: value / total
+        for phase, value in sorted(amounts.items(), key=lambda item: -item[1])
+    }
