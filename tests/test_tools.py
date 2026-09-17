@@ -154,3 +154,39 @@ def test_each_shortcut_describes_itself(tmp_path):
 def test_a_shortcut_with_no_module_falls_back_to_the_interface():
     plain = Shortcut(name="X", slug="x", comment="y")
     assert "clayquant" in " ".join(plain.command()).lower()
+
+
+# --- which found phases arrive ticked -------------------------------------
+
+
+class Finding:
+    """Just enough of a PhaseEvidence for the ticking rule."""
+
+    def __init__(self, name, score):
+        self.name = name
+        self.score = score
+
+
+def test_the_competitive_screen_ticks_by_the_share_asked_for():
+    from clayquant.gui.app import phases_to_tick
+
+    findings = [Finding("Albite", 0.045), Finding("Quartz", 0.015), Finding("Rutile", 0.004)]
+    assert phases_to_tick(findings, screened=True, tick_above=3.0) == ["Albite"]
+    assert phases_to_tick(findings, screened=True, tick_above=1.0) == ["Albite", "Quartz"]
+    assert phases_to_tick(findings, screened=True, tick_above=10.0) == []
+
+
+def test_position_matching_ticks_nothing_however_high_it_scores():
+    """The failure this prevents, from a real run on a clay separate.
+
+    With no clay library the search falls back to matching peak positions, where
+    galena scored 95 %, otavite 99 % and cassiterite 96 % - none of them credible
+    in a clay separate, and all of them were arriving pre-ticked, one click from
+    entering the fit.  A position-matching score is not a share of the pattern,
+    so there is no threshold that would make pre-ticking honest.
+    """
+    from clayquant.gui.app import phases_to_tick
+
+    findings = [Finding("Galena", 0.95), Finding("Otavite", 0.99), Finding("Corundum", 1.0)]
+    for threshold in (0.5, 1.0, 3.0, 10.0):
+        assert phases_to_tick(findings, screened=False, tick_above=threshold) == []

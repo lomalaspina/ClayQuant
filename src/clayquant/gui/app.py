@@ -190,6 +190,29 @@ def working(*children) -> dcc.Loading:
     )
 
 
+def phases_to_tick(findings, screened: bool, tick_above: float) -> list[str]:
+    """Which found phases arrive already ticked in the main-mineral dialog.
+
+    Only the competitive screen pre-ticks anything.  A position-matching score
+    says that a phase's expected lines fall where the data has peaks, which in a
+    crowded pattern a candidate with a dozen expected lines manages whether or
+    not it is there - scores of 95 to 100 % are normal for phases that are
+    absent.  There is no honest threshold to pre-tick on, and pre-ticking the top
+    of that list put galena, otavite and cassiterite in front of an operator of a
+    clay separate, one click from entering the fit.
+
+    With a library loaded the score is the share of the pattern the phase
+    accounts for, fitted in competition with the clays and the other candidates,
+    and ``tick_above`` is that share in per cent.
+    """
+    if not screened:
+        return []
+    return [
+        evidence.name for evidence in findings
+        if evidence.score >= float(tick_above) / 100.0
+    ]
+
+
 def background_report(pattern, fit, background) -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
@@ -865,12 +888,15 @@ def main_minerals_tab() -> html.Div:
                                marks={0.5: "0.5", 3: "3", 10: "10"}),
                     html.Div(
                         "Every phase found is listed; this decides only which arrive "
-                        "already ticked. A share depends on what else is in the "
-                        "database competing for the same intensity, so a phase can "
-                        "drop below the line because a different candidate was added, "
-                        "not because the evidence for it changed. If a mineral you "
-                        "expect is listed but unticked, lower this rather than "
-                        "assuming it was not found.",
+                        "already ticked, and it applies to the competitive screen "
+                        "alone \u2014 with no clay library loaded the search falls back "
+                        "to matching peak positions, whose score is not a share of "
+                        "anything, and nothing is pre-ticked. A share depends on what "
+                        "else is in the database competing for the same intensity, so "
+                        "a phase can drop below the line because a different candidate "
+                        "was added, not because the evidence for it changed. If a "
+                        "mineral you expect is listed but unticked, lower this rather "
+                        "than assuming it was not found.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Search range (°2θ)"),
@@ -1688,6 +1714,14 @@ def register_callbacks(app: Dash) -> None:
         prevent_initial_call=True,
     )
     def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above):
+        """Search for accompanying minerals, by competitive fit or by positions.
+
+        Which of the two happens depends on whether a clay library is loaded, and
+        the difference is not a detail: the competitive fit put quartz and albite
+        first and second on a real separate, while position matching ranked
+        quartz 101st of 169 behind pyrite, boehmite, hematite and cementite.  The
+        dialog now says which test produced the list it is showing.
+        """
         if not STATE.phase_database:
             return no_update, None, error_message(
                 ValueError("Load a phase database first.")
@@ -1757,8 +1791,35 @@ def register_callbacks(app: Dash) -> None:
                 html.Div(
                     [
                         html.H4(
-                            "Evidence for the following main minerals has been found in the data:",
+                            "Evidence for the following main minerals has been found in the data:"
+                            if screened else
+                            "Phases whose expected lines fall where the data has peaks:",
                             style={"marginTop": 0},
+                        ),
+                        # Without a clay library this is position matching, which
+                        # is a far weaker test - and it is weak in a way that looks
+                        # strong, because a phase with a dozen expected lines in a
+                        # crowded pattern scores highly whether or not it is there.
+                        # Saying so where the list is read, rather than only in the
+                        # status line under the button, is the difference between a
+                        # shortlist and ten spurious phases entering a fit.
+                        None if screened else html.Div(
+                            [
+                                html.Strong("This is the weaker test. "),
+                                "No clay library is loaded, so these are matches on peak "
+                                "positions alone, not on how much of the pattern each phase "
+                                "explains. Scores of 95–100 % are normal here for phases "
+                                "that are not present: a candidate with a dozen expected "
+                                "lines will find them all in a crowded pattern. Nothing is "
+                                "ticked for that reason. Load a clay library on the ",
+                                html.Em("Fit and results"),
+                                " tab and search again, and the list becomes each phase's "
+                                "share of the pattern, fitted in competition with the clays "
+                                "and with the other candidates.",
+                            ],
+                            style={"background": "#fdf3f2", "border": "1px solid #d9a9a2",
+                                   "borderRadius": "4px", "padding": "8px 10px",
+                                   "margin": "6px 0", "fontSize": "0.85rem"},
                         ),
                         dcc.Checklist(
                             id="detect-choices",
@@ -1789,12 +1850,14 @@ def register_callbacks(app: Dash) -> None:
                             # below the line with no change in the evidence for it.
                             # A number that decides what the operator sees should not
                             # be one they cannot see.
-                            value=[
-                                evidence.name
-                                for evidence in findings
-                                if evidence.score >= (float(tick_above) / 100.0
-                                                      if screened else 0.9)
-                            ],
+                            # Only the competitive screen pre-ticks anything.  A
+                            # position-matching score is not a measure of how much
+                            # of the pattern a phase accounts for, so there is no
+                            # honest threshold to pre-tick on - and pre-ticking the
+                            # top of that list put galena, otavite and cassiterite
+                            # in front of an operator of a clay separate, one click
+                            # from entering the fit.
+                            value=phases_to_tick(findings, screened, tick_above),
                             style={"maxHeight": "260px", "overflowY": "auto"},
                             labelStyle={"display": "block", "fontSize": "0.85rem"},
                         ),
