@@ -1530,15 +1530,24 @@ very signal being quantified. Peak stripping errs the other way, underestimating
 beneath a broad strong low-angle reflection, which is the safe direction but means the low-angle
 background should always be checked by eye.</p>
 
-<p>Two estimators of that stripped background are offered and they are not interchangeable. Peak
-stripping is the default; Sonneveld &amp; Visser (1975), the method the whole family descends from,
-is the alternative. It puts the baseline higher almost everywhere &mdash; by a tenth of the intensity
-range on a diffuse specimen &mdash; and on this laboratory's mounts it fits worse at every width
-tried, because what sits immediately above the baseline in an oriented mount is the broad basal
-intensity being quantified. Its use is as a check: the difference between the two, on one pattern at
-one width, measures how much of the background is a matter of method rather than of measurement, and
-a specimen where they disagree by more than a few per cent is one whose percentages carry that
-disagreement (&sect;<a href="#a-19">A.19</a>).</p>
+<p><strong>Sonneveld&ndash;Visser</strong> is the exception among the components, and is chosen in
+the same list. It is not a function fitted to a stripped estimate: the eroded curve <em>is</em> the
+background, as it is in HighScore, so there is no degree to choose and no stripping width &mdash; the
+two parameters are the same two HighScore exposes, <em>granularity</em> and <em>bending factor</em>,
+and the panel shows those instead. The <span class="kw">1/x</span> term is not offered with it
+either, and not for want of arithmetic: the erosion returns a convex background exactly as it found
+it, and the low-angle rise from air scatter and the direct beam is convex, so it is already in the
+curve and a fitted <span class="kw">1/x</span> on top would count it twice.</p>
+
+<p>Which to use is a real choice and not a matter of taste. Measured over 39 patterns,
+Sonneveld&ndash;Visser puts the baseline higher almost everywhere &mdash; by a tenth of the intensity
+range on a diffuse specimen &mdash; and on this laboratory's mounts the fitted components on a
+peak-stripped estimate give a lower <var>R</var><sub>wp</sub> on every mount tried, because what sits
+immediately above the baseline in an oriented mount is the broad basal intensity being quantified.
+The other use of it is as a check: the difference between the two, on one pattern at one width,
+measures how much of the background is a matter of method rather than of measurement, and a specimen
+where they disagree by more than a few per cent is one whose percentages carry that disagreement
+(&sect;<a href="#a-19">A.19</a>).</p>
 
 <p><em>Apply to all mounts</em> uses the same model for the three mounts, which is appropriate when
 they were measured under identical conditions.</p>
@@ -1683,12 +1692,21 @@ is present in the folder.</td></tr>
 <td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
 <tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
 <td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
-<tr><td>Background estimator</td><td class="kw">bg-estimator</td><td>SNIP</td>
-<td>Which estimate of the background the components are fitted to: peak stripping, or
-Sonneveld&nbsp;&amp;&nbsp;Visser (1975). The width below means the same thing to both, though its
-cutoff is soft for the second. SNIP is the default and fits better on every mount tested; the
-alternative is there to measure how much of the background depends on the method
-(&sect;<a href="#a-19">A.19</a>).</td></tr>
+<tr><td>Granularity (points per interval)</td><td class="kw">bg-granularity</td><td>20</td>
+<td>Sonneveld&ndash;Visser only. Points between the samples the erosion runs on &mdash; the paper's
+every twentieth point, and HighScore's parameter of the same name, recommended there between 15 and
+30. It is the parameter that decides the baseline, because it sets how wide a feature is removed:
+2.2&nbsp;&times;&nbsp;granularity&nbsp;&times;&nbsp;step&nbsp;&times;&nbsp;&radic;passes, which the
+panel reports in degrees beneath the slider. Counted in points rather than degrees, as both the paper
+and HighScore count it, so the same number reaches further on a coarser scan &mdash; 20 points is
+2.4&deg; on a 0.01&deg; film scan and 4.0&deg; on this laboratory's 0.0167&deg; step.</td></tr>
+<tr><td>Bending factor</td><td class="kw">bg-bending</td><td>1.0</td>
+<td>Sonneveld&ndash;Visser only. How much <em>downward</em> curvature the background may keep;
+HighScore's slider of the same name, where 0 to 2 is the usual advice. 0 allows only a straight or
+convex background, which is the paper's first form; 1 is the value the paper itself used. On clay
+patterns it is a weak control: across 39 of them its whole span moves the baseline by at most
+0.70 % of the intensity range, against granularity's 30 %
+(&sect;<a href="#a-19">A.19</a>). Set granularity first.</td></tr>
 <tr><td>Stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
 <td>Width of the widest feature the stripping treats as a peak. The components are fitted to the
 stripped estimate and follow it to a few counts, so this control, not the choice of component, is
@@ -3532,9 +3550,33 @@ more than <var>c</var> above that mean,</p>
 <span class="n">(A.1)</span></div>
 
 <p>and interpolate the eroded samples back onto the measured grid. A peak is a local maximum and is
-pulled down pass by pass; a background is not. Their own settings are a 0.2&deg; subsample (every
-twentieth point of a 0.01&deg; film scan), <var>c</var> &asymp; 0.02 on the eight-bit scale of their
-microdensitometer, and about thirty passes.</p>
+pulled down pass by pass; a background is not. Their own settings are every twentieth point of a
+0.01&deg; film scan, <var>c</var> &asymp; 0.02 on the eight-bit scale of their microdensitometer, and
+about thirty passes.</p>
+
+<div class="note"><strong>It is a background component, not an estimator the other components are
+fitted to.</strong> The eroded curve <em>is</em> the background &mdash; nothing is fitted to it and
+there is no degree to choose &mdash; which is how HighScore presents it and how ClayQuant offers it,
+in the same list as the polynomials. Its two parameters carry HighScore's names and defaults so that
+a setting means the same thing in both:
+
+<div class="tablewrap"><table>
+<tr><th>Parameter</th><th>Paper</th><th>HighScore</th><th>Here</th></tr>
+<tr><td>Granularity</td><td>every twentieth point</td><td>number of intervals, 15&ndash;30
+recommended, literature value 20</td><td class="num">20</td></tr>
+<tr><td>Bending factor</td><td><var>c</var> = 0.02 of 255</td><td>slider, 0&ndash;4, usually
+0&ndash;2</td><td class="num">1</td></tr>
+<tr><td>Passes</td><td>about 30</td><td>not exposed</td><td class="num">30</td></tr>
+</table></div>
+
+<p>Granularity is counted in points, as both the paper and HighScore count it, and bending 1 is
+anchored on the paper's own <var>c</var>, so that 0 is their strictly-linear first form. That
+anchoring is a choice rather than a conversion: HighScore's slider position is not documented as a
+multiple of anything, so the same number in both need not give exactly the same curve. Given what the
+bending factor is measured to do below &mdash; almost nothing &mdash; that matters less than it
+sounds. The passes are left at the paper's thirty and not exposed, for the same reason HighScore does
+not expose them: with the passes fixed, granularity is the single control of how wide a feature is
+removed.</p></div>
 
 <h4>Does it do what the paper says</h4>
 
@@ -3579,32 +3621,38 @@ sample each. Measured on Gaussian peaks, the width at which half the height is r
 <div class="eq">FWHM = 2.2 &middot; <var>h</var> &middot; &radic;<var>n</var>
 <span class="n">(A.3)</span></div>
 
-<p>for <var>n</var> passes, holding to 2 % from 5 to 120 passes and over a fourfold range of
-<var>h</var>. The consequences are practical. The paper's thirty passes at 0.2&deg; sampling reach
-about <strong>2.4&deg;</strong>, not the 12&deg; a linear reading gives &mdash; well matched to the
-sharp lines of a Guinier film, and deliberately short of the broad features of a clay mount. And the
-cost of a wide window is quadratic, so it is worth knowing before asking for one. ClayQuant inverts
-(A.3) so that this estimator and the stripping can be asked for the same width; unlike SNIP's window
-the cutoff is soft, a feature of exactly the stated width keeping half its height.</p>
+<p>for <var>n</var> passes, where <var>h</var> is granularity &times; step. It holds to 2 % from 5
+to 120 passes and over a fourfold range of <var>h</var>. The consequences are the practical content
+of the granularity slider. The paper's twenty points on a 0.01&deg; film scan, at thirty passes, reach
+about <strong>2.4&deg;</strong> &mdash; not the 12&deg; a linear reading of the iteration gives, and
+well matched to the sharp lines of a Guinier camera. The same granularity on this laboratory's
+0.0167&deg; step reaches <strong>4.0&deg;</strong>, because granularity is counted in points and the
+points are further apart; that is, as it happens, the stripping width ClayQuant had already settled
+on independently (&sect;<a href="#s6">6</a>). Since the number that matters is the one in degrees and
+the slider is in points, the interface reports the conversion beneath the slider. Unlike SNIP's
+window the cutoff is soft: a feature of exactly the stated width keeps half its height.</p>
 
 <div class="tablewrap"><table>
-<tr><th class="num">Width asked for</th><th class="num">0.5&deg;</th><th class="num">1&deg;</th>
-<th class="num">2&deg;</th><th class="num">4&deg;</th><th class="num">8&deg;</th></tr>
-<tr><td>Passes</td><td class="num">1</td><td class="num">5</td><td class="num">21</td>
-<td class="num">83</td><td class="num">331</td></tr>
-<tr><td>Width half-removed</td><td class="num">0.33&deg;</td><td class="num">0.97&deg;</td>
-<td class="num">2.02&deg;</td><td class="num">4.03&deg;</td><td class="num">8.06&deg;</td></tr>
+<tr><th class="num">Granularity</th><th class="num">5</th><th class="num">10</th>
+<th class="num">20</th><th class="num">30</th><th class="num">40</th></tr>
+<tr><td>Spacing on a 0.0167&deg; scan</td><td class="num">0.084&deg;</td><td class="num">0.167&deg;</td>
+<td class="num">0.334&deg;</td><td class="num">0.501&deg;</td><td class="num">0.668&deg;</td></tr>
+<tr><td>Width half-removed, 30 passes</td><td class="num">1.0&deg;</td><td class="num">2.0&deg;</td>
+<td class="num">4.0&deg;</td><td class="num">6.0&deg;</td><td class="num">8.1&deg;</td></tr>
 </table></div>
 
-<p><strong><var>c</var> is inert.</strong> The paper introduces <var>c</var> as the thing that lets a
-curved background through, so a reader expects it to be the parameter to tune, and the temptation
-when porting the method is to argue about its value. On a clay pattern of 10<sup>4</sup> counts the
-paper's <var>c</var>, the literal 0.02 taken across unchanged, and <var>c</var> = 0 give baselines
-agreeing to <strong>0.03 % of the intensity range</strong>. The reason is (A.2): the bound scales
-with the range of the data, so a real background's curvature is either far above it &mdash; in which
-case (A.1) fires whatever <var>c</var> is &mdash; or far below, where the erosion is negligible
-anyway. What decides the baseline is the sampling and the number of passes. <var>c</var> is kept for
-fidelity and is documented as inert so that nobody spends time on it.</p>
+<p><strong>The bending factor barely matters, and granularity decides everything.</strong> The
+paper introduces <var>c</var> as the thing that lets a curved background through, so a reader expects
+it to be the parameter to tune, and HighScore putting it on a slider invites the same. Measured over
+the 39 real patterns available, moving the bending factor across its whole useful span shifts the
+baseline by at most <strong>0.70 % of the intensity range</strong> &mdash; 0.16 % from 0 to 1, 0.37 %
+from 0 to 2 &mdash; while moving granularity from 10 to 40 shifts it by <strong>30 %</strong>. A
+factor of forty between the two. The reason is (A.2): the bound scales with the range of the data,
+so a real background's curvature is either far above it &mdash; in which case (A.1) fires whatever
+<var>c</var> is &mdash; or far below, where the erosion is negligible anyway. The bending factor is
+kept because it is the paper's parameter and HighScore's, and is documented here as weak so that
+nobody spends an afternoon on that slider while leaving granularity at whatever it happened to
+be.</p>
 
 <p>One implementation question the paper leaves open answers itself. Their loop is in place, so a
 sample already lowered in this pass is what its right-hand neighbour sees, which makes a pass
@@ -3759,9 +3807,11 @@ established; every phase checked against the cell mass and volume its block stat
 <tr><td>Mineral search</td><td>4 methods compared on known and real data</td><td>Method 4 adopted</td></tr>
 <tr><td>Peak stripping</td><td>5 widths, with and without peaks, against a known background</td>
 <td>Defect found and corrected; 12 automated</td></tr>
-<tr><td>Background estimators</td><td>29 automated; two estimators over 39 real patterns and
-8 fits; the reach law measured</td>
-<td>Sonneveld&ndash;Visser verified and offered; SNIP keeps the default on all 8</td></tr>
+<tr><td>Background estimators</td><td>32 automated; two estimators over 39 real patterns and
+8 fits; the reach law measured, and the two parameters' influence compared</td>
+<td>Sonneveld&ndash;Visser verified and offered as a component with HighScore's own parameters;
+granularity decides the baseline and bending barely moves it; the fitted components keep the
+default on all 8</td></tr>
 <tr><td>Weight percent</td><td>11 automated, against known masses</td>
 <td>Exact; needs a texture calibration</td></tr>
 <tr><td>Internal standard</td><td>10 automated, on both bases</td>
@@ -3800,7 +3850,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>314 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>319 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

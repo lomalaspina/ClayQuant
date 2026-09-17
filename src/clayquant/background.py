@@ -40,6 +40,7 @@ adjusted, which is what the GUI is for.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -47,12 +48,15 @@ import numpy as np
 __all__ = [
     "ESTIMATORS",
     "ESTIMATOR_LABELS",
+    "SONNEVELD_VISSER_BENDING",
     "SONNEVELD_VISSER_CURVATURE",
+    "SONNEVELD_VISSER_GRANULARITY",
+    "SONNEVELD_VISSER_ITERATIONS",
     "SONNEVELD_VISSER_REACH",
-    "SONNEVELD_VISSER_SAMPLING",
     "snip_edge_width",
     "snip_iterations",
-    "sonneveld_visser_iterations",
+    "sonneveld_visser_granularity",
+    "sonneveld_visser_reach",
     "BackgroundModel",
     "BackgroundFit",
     "NoiseLevel",
@@ -288,6 +292,15 @@ class BackgroundFit:
         """Background-subtracted intensity, clipped at zero."""
         return np.clip(np.asarray(intensity, dtype=float) - self(two_theta), 0.0, None)
 
+    @property
+    def components(self) -> list[str]:
+        """Delegated, so a caller need not know which kind of background it holds."""
+        return self.model.components
+
+    @property
+    def n_terms(self) -> int:
+        return self.model.n_terms
+
     def r_squared(self, two_theta: np.ndarray, intensity: np.ndarray | None = None) -> float:
         """How well the model describes the background it was fitted to.
 
@@ -328,6 +341,14 @@ class StrippedBackground:
     baseline: np.ndarray
     window: float = 4.0
     estimator: str = "snip"
+    granularity: int | None = None
+    bending: float | None = None
+    """Sonneveld-Visser's own two parameters, when that is the estimator.
+
+    Set instead of ``window``, which they replace: granularity says how wide a
+    feature is removed, in points rather than in degrees
+    (:func:`sonneveld_visser_baseline`).
+    """
 
     def __post_init__(self) -> None:
         self.two_theta = np.asarray(self.two_theta, dtype=float)
@@ -342,18 +363,42 @@ class StrippedBackground:
         intensity: np.ndarray,
         window: float = 4.0,
         estimator: str = "snip",
+        granularity: int | None = None,
+        bending: float | None = None,
     ) -> "StrippedBackground":
+        """The estimate itself, as the background.
+
+        Pass ``granularity`` and ``bending`` to drive Sonneveld-Visser by its
+        own parameters, as HighScore does, rather than by a width in degrees.
+        """
         two_theta = np.asarray(two_theta, dtype=float)
+        if granularity is not None or bending is not None:
+            estimator = "sonneveld-visser"
+            baseline = sonneveld_visser_baseline(
+                two_theta,
+                intensity,
+                granularity=(SONNEVELD_VISSER_GRANULARITY if granularity is None
+                             else granularity),
+                bending=SONNEVELD_VISSER_BENDING if bending is None else bending,
+            )
+        else:
+            baseline = baseline_estimate(two_theta, intensity, window=window,
+                                         estimator=estimator)
         return cls(
             two_theta=two_theta,
-            baseline=baseline_estimate(two_theta, intensity, window=window,
-                                       estimator=estimator),
+            baseline=baseline,
             window=window,
             estimator=estimator,
+            granularity=granularity,
+            bending=bending,
         )
 
     @property
     def model(self) -> str:
+        if self.estimator == "sonneveld-visser" and self.granularity is not None:
+            bending = SONNEVELD_VISSER_BENDING if self.bending is None else self.bending
+            return (f"{ESTIMATOR_LABELS[self.estimator]} "
+                    f"(granularity {self.granularity:d}, bending {bending:g})")
         return f"{ESTIMATOR_LABELS[self.estimator]} ({self.window:g} deg)"
 
     @property
@@ -379,6 +424,15 @@ class StrippedBackground:
     def r_squared(self, two_theta: np.ndarray, intensity: np.ndarray | None = None) -> float:
         """Unity by construction: the background *is* the estimate it follows."""
         return 1.0
+
+    @property
+    def components(self) -> list[str]:
+        return [ESTIMATOR_LABELS[self.estimator]]
+
+    @property
+    def n_terms(self) -> int:
+        """Nothing is fitted, so there are no free terms to report."""
+        return 0
 
 
 def snip_iterations(two_theta: np.ndarray, window: float) -> int:
@@ -530,134 +584,180 @@ def select_background_points(
 # Sonneveld & Visser (1975)
 # --------------------------------------------------------------------------
 
-SONNEVELD_VISSER_SAMPLING = 0.2
-"""Default sample spacing in degrees.
+SONNEVELD_VISSER_GRANULARITY = 20
+"""Default granularity: points between the samples the erosion runs on.
 
-Sonneveld & Visser sampled every twentieth point of a 0.01 deg scan, which is
-this spacing.  Their 5 % is a consequence of their step size, not a quantity
-with a meaning of its own; the spacing is the parameter that decides which
-features the erosion can remove, so it is the one exposed.
+Sonneveld & Visser used every twentieth point of their film scan - their 5 %
+of the data - and this is that number.  It is also the parameter HighScore
+exposes under this name, where the number of intervals is recommended between
+15 and 30 and the literature value is 20, so a granularity set here means the
+same thing as a granularity set there.
+
+It is given in points rather than in degrees because that is what both the
+paper and HighScore mean by it.  The consequence is worth knowing: the width of
+feature the method removes is set by ``granularity * step``, so the same
+granularity on a finer scan reaches less far in degrees.
+"""
+
+SONNEVELD_VISSER_BENDING = 1.0
+"""Default bending factor: how much downward curvature the background may keep.
+
+HighScore's slider of the same name, where 0 to 4 is the usual span and 0 to 2
+the usual advice.  Here 1 is anchored on the paper's own value - ``c`` = 0.02 on
+the eight-bit scale of their microdensitometer, so 7.8e-5 of the intensity
+range - which makes 0 the strictly-linear first form of their algorithm and 4
+four times their allowance.
+
+That anchoring is a choice, not a conversion: HighScore's slider position is not
+documented as a multiple of anything, so the same number here and there need not
+give the same curve.  It matters less than it sounds, because the parameter is
+weak: across 39 real patterns its whole span moves the baseline by at most
+0.70 % of the intensity range against granularity's 30 %.  The measurement is
+reported under :func:`sonneveld_visser_baseline`.
 """
 
 SONNEVELD_VISSER_CURVATURE = 0.02 / 255.0
-"""Default curvature allowance, as a fraction of the intensity range.
+"""The paper's own curvature allowance, as a fraction of the intensity range.
 
-The paper gives ``c ~ 0.02`` "on the intensity scale from 0 to 255", the eight
-bits of their microdensitometer, so the scale-free form of their value is
-7.8e-5 of full scale.  Passing it as a fraction rather than in counts is what
-keeps the parameter meaningful on a pattern of 10^5 counts, where the literal
-0.02 would be indistinguishable from zero.
-
-Measured, that distinction turns out not to matter: on a clay pattern the paper's
-``c``, the literal 0.02 and ``c = 0`` give baselines agreeing to 0.03 % of the
-intensity range, because the bound ``c`` sets scales with the range of the data
-and a real background's curvature is either far above it - in which case the
-rule fires whatever ``c`` is - or far below, where the erosion is negligible
-anyway.  What the baseline actually depends on is the sampling and the number
-of passes.  ``c`` is kept because it is the paper's parameter and is exactly the
-right one in principle; it is documented here as inert so that nobody spends
-time tuning it.
+``c ~ 0.02`` "on the intensity scale from 0 to 255", the eight bits of their
+microdensitometer, so 7.8e-5 of full scale.  This is what a bending factor of 1
+means; passing it as a fraction rather than in counts is what keeps the
+parameter meaningful on a pattern of 10^5 counts, where the literal 0.02 would
+be indistinguishable from zero.
 """
-
 
 SONNEVELD_VISSER_REACH = 2.2
-"""Coefficient in the reach law ``FWHM = REACH * sampling * sqrt(passes)``.
+"""Coefficient in the reach law ``FWHM = REACH * spacing * sqrt(passes)``.
 
 Measured, not derived: half of a Gaussian's height is removed at this width,
-and the coefficient holds to 2 % over 5 to 120 passes and sampling from 0.1 to
-0.4 deg (:func:`sonneveld_visser_iterations`).
+and the coefficient holds to 2 % over 5 to 120 passes and spacings from 0.1 to
+0.4 deg (:func:`sonneveld_visser_reach`).
 """
 
+SONNEVELD_VISSER_ITERATIONS = 30
+"""Erosion passes.  The paper's "about 30 times", and not exposed in the
+interface for the same reason HighScore does not expose it: with the passes
+fixed, granularity is the single control of how wide a feature is removed.
+"""
 
-def sonneveld_visser_iterations(window: float, sampling: float) -> int:
-    """Passes that half-remove a feature ``window`` degrees wide.
+def sonneveld_visser_reach(granularity: int, step: float, iterations: int) -> float:
+    """Width in degrees of the feature the erosion half-removes.
 
     The replacement ``p_i <- (p_(i+1) + p_(i-1))/2`` is one explicit step of the
     diffusion equation, so the passes do not march outwards one sample at a
-    time - they spread as the square root of their number.  Measured on Gaussian
-    peaks, the width at which half the height is removed is
+    time: they spread as the square root of their number.  Measured on Gaussian
+    peaks,
 
-        FWHM = 2.2 * sampling * sqrt(passes)
+        FWHM = 2.2 * granularity * step * sqrt(passes)
 
     which holds to 2 % from 5 to 120 passes and over a fourfold range of
-    sampling.  Inverting it gives the passes for a required width.  Two
-    consequences are worth having in mind.  The cost of a wide window is
-    quadratic, not linear.  And the paper's own settings - 30 passes at 0.2 deg
-    sampling - reach only about 2.4 deg, not the 12 deg a linear reading of the
-    iteration suggests, which is well matched to the sharp lines of a Guinier
-    film and deliberately short of the broad humps of a clay mount.
+    spacing.  This is what granularity does, and it is the parameter that
+    decides the baseline.
 
-    Unlike the ``window`` of :func:`snip_baseline`, this is a soft cutoff: a
+    Two readings worth having.  The paper's own settings - granularity 20 on a
+    0.01 deg film scan, 30 passes - reach about 2.4 deg, not the 12 deg a linear
+    reading of the iteration suggests: well matched to the sharp lines of a
+    Guinier camera and deliberately short of the broad features of a clay mount.
+    And on a 0.0167 deg clay scan the same granularity reaches 4 deg, because the
+    granularity is counted in points and the points are wider apart.
+
+    Unlike the ``window`` of :func:`snip_baseline` this is a soft cutoff: a
     feature of exactly this width keeps half its height, one of half the width
     keeps a few per cent.
     """
-    if sampling <= 0:
-        raise ValueError("sampling must be positive")
+    return SONNEVELD_VISSER_REACH * granularity * step * math.sqrt(max(1, iterations))
+
+
+def sonneveld_visser_granularity(window: float, step: float,
+                                 iterations: int = SONNEVELD_VISSER_ITERATIONS) -> int:
+    """Granularity that half-removes a feature ``window`` degrees wide.
+
+    The inverse of :func:`sonneveld_visser_reach`, for asking this estimator and
+    :func:`snip_baseline` for the same thing.
+    """
+    if step <= 0:
+        raise ValueError("step must be positive")
     if window <= 0:
         raise ValueError("window must be positive")
-    return max(1, int(round((window / (SONNEVELD_VISSER_REACH * sampling)) ** 2)))
+    spacing = window / (SONNEVELD_VISSER_REACH * math.sqrt(max(1, iterations)))
+    return max(1, int(round(spacing / step)))
 
 
 def sonneveld_visser_baseline(
     two_theta: np.ndarray,
     intensity: np.ndarray,
-    sampling: float = SONNEVELD_VISSER_SAMPLING,
-    curvature: float = SONNEVELD_VISSER_CURVATURE,
-    iterations: int = 30,
+    granularity: int = SONNEVELD_VISSER_GRANULARITY,
+    bending: float = SONNEVELD_VISSER_BENDING,
+    iterations: int = SONNEVELD_VISSER_ITERATIONS,
     window: float | None = None,
     sequential: bool = True,
 ) -> np.ndarray:
     """Estimate the background by the method of Sonneveld & Visser (1975).
 
-    The method (their Sec. 3.1) is to take a coarse subsample of the pattern as
-    a first approximation of the background, then repeatedly replace each sample
-    by the mean of its two neighbours wherever it stands more than ``c`` above
-    that mean::
+    The method (their Sec. 3.1) is to take every ``granularity``-th point of the
+    pattern as a first approximation of the background, then repeatedly replace
+    each sample by the mean of its two neighbours wherever it stands more than
+    ``c`` above that mean::
 
         m_i = (p_(i+1) + p_(i-1)) / 2
         if p_i > m_i + c:  p_i <- m_i
 
     and finally interpolate the eroded samples back onto the measured grid.
     Peaks, being local maxima, are pulled down pass by pass; a background is
-    not.  It is the oldest of the automatic baseline estimators still in use and
-    is cited as the origin of the family that :func:`snip_baseline` belongs to.
+    not.  It is the oldest of the automatic baseline estimators still in use,
+    and the one HighScore determines its background with - which is why the two
+    parameters carry HighScore's names.
 
-    **What ``c`` is.** At the fixed point of the rule the second difference of
-    the retained background is ``-2c``, so with a sample spacing ``h``
+    **Granularity** is the number of points between samples, HighScore's
+    "number of intervals", recommended there between 15 and 30.  It is the
+    parameter that decides the baseline, because it sets how wide a feature the
+    erosion can remove: ``2.2 * granularity * step * sqrt(passes)``, which
+    :func:`sonneveld_visser_reach` reports in degrees.
+
+    **Bending factor** is how much *downward* curvature the background may
+    keep.  At the fixed point of the rule the second difference of the retained
+    background is ``-2c``, so with a sample spacing ``h``
 
         d2p/dx2 >= -2c/h^2
 
-    which is to say: ``c`` is exactly the largest *downward* curvature a
-    background is allowed to keep.  At ``c = 0`` only a straight line or a
-    convex curve survives, which is the paper's first form and why they had to
-    introduce ``c`` at all.  It follows that ``c`` scales with the intensity, so
-    it is given here as a fraction of the range of the sampled data rather than
-    in counts, and with ``h^2``, so a change of sampling is a change of ``c``.
-    On XRD data it is nevertheless nearly inert - see
-    :data:`SONNEVELD_VISSER_CURVATURE`, which reports the measurement - and the
-    parameters that decide the answer are ``sampling`` and ``iterations``.
+    which is to say that ``c`` - and so the bending factor - is exactly the
+    largest downward curvature allowed.  At 0 only a straight or convex
+    background survives, which is the paper's first form and why they had to
+    introduce ``c`` at all; 1 is their own value; HighScore's usual advice is 0
+    to 2.
+
+    On real patterns the bending factor turns out to matter very little, and
+    granularity to decide almost everything.  Measured over 39 clay and standard
+    patterns, taking the bending factor across its whole useful span moves the
+    baseline by at most 0.70 % of the intensity range - 0.16 % from 0 to 1 -
+    while taking granularity from 10 to 40 moves it by 30 %.  The reason is the
+    relation above: the bound scales with the range of the data, so a real
+    background's curvature is either far above it, in which case the rule fires
+    whatever the bending, or far below, where the erosion is negligible anyway.
+    Documented here so that nobody spends an afternoon on the bending slider
+    while leaving granularity at whatever it happened to be.
 
     **What survives.** A convex background - the direct-beam tail of an oriented
     mount, which falls as roughly ``a/x^n`` - has ``m_i >= p_i`` everywhere, so
     the rule never fires and the tail is returned untouched, exactly as with
     peak stripping.  What the method acts on is concave features: peaks, and
     also the broad hump of a poorly crystalline or interstratified phase, which
-    is why the reach set by ``iterations`` matters more here than the value of
-    ``c``.
+    is why granularity matters more here than bending.
 
     Parameters
     ----------
-    sampling:
-        Spacing in degrees between the samples the erosion runs on.
-    curvature:
-        ``c``, as a fraction of the range of the sampled intensities.
+    granularity:
+        Points between samples.  HighScore's parameter of the same name.
+    bending:
+        Curvature allowance, 1 being the value the paper used.
     iterations:
-        Erosion passes.  The paper uses about 30.
+        Erosion passes; the paper's about 30, and left alone by the interface so
+        that granularity is the single control of reach.
     window:
-        Width in degrees of the widest feature to remove, converted to passes by
-        :func:`sonneveld_visser_iterations` so that this estimator and
-        :func:`snip_baseline` can be asked for the same thing.  Note that the
-        cutoff is soft here and the cost is quadratic in the width.
+        Width in degrees of the widest feature to remove, converted to a
+        granularity by :func:`sonneveld_visser_granularity` so that this
+        estimator and :func:`snip_baseline` can be asked for the same thing.
+        Overrides ``granularity``.
     sequential:
         Erode in place along the samples, as the paper's loop does, so that a
         sample already lowered in this pass is what its right-hand neighbour
@@ -682,24 +782,24 @@ def sonneveld_visser_baseline(
     step = float(np.mean(np.diff(two_theta)))
     if step <= 0:
         raise ValueError("two_theta must be increasing")
-    if sampling <= 0:
-        raise ValueError("sampling must be positive")
-    if curvature < 0:
-        raise ValueError("curvature must not be negative")
+    if bending < 0:
+        raise ValueError("bending must not be negative")
     if window is not None:
-        iterations = sonneveld_visser_iterations(window, sampling)
+        granularity = sonneveld_visser_granularity(window, step, iterations)
+    granularity = int(granularity)
+    if granularity < 1:
+        raise ValueError("granularity must be at least 1 point")
 
-    stride = max(1, int(round(sampling / step)))
     # The last point is sampled as well as the first: the samples are the only
     # evidence the interpolation has, and without the right-hand end it would
     # extrapolate the last interval across whatever remains of the scan.
-    index = np.unique(np.append(np.arange(0, len(values), stride), len(values) - 1))
+    index = np.unique(np.append(np.arange(0, len(values), granularity), len(values) - 1))
     samples = values[index].copy()
     if len(samples) < 3:
         return values.copy()
 
     span = float(samples.max() - samples.min())
-    c = curvature * span
+    c = bending * SONNEVELD_VISSER_CURVATURE * span
 
     for _ in range(max(0, iterations)):
         if sequential:

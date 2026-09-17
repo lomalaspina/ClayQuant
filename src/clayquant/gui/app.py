@@ -38,7 +38,12 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
-from ..background import ESTIMATOR_LABELS, BackgroundModel
+from ..background import (
+    SONNEVELD_VISSER_ITERATIONS,
+    BackgroundModel,
+    StrippedBackground,
+    sonneveld_visser_reach,
+)
 from ..bern import is_clay_phase
 from ..detection import detect_phases, screen_phases
 from ..calibration import (
@@ -134,6 +139,32 @@ def background_model_from_controls(
     )
 
 
+def fit_background_from_controls(pattern, kind, degree, decay, use_inverse, offset,
+                                 snip, granularity, bending):
+    """The background the Background tab's controls describe.
+
+    Sonneveld-Visser is a component in its own right rather than something a
+    polynomial is then fitted to, which is how HighScore presents it and what
+    the method is for: the eroded curve *is* the background, so there is nothing
+    left to fit and no degree to choose.  The other components are fitted to a
+    peak-stripped estimate as before.
+
+    The 1/x term is not accumulated on top of Sonneveld-Visser, and not because
+    it would be hard to: the erosion leaves a convex background exactly as it
+    found it (Sec. A.11, Sec. A.19), and the low-angle rise from air scatter and
+    the direct beam is convex, so it is already in the curve.  Adding a fitted
+    1/x on top would be counting it twice.
+    """
+    if kind == "sonneveld-visser":
+        return StrippedBackground.fit(
+            pattern.two_theta, pattern.intensity,
+            granularity=int(granularity), bending=float(bending),
+        )
+    model = background_model_from_controls(kind, int(degree), float(decay),
+                                           bool(use_inverse), float(offset))
+    return model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip))
+
+
 def working(*children) -> dcc.Loading:
     """Wrap a pane so a spinner covers it while a callback is computing it.
 
@@ -158,7 +189,7 @@ def working(*children) -> dcc.Loading:
     )
 
 
-def background_report(pattern, fit, background, model, estimator: str = "snip") -> str:
+def background_report(pattern, fit, background) -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
     A single R\u00b2 against the stripped estimate is close to 1 for almost any
@@ -181,18 +212,32 @@ def background_report(pattern, fit, background, model, estimator: str = "snip") 
     left = max(0.0, measured_start - model_start)
     share = 100.0 * left / measured_start if measured_start > 0 else 0.0
 
+    # A non-parametric background is the estimate, so "follows it to 0 counts"
+    # would be a tautology dressed as a result; what it is described by instead
+    # is the parameters that produced it.
+    if fit.n_terms == 0:
+        heading = f"{fit.model}. "
+        agreement = ""
+    else:
+        heading = f"{' + '.join(fit.components)}, {fit.n_terms} terms. "
+        agreement = (
+            f"Follows the peak-stripped estimate to {overall:.0f} counts RMS "
+            f"({low_rms:.0f} counts over the lowest 1\u00b0). "
+        )
     text = (
-        f"{' + '.join(model.components)}, {model.n_terms} terms. "
-        f"Follows the {ESTIMATOR_LABELS[estimator]} estimate to {overall:.0f} counts RMS "
-        f"({low_rms:.0f} counts over the lowest 1\u00b0). "
-        f"At {start:.2f}\u00b0 the model reads {model_start:.0f} of {measured_start:.0f} "
-        f"measured counts, leaving {left:.0f} ({share:.0f}%) as signal."
+        heading
+        + agreement
+        + (
+        f"At {start:.2f}\u00b0 the background reads {model_start:.0f} of "
+        f"{measured_start:.0f} measured counts, leaving {left:.0f} ({share:.0f}%) "
+        f"as signal."
+        )
     )
     if share > 25.0:
         text += (
             " That is a large share to carry into the fit. Unless a real reflection "
             "lies at the start of the scan, the background should be following the "
-            "direct-beam tail there: check the blue curve against the measurement."
+            "direct-beam tail there: check the orange curve against the measurement."
         )
     above = float(np.mean(background > pattern.intensity))
     if above > 0.02:
@@ -590,56 +635,72 @@ def background_tab() -> html.Div:
                             {"label": "Polynomial", "value": "polynomial"},
                             {"label": "Chebyshev", "value": "chebyshev"},
                             {"label": "Exponential", "value": "exponential"},
+                            {"label": "Sonneveld–Visser", "value": "sonneveld-visser"},
                             {"label": "None (1/x only)", "value": "none"},
                         ],
                         value="chebyshev",
                         clearable=False,
                     ),
-                    label("Degree"),
-                    dcc.Slider(id="bg-degree", min=0, max=12, step=1, value=4,
-                               marks={0: "0", 4: "4", 8: "8", 12: "12"}),
-                    label("Exponential decay (1/°)"),
-                    dcc.Slider(id="bg-decay", min=0.02, max=1.0, step=0.02, value=0.2,
-                               marks={0.02: "0.02", 0.5: "0.5", 1.0: "1"}),
-                    html.Hr(),
-                    dcc.Checklist(
-                        id="bg-inverse",
-                        options=[{"label": "  Accumulate 1/x term", "value": "on"}],
-                        value=["on"],
-                    ),
-                    label("1/x offset (°2θ)"),
-                    dcc.Slider(id="bg-offset", min=0.0, max=10.0, step=0.25, value=1.0,
-                               marks={0: "0", 5: "5", 10: "10"}),
-                    html.Hr(),
-                    label("Background estimator"),
-                    dcc.Dropdown(
-                        id="bg-estimator",
-                        options=[
-                            {"label": "Peak stripping (SNIP)", "value": "snip"},
-                            {"label": "Sonneveld–Visser (1975)", "value": "sonneveld-visser"},
+                    html.Div(
+                        [
+                            label("Degree"),
+                            dcc.Slider(id="bg-degree", min=0, max=12, step=1, value=4,
+                                       marks={0: "0", 4: "4", 8: "8", 12: "12"}),
                         ],
-                        value="snip",
-                        clearable=False,
+                        id="bg-degree-box",
                     ),
                     html.Div(
-                        "SNIP is the default. Sonneveld–Visser puts the baseline "
-                        "higher almost everywhere — by a tenth of the intensity "
-                        "range on a diffuse pattern — so it takes broad basal "
-                        "intensity out as background, and on this laboratory's "
-                        "mounts it fits worse at every width tried. Use it to see "
-                        "how much of the background is a matter of method.",
-                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                        [
+                            label("Exponential decay (1/°)"),
+                            dcc.Slider(id="bg-decay", min=0.02, max=1.0, step=0.02, value=0.2,
+                                       marks={0.02: "0.02", 0.5: "0.5", 1.0: "1"}),
+                        ],
+                        id="bg-decay-box",
                     ),
-                    label("Stripping width (°2θ)"),
-                    dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
-                               marks={0.5: "0.5", 5: "5", 10: "10"}),
                     html.Div(
-                        "The blue dashed curve is what the model is fitted to. Set "
-                        "this just above the width of the broadest reflection you "
-                        "want kept: narrower leaves peak wings standing in the "
-                        "background. It does not control the low-angle tail, which "
-                        "is background at any width and is kept as such.",
-                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                        [
+                            label("Granularity (points per interval)"),
+                            dcc.Slider(id="bg-granularity", min=2, max=60, step=1, value=20,
+                                       marks={2: "2", 20: "20", 40: "40", 60: "60"}),
+                            label("Bending factor"),
+                            dcc.Slider(id="bg-bending", min=0.0, max=4.0, step=0.1, value=1.0,
+                                       marks={0: "0", 1: "1", 2: "2", 4: "4"}),
+                            html.Div(id="bg-sv-note",
+                                     style={"fontSize": "11px", "color": "#666"}),
+                        ],
+                        id="bg-sv-box",
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        [
+                            dcc.Checklist(
+                                id="bg-inverse",
+                                options=[{"label": "  Accumulate 1/x term", "value": "on"}],
+                                value=["on"],
+                            ),
+                            label("1/x offset (°2θ)"),
+                            dcc.Slider(id="bg-offset", min=0.0, max=10.0, step=0.25, value=1.0,
+                                       marks={0: "0", 5: "5", 10: "10"}),
+                        ],
+                        id="bg-inverse-box",
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        [
+                            label("Stripping width (°2θ)"),
+                            dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
+                                       marks={0.5: "0.5", 5: "5", 10: "10"}),
+                            html.Div(
+                                "The blue dashed curve is what the model is fitted to. "
+                                "Set this just above the width of the broadest "
+                                "reflection you want kept: narrower leaves peak wings "
+                                "standing in the background. It does not control the "
+                                "low-angle tail, which is background at any width and "
+                                "is kept as such.",
+                                style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                            ),
+                        ],
+                        id="bg-snip-box",
                     ),
                     html.Button("Apply to this mount", id="bg-apply", n_clicks=0,
                                 style={"marginTop": "10px"}),
@@ -1237,6 +1298,64 @@ def register_callbacks(app: Dash) -> None:
         )
 
     @app.callback(
+        Output("bg-degree-box", "style"),
+        Output("bg-decay-box", "style"),
+        Output("bg-sv-box", "style"),
+        Output("bg-snip-box", "style"),
+        Output("bg-inverse-box", "style"),
+        Input("bg-kind", "value"),
+    )
+    def show_the_controls_that_apply(kind):
+        """Hide the parameters the chosen component does not have.
+
+        Sonneveld-Visser has a granularity and a bending factor and no degree;
+        the polynomials have a degree and no decay.  Leaving all of them on
+        screen invites someone to move a slider that does nothing, which then
+        looks like a defect in the program.
+        """
+        hidden = {"display": "none"}
+        shown = {}
+        return (
+            shown if kind in ("polynomial", "chebyshev") else hidden,
+            shown if kind == "exponential" else hidden,
+            shown if kind == "sonneveld-visser" else hidden,
+            # The stripping width is what the fitted components are fitted to,
+            # so it is meaningless for the one component that is not fitted.
+            hidden if kind == "sonneveld-visser" else shown,
+            # Nor is the 1/x term accumulated on Sonneveld-Visser: the erosion
+            # returns a convex background exactly as it found it, and the
+            # low-angle rise from air scatter and the direct beam is convex, so
+            # it is already in the curve.  A fitted 1/x on top would count it
+            # twice, and a control that quietly does nothing reads as a defect.
+            hidden if kind == "sonneveld-visser" else shown,
+        )
+
+    @app.callback(
+        Output("bg-sv-note", "children"),
+        Input("bg-granularity", "value"),
+        Input("bg-mount", "value"),
+        Input("load-status", "children"),
+    )
+    def report_the_reach(granularity, mount, _loaded):
+        """Say what a granularity in points comes to in degrees on this scan.
+
+        Granularity is counted in points because that is what the paper and
+        HighScore both mean by it, and the consequence is that the same number
+        reaches different distances on scans of different step size - 20 points
+        is 2.4 deg on a 0.01 deg film scan and 4 deg on a 0.0167 deg one. The
+        number that matters is the one in degrees, so it is shown.
+        """
+        state = STATE.mounts[mount]
+        if state.raw is None or len(state.raw.two_theta) < 2:
+            return "Load a pattern to see what this granularity reaches in degrees."
+        step = float(np.mean(np.diff(state.raw.two_theta)))
+        reach = sonneveld_visser_reach(int(granularity), step, SONNEVELD_VISSER_ITERATIONS)
+        return (
+            f"{int(granularity)} points is {int(granularity) * step:.3f}\u00b0 between samples, "
+            f"which half-removes features up to about {reach:.1f}\u00b0 wide."
+        )
+
+    @app.callback(
         Output("bg-graph", "figure"),
         Output("bg-status", "children"),
         Input("bg-mount", "value"),
@@ -1252,12 +1371,13 @@ def register_callbacks(app: Dash) -> None:
         Input("bg-inverse", "value"),
         Input("bg-offset", "value"),
         Input("bg-snip", "value"),
-        Input("bg-estimator", "value"),
+        Input("bg-granularity", "value"),
+        Input("bg-bending", "value"),
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
     )
     def update_background(mount, _loaded, _zeroed, kind, degree, decay, inverse, offset,
-                          snip, estimator, _apply, _apply_all):
+                          snip, granularity, bending, _apply, _apply_all):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -1266,14 +1386,21 @@ def register_callbacks(app: Dash) -> None:
             return empty_figure("Select a component or enable the 1/x term"), error_message(
                 ValueError("A background model needs at least one component.")
             )
-        model = background_model_from_controls(kind, int(degree), float(decay), use_inverse,
-                                              float(offset))
         pattern = state.corrected()
+
+        def background_for(this_pattern):
+            return fit_background_from_controls(
+                this_pattern, kind, degree, decay, use_inverse, offset,
+                snip, granularity, bending,
+            )
+
         try:
-            fit = model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip),
-                            estimator=estimator)
+            fit = background_for(pattern)
         except Exception as exc:  # noqa: BLE001
             return empty_figure("Fit failed"), error_message(exc)
+        # BackgroundFit.model is the model object; StrippedBackground.model is a
+        # description, there being nothing fitted.  Only the former is state.
+        model = fit.model if isinstance(fit.model, BackgroundModel) else None
 
         triggered = [item["prop_id"] for item in callback_context.triggered]
         applied = ""
@@ -1281,11 +1408,11 @@ def register_callbacks(app: Dash) -> None:
             for other in STATE.loaded_mounts():
                 other_state = STATE.mounts[other]
                 other_pattern = other_state.corrected()
-                other_state.background_model = model
-                other_state.background_fit = model.fit(
-                    other_pattern.two_theta, other_pattern.intensity, snip_window=float(snip),
-                    estimator=estimator,
+                other_fit = background_for(other_pattern)
+                other_state.background_model = (
+                    other_fit.model if isinstance(other_fit.model, BackgroundModel) else None
                 )
+                other_state.background_fit = other_fit
             applied = " Applied to all loaded mounts."
         elif any("bg-apply" in prop for prop in triggered):
             state.background_model = model
@@ -1299,23 +1426,25 @@ def register_callbacks(app: Dash) -> None:
         # on top of each other indistinguishably.
         figure.add_scatter(x=pattern.two_theta, y=pattern.intensity, name="measured",
                            line={"color": "#444444", "width": 1})
-        figure.add_scatter(x=pattern.two_theta, y=background, name="background model",
+        figure.add_scatter(x=pattern.two_theta, y=background,
+                           name="background" if kind == "sonneveld-visser" else "background model",
                            line={"color": "#ff7f0e", "width": 3})
         # Drawn after the model, because a good model lies on top of it: dashes
-        # over the orange line are what shows the two agree.
-        figure.add_scatter(
-            x=pattern.two_theta,
-            y=fit.target,
-            name=f"{ESTIMATOR_LABELS[estimator]} estimate (width {float(snip):g}\u00b0)",
-            line={"color": "#1f77b4", "width": 2, "dash": "dash"},
-        )
+        # over the orange line are what shows the two agree.  Sonneveld-Visser
+        # *is* the curve, so there is no second thing to compare it against and
+        # a dashed line exactly on top of it would only suggest there were.
+        if kind != "sonneveld-visser":
+            figure.add_scatter(
+                x=pattern.two_theta,
+                y=fit.target,
+                name=f"peak-stripped estimate (width {float(snip):g}\u00b0)",
+                line={"color": "#1f77b4", "width": 2, "dash": "dash"},
+            )
         figure.add_scatter(x=pattern.two_theta, y=fit.subtract(pattern.two_theta, pattern.intensity),
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
 
-        return figure, html.Div(
-            background_report(pattern, fit, background, model, estimator) + applied
-        )
+        return figure, html.Div(background_report(pattern, fit, background) + applied)
 
     @app.callback(
         Output("kao-graph", "figure"),

@@ -13,14 +13,17 @@ import pytest
 from clayquant.background import (
     ESTIMATOR_LABELS,
     ESTIMATORS,
+    SONNEVELD_VISSER_BENDING,
     SONNEVELD_VISSER_CURVATURE,
+    SONNEVELD_VISSER_GRANULARITY,
     BackgroundModel,
     StrippedBackground,
     baseline_estimate,
     noise_level,
     snip_baseline,
     sonneveld_visser_baseline,
-    sonneveld_visser_iterations,
+    sonneveld_visser_granularity,
+    sonneveld_visser_reach,
 )
 
 STEP = 0.0167
@@ -71,8 +74,8 @@ def test_the_curvature_allowance_is_the_second_difference():
     span = float(np.ptp(parabola[:: int(round(h / STEP))]))
     needed = -second_derivative * h**2 / 2.0
 
-    kept = sonneveld_visser_baseline(x, parabola, sampling=h, curvature=1.1 * needed / span)
-    eroded = sonneveld_visser_baseline(x, parabola, sampling=h, curvature=0.5 * needed / span)
+    kept = sonneveld_visser_baseline(x, parabola, granularity=int(round(h / STEP)), bending=1.1 * needed / (span * SONNEVELD_VISSER_CURVATURE))
+    eroded = sonneveld_visser_baseline(x, parabola, granularity=int(round(h / STEP)), bending=0.5 * needed / (span * SONNEVELD_VISSER_CURVATURE))
     assert np.max(np.abs(kept - parabola)) < 1e-4 * np.ptp(parabola)
     assert np.max(parabola - eroded) > 20.0 * np.max(np.abs(kept - parabola))
 
@@ -103,7 +106,7 @@ def test_the_reach_follows_the_square_root_of_the_passes():
             middle = 0.5 * (low + high)
             y = 1000.0 + gaussian(x, 20.0, 5000.0, middle)
             baseline = sonneveld_visser_baseline(
-                x, y, sampling=0.2, iterations=passes, curvature=0.0
+                x, y, granularity=12, iterations=passes, bending=0.0
             )
             if (baseline.max() - 1000.0) / 5000.0 < 0.5:
                 low = middle
@@ -120,36 +123,73 @@ def test_the_reach_follows_the_square_root_of_the_passes():
 def test_the_requested_window_is_the_width_half_removed(window):
     x = grid()
     y = 1000.0 + gaussian(x, 20.0, 5000.0, window)
-    baseline = sonneveld_visser_baseline(x, y, sampling=0.2, window=window, curvature=0.0)
+    baseline = sonneveld_visser_baseline(x, y, granularity=12, window=window, bending=0.0)
     assert (baseline.max() - 1000.0) / 5000.0 == pytest.approx(0.5, abs=0.06)
 
 
-def test_iterations_grow_as_the_square_of_the_window():
-    assert sonneveld_visser_iterations(4.0, 0.2) == pytest.approx(
-        4 * sonneveld_visser_iterations(2.0, 0.2), rel=0.1
+def test_the_granularity_asked_for_a_width_scales_with_it():
+    """With the passes fixed, reach is linear in granularity, so this is too."""
+    assert sonneveld_visser_granularity(4.0, STEP) == pytest.approx(
+        2 * sonneveld_visser_granularity(2.0, STEP), rel=0.1
     )
+
+
+def test_the_reach_in_degrees_is_reported_for_a_granularity():
+    """The number a user needs: granularity is points, reach is degrees.
+
+    HighScore's recommended granularity of 20 reaches 2.4 deg on the 0.01 deg
+    film scan the method was written for, and 4.0 deg on this laboratory's
+    0.0167 deg step - which is, by coincidence worth noting, the stripping width
+    ClayQuant had already settled on independently.
+    """
+    assert sonneveld_visser_reach(20, 0.01, 30) == pytest.approx(2.4, abs=0.1)
+    assert sonneveld_visser_reach(20, STEP, 30) == pytest.approx(4.0, abs=0.1)
+    # And it is what the estimator actually does, not just arithmetic.
+    x = grid()
+    width = sonneveld_visser_reach(20, STEP, 30)
+    y = 1000.0 + gaussian(x, 20.0, 5000.0, width)
+    baseline = sonneveld_visser_baseline(x, y, granularity=20, bending=0.0)
+    assert (baseline.max() - 1000.0) / 5000.0 == pytest.approx(0.5, abs=0.08)
 
 
 # --- the parameters, and which of them matter -----------------------------
 
 
-def test_the_curvature_allowance_is_inert_on_a_counts_scale():
-    """The paper's ``c``, the literal 0.02 and zero agree on real magnitudes.
+def test_granularity_dominates_the_bending_factor():
+    """Which of the two parameters to reach for, settled by measurement.
 
-    Worth an assertion rather than a remark: the paper introduces ``c`` as the
-    thing that lets a curved background through, so a reader expects it to
-    matter, and anyone porting the method is tempted to spend time on it.  On a
-    pattern of 10^4 counts the sampling and the pass count decide the answer and
-    ``c`` does not.
+    The paper introduces ``c`` as the thing that lets a curved background
+    through and HighScore puts it on a slider, so a reader expects it to be the
+    control that matters.  It is not: over the 39 real patterns available, the
+    bending factor's whole span moves the baseline by at most 0.70 % of the
+    intensity range while granularity from 10 to 40 moves it by 30 %.  Asserted
+    here on a synthetic standing in for them, as an order-of-magnitude claim
+    rather than the exact figures, so that the conclusion is held in place
+    without the test depending on data that is not in the repository.
     """
     x = grid()
-    y = 8000.0 + gaussian(x, 22.0, 400.0, 14.0)
-    span = float(np.ptp(y[::12]))
-    paper = sonneveld_visser_baseline(x, y, curvature=SONNEVELD_VISSER_CURVATURE)
-    literal = sonneveld_visser_baseline(x, y, curvature=0.02 / span)
-    none = sonneveld_visser_baseline(x, y, curvature=0.0)
-    assert np.max(np.abs(paper - literal)) < 1e-3 * span
-    assert np.max(np.abs(paper - none)) < 1e-3 * span
+    # A diffuse mount, which is where the contrast lives: on a pattern of sharp
+    # peaks on a smooth background neither parameter has much to do, and the
+    # ratio falls to about three.  The real disagreement between the two comes
+    # from broad scattering, so the stand-in has to have some - a hectorite or
+    # an opal-CT-bearing bentonite rather than a well-crystallised chlorite.
+    y = (4.0e4 / x**1.6 + 400.0
+         + gaussian(x, 6.5, 30000.0, 5.0)
+         + gaussian(x, 22.0, 6000.0, 14.0)
+         + gaussian(x, 19.9, 9000.0, 0.2)
+         + gaussian(x, 26.7, 12000.0, 0.15))
+    span = float(np.ptp(y))
+
+    from_bending = np.max(np.abs(
+        sonneveld_visser_baseline(x, y, granularity=20, bending=4.0)
+        - sonneveld_visser_baseline(x, y, granularity=20, bending=0.0)
+    ))
+    from_granularity = np.max(np.abs(
+        sonneveld_visser_baseline(x, y, granularity=40)
+        - sonneveld_visser_baseline(x, y, granularity=10)
+    ))
+    assert from_bending < 0.03 * span
+    assert from_granularity > 10.0 * from_bending
 
 
 def test_the_order_of_travel_stops_mattering_once_the_erosion_settles():
@@ -159,20 +199,20 @@ def test_the_order_of_travel_stops_mattering_once_the_erosion_settles():
         y = y + gaussian(x, centre, height, fwhm)
 
     def difference(passes):
-        a = sonneveld_visser_baseline(x, y, sampling=0.2, iterations=passes, sequential=True)
-        b = sonneveld_visser_baseline(x, y, sampling=0.2, iterations=passes, sequential=False)
+        a = sonneveld_visser_baseline(x, y, granularity=12, iterations=passes, sequential=True)
+        b = sonneveld_visser_baseline(x, y, granularity=12, iterations=passes, sequential=False)
         return float(np.max(np.abs(a - b)))
 
     assert difference(1) > 100.0
     assert difference(83) == 0.0
 
 
-def test_the_sampling_must_be_positive():
+def test_the_parameters_are_checked():
     x = grid()
     with pytest.raises(ValueError):
-        sonneveld_visser_baseline(x, np.ones_like(x), sampling=0.0)
+        sonneveld_visser_baseline(x, np.ones_like(x), granularity=0)
     with pytest.raises(ValueError):
-        sonneveld_visser_baseline(x, np.ones_like(x), curvature=-1.0)
+        sonneveld_visser_baseline(x, np.ones_like(x), bending=-1.0)
 
 
 def test_mismatched_shapes_are_refused():
@@ -296,3 +336,54 @@ def test_too_little_data_is_refused():
         noise_level(np.array([1.0]))
     with pytest.raises(ValueError):
         noise_level(np.zeros(10), sample=1)
+
+
+# --- as a background component in its own right ---------------------------
+
+
+def test_it_is_a_background_in_itself_rather_than_something_fitted():
+    """HighScore's arrangement, and the method's own: the curve is the background.
+
+    Fitting a polynomial to a Sonneveld-Visser estimate is possible - the
+    estimator dispatch still allows it, and Sec. A.19 uses it for comparison -
+    but it is not what the method is for, and it was the wrong thing to put in
+    front of an operator.
+    """
+    x = grid()
+    y = 4.0e4 / x**1.6 + 600.0 + gaussian(x, 8.8, 9000.0, 0.2)
+    background = StrippedBackground.fit(x, y, granularity=20, bending=1.0)
+    assert background.estimator == "sonneveld-visser"
+    assert background.n_terms == 0, "nothing is fitted, so there are no free terms"
+    assert "granularity 20" in background.model and "bending 1" in background.model
+    # It behaves as any other background does.
+    assert np.all(background(x) <= y + 1e-9)
+    assert np.all(background.subtract(x, y) >= 0.0)
+
+
+def test_granularity_and_bending_are_the_parameters_highscore_exposes():
+    """Named and defaulted to match, so a setting means the same in both.
+
+    Granularity is the number of points between samples - the paper's every
+    twentieth point, HighScore's number of intervals, recommended there between
+    15 and 30.  Bending 1 is anchored on the value the paper itself used.
+    """
+    assert SONNEVELD_VISSER_GRANULARITY == 20
+    assert 15 <= SONNEVELD_VISSER_GRANULARITY <= 30
+    assert SONNEVELD_VISSER_BENDING == 1.0
+    x = grid()
+    y = 4.0e4 / x**1.6 + 600.0 + gaussian(x, 12.4, 9000.0, 0.15)
+    # The defaults are what the bare call uses.
+    assert np.allclose(
+        sonneveld_visser_baseline(x, y),
+        sonneveld_visser_baseline(x, y, granularity=SONNEVELD_VISSER_GRANULARITY,
+                                  bending=SONNEVELD_VISSER_BENDING),
+    )
+
+
+def test_granularity_is_counted_in_points_not_degrees():
+    """Which is why the reach has to be reported: it moves with the step size."""
+    fine = np.arange(3.0, 40.0, 0.005)
+    coarse = np.arange(3.0, 40.0, 0.02)
+    reaches = [sonneveld_visser_reach(20, float(np.mean(np.diff(g))), 30)
+               for g in (fine, coarse)]
+    assert reaches[1] == pytest.approx(4.0 * reaches[0], rel=0.05)
