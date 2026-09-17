@@ -38,7 +38,10 @@ usage: .\clayquant.ps1 <command> [options]
   gui                 open the quantification workflow in a browser
   import-structures   convert a TOPAS structure library into a phase database
   build-library       calculate the reference pattern library
-  shortcut            put ClayQuant on the desktop and in the Start menu
+  setup               the same two steps in a window, with file pickers
+                      (setup import-structures, setup build-library)
+  shortcut            put ClayQuant and the two setup windows on the desktop
+                      and in the Start menu
   python              run the environment's interpreter
 
 Options after the command are passed through unchanged; --help on any of them
@@ -64,6 +67,7 @@ $module = switch ($Command) {
     'gui'               { 'clayquant.gui.app' }
     'import-structures' { 'clayquant.bern' }
     'build-library'     { 'clayquant.library' }
+    'setup'             { 'clayquant.tools' }
     'shortcut'          { 'clayquant.desktop' }
     'python'            { & $python @Rest; exit $LASTEXITCODE }
     { $_ -in '-h', '--help', 'help' } { Show-Usage; exit 0 }

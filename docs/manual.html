@@ -180,7 +180,8 @@ tests by which the program was verified.</p>
   <li><a href="#s3-3">The reference library</a></li><li><a href="#s3-4">Numerical notes</a></li></ol></li>
 <li><a href="#s4">Installation and structure data</a>
   <ol><li><a href="#s4-1">Installation</a></li><li><a href="#s4-2">Structure data and licensing</a></li>
-  <li><a href="#s4-3">Importing a TOPAS structure library</a></li><li><a href="#s4-4">Building the reference library</a></li></ol></li>
+  <li><a href="#s4-3">Importing a TOPAS structure library</a></li><li><a href="#s4-4">Building the reference library</a></li>
+  <li><a href="#s4-5">A library from measured peak lists</a></li></ol></li>
 <li><a href="#s5">Operating procedure</a>
   <ol><li><a href="#s5-1">Specimen preparation assumed</a></li><li><a href="#s5-2">Step 1 &mdash; Load</a></li>
   <li><a href="#s5-3">Step 2 &mdash; Zero error</a></li><li><a href="#s5-4">Step 3 &mdash; Background</a></li>
@@ -922,8 +923,13 @@ Sonneveld&ndash;Visser estimator and its noise level, the non-parametric backgro
 <tr><td class="kw">nnls.py</td><td>the weighted non-negative least-squares fit and its metrics</td></tr>
 <tr><td class="kw">quantification.py</td><td>grouping by phase, the two normalisation bases, CSV export</td></tr>
 <tr><td class="kw">plots.py</td><td>the four result figures and the report writer</td></tr>
-<tr><td class="kw">gui/</td><td>the browser interface, its session state, and the native folder
-chooser it opens on the computer running it</td></tr>
+<tr><td class="kw">gui/</td><td>the browser interface, its session state, and the native file and
+folder choosers it opens on the computer running it</td></tr>
+<tr><td class="kw">peaklist.py</td><td>patterns and a separate library from measured peak lists
+(&sect;<a href="#s4-5">4.5</a>)</td></tr>
+<tr><td class="kw">tools.py</td><td>the two double-clickable setup windows and the jobs behind
+them</td></tr>
+<tr><td class="kw">desktop.py</td><td>the three desktop and menu shortcuts, on all platforms</td></tr>
 <tr><td><span class="kw">install.sh</span>, <span class="kw">install.ps1</span></td>
 <td>installers for Linux/macOS/WSL and for Windows: interpreter selection, environment creation, installation and verification</td></tr>
 <tr><td><span class="kw">install.cmd</span>, <span class="kw">clayquant.cmd</span></td>
@@ -1257,6 +1263,25 @@ Reynolds (1965), transcribed into the source with its provenance, and is reprodu
 
 <h3 id="s4-3">4.3 Importing a TOPAS structure library</h3>
 
+<div class="note"><strong>This step and the next have a window each, which can be double-clicked.</strong>
+Both were command lines with paths in them, and typing a Windows path into a terminal is where this
+program lost people. <span class="kw">clayquant shortcut</span> now puts three icons on the desktop
+and in the menu &mdash; the interface, <em>Import structures</em> and <em>Build library</em> &mdash;
+and each of the latter two opens a small window with file pickers, a Run button and the log of what
+happened. The same windows open from a checkout with
+<span class="kw">.\clayquant.cmd setup import-structures</span> and
+<span class="kw">.\clayquant.cmd setup build-library</span> (<span class="kw">./clayquant</span> on
+Linux and macOS). The command lines described below are unchanged and remain the scriptable route.
+
+<p>The work runs in a worker thread and the window polls it, because building a library takes minutes
+and a window that stops repainting for minutes is a window people force-quit. Anything the job prints
+&mdash; including the import's report of phases that do not match the mass TOPAS states for them
+&mdash; appears in the window rather than on a console a double-clicked program does not have. The
+icons run <span class="kw">python -m clayquant.tools</span> rather than a console script, because the
+scripts are written into the environment at install time and at no other, so an icon naming one would
+break for anybody who pulled a version that added it without reinstalling
+(&sect;<a href="#s4-1">4.1</a>).</p></div>
+
 <p>The accompanying non-clay minerals &mdash; quartz, feldspars, carbonates, sulphates, oxides
 &mdash; come from a structure library of your own. ClayQuant reads the jEdit macro-menu form in
 which TOPAS structure collections are commonly distributed: an XML file whose items each insert a
@@ -1430,6 +1455,82 @@ has a diffuse tail from stacking disorder that carries much of its area, so a wi
 beside the peak width can hold a different fraction of each order &mdash; which is exactly what a
 ratio of orders responds to. &sect;<a href="#a-17">A.17</a> records a conclusion drawn from a window
 too narrow by a factor of three, and its retraction.</div>
+
+<h3 id="s4-5">4.5 A library from measured peak lists</h3>
+
+<p>Everything above calculates a pattern from atomic positions. This is the other case: a reference
+pattern built from a table of <var>d</var>-spacings and relative intensities, which is the form a
+powder diffraction file entry takes. It is an <em>addition</em> &mdash; the clay library is still
+built from structures by &sect;<a href="#s4-4">4.4</a>, and a peak-list library is a separate file
+built separately.</p>
+
+<div class="lim"><strong>What it cannot do, and why the clays are not in it.</strong> ICDD's PDF-2
+&mdash; the set a local HighScore installation usually searches, whose entry numbers look like
+<span class="kw">00-012-0219</span> &mdash; holds per entry a table of interplanar spacings, relative
+intensities and often the diffraction indices. It holds <em>no atomic coordinates</em>; those are in
+PDF-4+. So an entry from it can give a pattern and cannot give a structure, and two things follow
+that no amount of work will change.
+
+<p>An illite/smectite pattern is not a sum of reflections at all. It comes from the matrix method
+(&sect;<a href="#s2-5">2.5</a>), which needs the layer structure factor as a <em>continuous</em>
+function of the scattering vector, and that needs scatterers at heights within the layer. A table of
+spacings cannot supply it, so an interstratified phase cannot be built from a file entry &mdash; only
+a discrete one, which is the opposite of the point. And a weight percent needs the mass of what the
+pattern was calculated from (&sect;<a href="#s2-13">2.13</a>); a peak list was not calculated from
+anything with a mass, so a peak-list phase has no weight percent of its own. That is why it is a
+separate file: mixing the two kinds behind one interface would make the weight percent quietly wrong
+for some of them.</p></div>
+
+<p>Where it earns its place is the accompanying minerals. Quartz, the feldspars and calcite enter
+the fit as discrete phases, and a file entry's intensities are <em>measured</em>, on a real specimen
+with its real substitutions &mdash; which a calculated pattern from one published structure need not
+match any better. So a peak-list library is a reasonable thing to fit those against, and to compare
+against the calculated ones.</p>
+
+<p>One correction is applied and it is not cosmetic. An entry's intensities are observed, so they
+already carry the Lorentz&ndash;polarization factor at the angle each line was measured at, while the
+pattern assembler applies that factor itself. Passing them through unchanged would apply it twice
+&mdash; a factor of thirty across a 4&ndash;40&deg; scan, tilting the pattern end to end. The
+observed intensity is therefore divided by the factor on the way in and the assembler puts it back,
+so the pattern reproduces the entry at the entry's own geometry and still responds correctly to a
+change of instrument description. Tested by integrating each peak of the result and comparing with
+the entry, which agrees to 0.5 %.</p>
+
+<p>Preferred orientation needs the indices <em>and</em> the cell, because the March&ndash;Dollase
+factor is a function of the angle between a reflection and <var>c</var>*. An entry carrying both can
+be spanned over <var>r</var> as the clay library is; an entry without them raises rather than
+guessing, since treating unindexed reflections as basal would enhance every line in the entry alike,
+which is not what an oriented mount does to anything. Such an entry contributes one pattern at
+<var>r</var> = 1, and the library records which entries those were.</p>
+
+<h4>The input</h4>
+
+<p>One block per phase, in a plain text file, which is what a powder diffraction file entry can be
+copied into:</p>
+
+<pre><code>PHASE   Montmorillonite-18A
+SOURCE  ICDD PDF 00-012-0219
+CELL    5.17 8.94 15.0 90 90 90
+#   d(A)     I    h  k  l
+  15.000   100    0  0  1
+   4.490    80    1  1  0
+   2.570    60</code></pre>
+
+<p><span class="kw">PHASE</span> starts a block and is the only required line.
+<span class="kw">SOURCE</span> is free text, carried into the pattern's metadata so a fit can be
+traced back to the entry it came from. <span class="kw">CELL</span> takes the six cell parameters and
+is needed only for orientation. Then two or more columns: the spacing in &aring;ngstr&ouml;m, the
+relative intensity, and optionally the indices, either as three columns or as one token such as
+<span class="kw">001</span>. A line that looks like data and cannot be read raises with its number
+&mdash; a peak list silently one row short is a pattern wrong in a way nothing downstream can
+notice.</p>
+
+<div class="warn"><strong>A powder diffraction file is licensed data.</strong> A library built from
+one is a derived work of it and belongs with your own files &mdash; not in a repository and not in
+anything shared, which is the same position the ICSD structures are in
+(&sect;<a href="#s4-2">4.2</a>). Nothing of the kind ships with ClayQuant: the input is supplied by
+whoever holds the licence. Entries can be quoted in a report by their file number, which is what the
+number is for.</div>
 
 <h2 id="s5">5 Operating procedure</h2>
 
@@ -3964,6 +4065,13 @@ against a CIF written by TOPAS</td>
 <tr><td>Names used but never imported</td><td>every source file, checked with pyflakes</td>
 <td>3 found in the interface and fixed</td></tr>
 <tr><td>Interface</td><td>End-to-end in a browser, every tab and button</td><td>Pass; 7 defects found and fixed</td></tr>
+<tr><td>Peak-list patterns</td><td>21 automated; integrated intensities against the entry they came
+from</td>
+<td>Reproduced to 0.5 %; a clipped arcsin found, which had put an unreachable spacing at
+180&deg;</td></tr>
+<tr><td>Setup windows and icons</td><td>13 automated; both windows opened under a virtual display,
+both jobs run on real files</td>
+<td>209 phases imported and 1751 patterns built from the windows' own code paths</td></tr>
 <tr><td>File and folder choosers</td><td>17 automated; the real dialogs opened, cancelled and
 accepted under a virtual display, and all three driven through the running server</td>
 <td>Pass; the chosen folder, database and library each reach their box</td></tr>
@@ -3975,7 +4083,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>335 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>374 tests</strong> and runs in about seventy seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

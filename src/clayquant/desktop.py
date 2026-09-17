@@ -20,6 +20,7 @@ import shutil
 import struct
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = [
@@ -32,6 +33,57 @@ __all__ = [
 
 APP_NAME = "ClayQuant"
 COMMENT = "Quantification of clay mineral assemblages from oriented mounts"
+
+
+@dataclass(frozen=True)
+class Shortcut:
+    """One icon: its name, the file name to write, and what it starts."""
+
+    name: str
+    slug: str
+    comment: str
+    module: str | None = None
+    """Module to run, or ``None`` for the main interface's own launcher.
+
+    The two setup tools are started as ``python -m clayquant.tools <step>``
+    rather than through a console script, deliberately: the scripts are written
+    into the environment at install time and at no other, so a shortcut naming
+    one would break for anybody who pulled a version that added it without
+    reinstalling.  A module is there as soon as the source is.
+    """
+
+    argument: str = ""
+
+    def command(self) -> list[str]:
+        if self.module is None:
+            return launch_command()
+        interpreter = str(Path(sys.executable))
+        parts = [interpreter, "-m", self.module]
+        if self.argument:
+            parts.append(self.argument)
+        return parts
+
+
+MAIN = Shortcut(name=APP_NAME, slug="clayquant", comment=COMMENT)
+
+TOOLS = (
+    Shortcut(
+        name="ClayQuant - Import structures",
+        slug="clayquant-import-structures",
+        comment="Convert a TOPAS structure library into the ClayQuant phase database",
+        module="clayquant.tools",
+        argument="import-structures",
+    ),
+    Shortcut(
+        name="ClayQuant - Build library",
+        slug="clayquant-build-library",
+        comment="Calculate the ClayQuant reference pattern library",
+        module="clayquant.tools",
+        argument="build-library",
+    ),
+)
+
+ALL_SHORTCUTS = (MAIN,) + TOOLS
 
 
 def project_root() -> Path:
@@ -169,14 +221,16 @@ def png_to_icns(png: Path, icns: Path) -> Path | None:
 # The three platforms
 # --------------------------------------------------------------------------- #
 
-def desktop_entry(command: list[str], icon: Path | None) -> str:
+def desktop_entry(command: list[str], icon: Path | None,
+                  shortcut: "Shortcut" = None) -> str:
     """The contents of a freedesktop ``.desktop`` file."""
+    shortcut = shortcut or MAIN
     executable = " ".join(_quote(part) for part in command)
     lines = [
         "[Desktop Entry]",
         "Type=Application",
-        f"Name={APP_NAME}",
-        f"Comment={COMMENT}",
+        f"Name={shortcut.name}",
+        f"Comment={shortcut.comment}",
         f"Exec={executable}",
         "Terminal=false",
         "Categories=Science;Education;Physics;",
@@ -231,8 +285,8 @@ def as_png(icon: Path, target: Path, size: int | None = None) -> Path:
     return target
 
 
-def _install_linux(desktop: bool, menu: bool) -> list[Path]:
-    command = launch_command()
+def _install_linux(desktop: bool, menu: bool,
+                   shortcuts: tuple["Shortcut", ...] = (MAIN,)) -> list[Path]:
     icon = icon_source()
     installed_icon = None
     if icon is not None:
@@ -243,24 +297,25 @@ def _install_linux(desktop: bool, menu: bool) -> list[Path]:
         )
 
     written: list[Path] = []
-    text = desktop_entry(command, installed_icon)
-    if menu:
-        entry = Path.home() / ".local/share/applications" / "clayquant.desktop"
-        entry.parent.mkdir(parents=True, exist_ok=True)
-        entry.write_text(text, encoding="utf-8")
-        entry.chmod(0o755)
-        written.append(entry)
-    if desktop:
-        directory = _desktop_directory()
-        if directory is not None:
-            directory.mkdir(parents=True, exist_ok=True)
-            entry = directory / "clayquant.desktop"
+    for shortcut in shortcuts:
+        text = desktop_entry(shortcut.command(), installed_icon, shortcut)
+        if menu:
+            entry = Path.home() / ".local/share/applications" / f"{shortcut.slug}.desktop"
+            entry.parent.mkdir(parents=True, exist_ok=True)
             entry.write_text(text, encoding="utf-8")
-            # GNOME will not launch an entry it does not consider trusted; the
-            # executable bit is what marks it so.
             entry.chmod(0o755)
-            _mark_trusted(entry)
             written.append(entry)
+        if desktop:
+            directory = _desktop_directory()
+            if directory is not None:
+                directory.mkdir(parents=True, exist_ok=True)
+                entry = directory / f"{shortcut.slug}.desktop"
+                entry.write_text(text, encoding="utf-8")
+                # GNOME will not launch an entry it does not consider trusted;
+                # the executable bit is what marks it so.
+                entry.chmod(0o755)
+                _mark_trusted(entry)
+                written.append(entry)
     _refresh_desktop_database()
     return written
 
@@ -280,9 +335,18 @@ def _refresh_desktop_database() -> None:
                        check=False, capture_output=True)
 
 
-def _install_macos(desktop: bool, menu: bool) -> list[Path]:
-    """Write an application bundle; ``menu`` means ~/Applications."""
-    command = launch_command()
+def _install_macos(desktop: bool, menu: bool,
+                   shortcuts: tuple["Shortcut", ...] = (MAIN,)) -> list[Path]:
+    """Write an application bundle each; ``menu`` means ~/Applications."""
+    written: list[Path] = []
+    for shortcut in shortcuts:
+        written.extend(_one_macos_bundle(shortcut, desktop))
+    return written
+
+
+def _one_macos_bundle(shortcut: "Shortcut", desktop: bool) -> list[Path]:
+    command = shortcut.command()
+    APP_NAME = shortcut.name
     bundle = (Path.home() / "Applications" / f"{APP_NAME}.app")
     macos = bundle / "Contents" / "MacOS"
     resources = bundle / "Contents" / "Resources"
@@ -300,7 +364,7 @@ def _install_macos(desktop: bool, menu: bool) -> list[Path]:
     info = {
         "CFBundleName": APP_NAME,
         "CFBundleDisplayName": APP_NAME,
-        "CFBundleIdentifier": "org.clayquant.app",
+        "CFBundleIdentifier": f"org.clayquant.{shortcut.slug}",
         "CFBundleExecutable": APP_NAME,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "0.1.0",
@@ -328,24 +392,26 @@ def _install_macos(desktop: bool, menu: bool) -> list[Path]:
     return written
 
 
-def _install_windows(desktop: bool, menu: bool) -> list[Path]:
-    command = launch_command()
+def _install_windows(desktop: bool, menu: bool,
+                     shortcuts: tuple["Shortcut", ...] = (MAIN,)) -> list[Path]:
     icon = icon_source()
     icon_file = None
     if icon is not None:
         icon_file = png_to_ico(icon, project_root() / "assets" / "clayquant.ico")
 
     targets = []
-    if desktop:
-        targets.append(Path(os.path.expanduser("~")) / "Desktop" / f"{APP_NAME}.lnk")
-    if menu:
-        targets.append(
-            Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
-            / "Microsoft/Windows/Start Menu/Programs" / f"{APP_NAME}.lnk"
-        )
+    for shortcut in shortcuts:
+        if desktop:
+            targets.append((Path(os.path.expanduser("~")) / "Desktop"
+                            / f"{shortcut.name}.lnk", shortcut))
+        if menu:
+            targets.append((
+                Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+                / "Microsoft/Windows/Start Menu/Programs" / f"{shortcut.name}.lnk", shortcut))
 
     written: list[Path] = []
-    for target in targets:
+    for target, shortcut in targets:
+        command = shortcut.command()
         target.parent.mkdir(parents=True, exist_ok=True)
         arguments = " ".join(_quote(part) for part in command[1:])
         script = [
@@ -354,7 +420,7 @@ def _install_windows(desktop: bool, menu: bool) -> list[Path]:
             f"$link.TargetPath = '{command[0]}'",
             f"$link.Arguments = '{arguments}'",
             f"$link.WorkingDirectory = '{project_root()}'",
-            f"$link.Description = '{COMMENT}'",
+            f"$link.Description = '{shortcut.comment}'",
         ]
         if icon_file is not None:
             script.append(f"$link.IconLocation = '{icon_file}'")
@@ -367,31 +433,40 @@ def _install_windows(desktop: bool, menu: bool) -> list[Path]:
     return written
 
 
-def shortcut_locations() -> list[Path]:
-    """Where a shortcut would be written, without writing one."""
-    if sys.platform.startswith("win"):
-        return [
-            Path(os.path.expanduser("~")) / "Desktop" / f"{APP_NAME}.lnk",
-            Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
-            / "Microsoft/Windows/Start Menu/Programs" / f"{APP_NAME}.lnk",
-        ]
-    if sys.platform == "darwin":
-        return [Path.home() / "Applications" / f"{APP_NAME}.app",
-                Path.home() / "Desktop" / f"{APP_NAME}.app"]
-    places = [Path.home() / ".local/share/applications" / "clayquant.desktop"]
-    directory = _desktop_directory()
-    if directory is not None:
-        places.append(directory / "clayquant.desktop")
+def shortcut_locations(shortcuts: tuple["Shortcut", ...] = ALL_SHORTCUTS) -> list[Path]:
+    """Where the shortcuts would be written, without writing any."""
+    places: list[Path] = []
+    for shortcut in shortcuts:
+        if sys.platform.startswith("win"):
+            places.append(Path(os.path.expanduser("~")) / "Desktop" / f"{shortcut.name}.lnk")
+            places.append(
+                Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+                / "Microsoft/Windows/Start Menu/Programs" / f"{shortcut.name}.lnk"
+            )
+            continue
+        if sys.platform == "darwin":
+            places.append(Path.home() / "Applications" / f"{shortcut.name}.app")
+            places.append(Path.home() / "Desktop" / f"{shortcut.name}.app")
+            continue
+        places.append(Path.home() / ".local/share/applications" / f"{shortcut.slug}.desktop")
+        directory = _desktop_directory()
+        if directory is not None:
+            places.append(directory / f"{shortcut.slug}.desktop")
     return places
 
 
-def install_shortcuts(desktop: bool = True, menu: bool = True) -> list[Path]:
-    """Create the shortcuts, returning what was written."""
+def install_shortcuts(desktop: bool = True, menu: bool = True,
+                      shortcuts: tuple["Shortcut", ...] = ALL_SHORTCUTS) -> list[Path]:
+    """Create the shortcuts, returning what was written.
+
+    All three by default: the interface, and one window each for the two setup
+    steps that have to happen before the interface is any use.
+    """
     if sys.platform.startswith("win"):
-        return _install_windows(desktop, menu)
+        return _install_windows(desktop, menu, shortcuts)
     if sys.platform == "darwin":
-        return _install_macos(desktop, menu)
-    return _install_linux(desktop, menu)
+        return _install_macos(desktop, menu, shortcuts)
+    return _install_linux(desktop, menu, shortcuts)
 
 
 def remove_shortcuts() -> list[Path]:

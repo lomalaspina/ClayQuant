@@ -114,8 +114,12 @@ def test_install_and_remove_on_linux(tmp_path, monkeypatch):
 
     written = desktop.install_shortcuts()
     names = {path.name for path in written}
-    assert names == {"clayquant.desktop"}
-    assert len(written) == 2, "one for the menu and one for the desktop"
+    assert names == {
+        "clayquant.desktop",
+        "clayquant-import-structures.desktop",
+        "clayquant-build-library.desktop",
+    }, "the interface and one window for each setup step"
+    assert len(written) == 6, "three icons, each in the menu and on the desktop"
     for path in written:
         assert path.is_file()
         assert path.read_text().startswith("[Desktop Entry]")
@@ -124,6 +128,19 @@ def test_install_and_remove_on_linux(tmp_path, monkeypatch):
     removed = desktop.remove_shortcuts()
     assert set(removed) == set(written)
     assert not any(path.exists() for path in written)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="freedesktop paths are Linux")
+def test_only_the_interface_can_be_installed(tmp_path, monkeypatch):
+    """The default is all three, but the selection is honoured."""
+    home = tmp_path / "home"
+    (home / "Desktop").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("XDG_DESKTOP_DIR", raising=False)
+
+    written = desktop.install_shortcuts(shortcuts=(desktop.MAIN,))
+    assert {path.name for path in written} == {"clayquant.desktop"}
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="freedesktop paths are Linux")
