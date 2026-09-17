@@ -126,9 +126,28 @@ def test_a_short_line_list_is_no_bar_to_being_found():
 def test_a_phase_that_is_absent_is_not_reported_above_the_threshold():
     found = screen_phases(
         a_measurement([rutile()], [1.0]), DATABASE, a_clay_library(),
-        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.02, max_phases=3,
+        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.05, max_phases=3,
     )
     assert [evidence.name for evidence in found] == ["Rutile"]
+
+
+def test_the_threshold_cuts_the_report_and_not_the_rounds():
+    """The failure this prevents, from a run on a real clay separate.
+
+    The score a phase is reported with is its share of the pattern, and the
+    score selection proceeds on is the gain - what a phase adds after everything
+    already chosen.  They are different numbers, and the second and third phase
+    of a real assemblage have small gains however plainly they are present.
+    Stopping the rounds when the gain fell below the reporting threshold cut the
+    list to the first one or two phases, which reads as the minerals having gone
+    missing and was the opposite of what the change was for.
+    """
+    findings = screen_phases(
+        a_measurement([quartz(), rutile()], [1.0, 0.3]), DATABASE, a_clay_library(),
+        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.005, max_phases=3,
+    )
+    names = [evidence.name for evidence in findings]
+    assert "Quartz" in names and "Rutile" in names
 
 
 def test_an_unapplied_zero_error_does_not_lose_quartz():
@@ -143,30 +162,73 @@ def test_an_unapplied_zero_error_does_not_lose_quartz():
         assert found[0].name == "Quartz", f"shift {shift} gave {[e.name for e in found]}"
 
 
-def test_the_shift_taken_is_reported_so_a_zero_error_can_be_recognised():
-    found = screen_phases(
-        a_measurement([quartz()], [1.0], shift=-0.06), DATABASE, a_clay_library(),
-        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.001, max_phases=3,
+def test_the_shared_zero_offset_is_fitted_and_reported():
+    # A zero error moves every reflection of every phase by the same amount, so
+    # it is fitted once and shared.  Reporting it matters: a large one says the
+    # zero error is worth correcting in its own step, where it is measured
+    # against a reference rather than inferred from the whole pattern.
+    for shift in (-0.06, +0.06):
+        found = screen_phases(
+            a_measurement([quartz()], [1.0], shift=shift), DATABASE, a_clay_library(),
+            two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.001,
+            max_phases=3, align=0.15,
+        )
+        assert found[0].name == "Quartz"
+        # The offset is the correction the screen applied to the measured
+        # angles, so it comes back equal to the error in them.
+        assert found[0].position_offset == pytest.approx(shift, abs=0.03)
+
+
+def test_the_shared_offset_is_what_rescues_an_uncorrected_zero_error():
+    uncorrected = a_measurement([quartz()], [1.0], shift=-0.06)
+    with_offset = screen_phases(
+        uncorrected, DATABASE, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.001, max_phases=3, align=0.15,
     )
-    # The shift reported is the one given to the model, so a measurement whose
-    # peaks sit 0.06 deg low needs the model moved 0.06 deg low to meet them.
-    assert found[0].position_offset == pytest.approx(-0.06, abs=0.03)
+    without = screen_phases(
+        uncorrected, DATABASE, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.001, max_phases=3, align=0.0,
+    )
+    assert with_offset[0].score > 1.4 * without[0].score
 
 
-def test_fixing_the_positions_reproduces_the_old_sensitivity():
-    # align=0 is the behaviour without the shift, kept as an option; it is what
-    # made an unapplied zero error able to lose the one mineral nobody doubts.
+def stretched_quartz(scale=1.012):
+    """Quartz with every cell edge ``scale`` times larger."""
+    cell = quartz()
+    return Crystal(
+        a=cell.a * scale, b=cell.b * scale, c=cell.c * scale,
+        alpha=cell.alpha, beta=cell.beta, gamma=cell.gamma,
+        sites=list(cell.sites), name="Quartz (stretched)",
+    )
+
+
+def test_a_cell_that_differs_from_the_database_is_still_matched():
+    # This is what the unit cell allowance is for, and until now it reached the
+    # position-matching search only: the competitive screen fixed every
+    # candidate at its published cell.
+    measurement = a_measurement([stretched_quartz()], [1.0])
+    found = screen_phases(
+        measurement, DATABASE, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.001, max_phases=3,
+        cell_allowance=0.02, align=0.0,
+    )
+    assert found and found[0].name == "Quartz"
+    assert found[0].cell_scale == pytest.approx(1.012, abs=0.006)
+
+
+def test_the_cell_allowance_reaches_the_competitive_screen():
+    measurement = a_measurement([stretched_quartz()], [1.0])
     loose = screen_phases(
-        a_measurement([quartz()], [1.0], shift=-0.06), DATABASE, a_clay_library(),
-        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.001,
-        max_phases=3, align=0.12,
+        measurement, DATABASE, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.001, max_phases=3,
+        cell_allowance=0.02, align=0.0,
     )
     tight = screen_phases(
-        a_measurement([quartz()], [1.0], shift=-0.06), DATABASE, a_clay_library(),
-        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.001,
-        max_phases=3, align=0.0,
+        measurement, DATABASE, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.001, max_phases=3,
+        cell_allowance=0.0, align=0.0,
     )
-    assert loose[0].score > tight[0].score
+    assert loose[0].score > 1.3 * tight[0].score
 
 
 def test_two_real_phases_are_both_found_and_ranked_by_what_they_explain():
@@ -192,3 +254,49 @@ def test_the_scores_never_rise_down_the_list():
 def test_an_empty_database_gives_nothing_rather_than_failing():
     assert screen_phases(a_measurement([quartz()], [1.0]), {}, a_clay_library(),
                          instrument=INSTRUMENT) == []
+
+
+def test_a_phase_the_pattern_contradicts_is_not_considered_at_all():
+    # min_agreement is a floor on entry, not a weight on the gain.  Weighting by
+    # the agreement was tried and is wrong: it is measured against the pattern as
+    # it stands, so a phase whose lines sit in an empty stretch scores higher
+    # than one whose lines stand on clay peaks, and it demoted albite from second
+    # to sixteenth on a real separate.  As a floor it removes only the flat
+    # contradiction.
+    found = screen_phases(
+        a_measurement([quartz()], [1.0]), DATABASE, a_clay_library(),
+        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, min_share=0.0001,
+        max_phases=3, min_agreement=0.5,
+    )
+    assert "Graphite" not in [evidence.name for evidence in found]
+
+
+def test_restricting_the_search_finds_a_mineral_the_open_search_loses():
+    """The rutile case, from a real clay separate.
+
+    Rutile's three reflections in range are all present, at signal-to-noise 19,
+    15 and 4, and their measured heights stand at 100 : 47 against a calculated
+    100 : 44.  An unrestricted search over two hundred candidates does not
+    select it, because phases the specimen cannot contain fit the same peaks and
+    are taken first, having twelve lines to spread a claim over against rutile's
+    three.  That is not a threshold to tune: on one scan the data does not
+    distinguish them, and naming the phases the specimen can contain supplies
+    what the data does not.
+    """
+    crowd = dict(DATABASE)
+    measurement = a_measurement([quartz(), rutile()], [1.0, 0.25])
+    restricted = screen_phases(
+        measurement, crowd, a_clay_library(), two_theta_range=(4.0, 40.0),
+        instrument=INSTRUMENT, min_share=0.0005, max_phases=4,
+        only={"Quartz", "Rutile"},
+    )
+    names = [evidence.name for evidence in restricted]
+    assert names == ["Quartz", "Rutile"]
+
+
+def test_a_restriction_that_names_nothing_in_the_database_gives_nothing():
+    found = screen_phases(
+        a_measurement([quartz()], [1.0]), DATABASE, a_clay_library(),
+        two_theta_range=(4.0, 40.0), instrument=INSTRUMENT, only={"Nepheline"},
+    )
+    assert found == []

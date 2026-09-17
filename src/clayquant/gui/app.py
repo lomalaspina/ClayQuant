@@ -991,6 +991,21 @@ def main_minerals_tab() -> html.Div:
                     label("Search range (°2θ)"),
                     dcc.RangeSlider(id="detect-range", min=2.0, max=70.0, step=0.5,
                                     value=[4.0, 40.0]),
+                    label("Restrict the search to"),
+                    dcc.Dropdown(id="detect-only", options=[], value=[], multi=True,
+                                 placeholder="the whole database"),
+                    html.Div(
+                        "An unrestricted search over two hundred candidates on one "
+                        "scan is genuinely ambiguous, and naming the phases the "
+                        "specimen can contain is the information the data does not "
+                        "hold. Measured on one separate: unrestricted, rutile is not "
+                        "selected at all, because a dozen phases the sample cannot "
+                        "contain fit its peaks and are taken first, having more lines "
+                        "to spread a claim over. Restricted to quartz, albite, "
+                        "sekaninaite and rutile, all four come out in order with "
+                        "rutile's own lines agreeing to 0.95.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Button("Search for main minerals", id="detect-run", n_clicks=0,
                                 style={"marginTop": "10px"}),
                     working(html.Div(id="detect-status", style={"marginTop": "10px"})),
@@ -1799,6 +1814,7 @@ def register_callbacks(app: Dash) -> None:
 
     @app.callback(
         Output("db-status", "children"),
+        Output("detect-only", "options"),
         Input("db-load", "n_clicks"),
         State("db-path", "value"),
         prevent_initial_call=True,
@@ -1807,12 +1823,17 @@ def register_callbacks(app: Dash) -> None:
         try:
             count = STATE.load_phase_database(resolve_user_path(path))
         except Exception as exc:  # noqa: BLE001
-            return error_message(exc)
+            return error_message(exc), []
         clays = sum(1 for name in STATE.phase_database if is_clay_phase(name))
+        options = [
+            {"label": name, "value": name}
+            for name in sorted(STATE.phase_database)
+            if not is_clay_phase(name)
+        ]
         return html.Div(
             f"{count} phases loaded ({clays} phyllosilicates, which are left to the clay "
             f"library and not offered here)."
-        )
+        ), options
 
     @app.callback(
         Output("db-path", "value"),
@@ -1859,9 +1880,11 @@ def register_callbacks(app: Dash) -> None:
         State("detect-snr", "value"),
         State("detect-range", "value"),
         State("detect-tick", "value"),
+        State("detect-only", "value"),
         prevent_initial_call=True,
     )
-    def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above):
+    def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above,
+                      only):
         """Search for accompanying minerals, by competitive fit or by positions.
 
         Which of the two happens depends on whether a clay library is loaded, and
@@ -1894,6 +1917,7 @@ def register_callbacks(app: Dash) -> None:
                     instrument=gui_instrument(),
                     min_share=float(min_score) / 1000.0,
                     cell_allowance=float(allowance) / 100.0,
+                    only=set(only) if only else None,
                 )
             else:
                 findings = detect_phases(
@@ -2181,6 +2205,15 @@ def register_callbacks(app: Dash) -> None:
             + ("" if use_background else ". Fitted without background subtraction")
             + "."
         )
+        if result.metadata.get("crowded"):
+            status = html.Div([
+                html.Div(status),
+                html.Div(result.metadata["crowded"], style={
+                    "marginTop": "8px", "padding": "8px", "background": "#fff4e5",
+                    "border": "1px solid #f0ad4e", "borderRadius": "6px",
+                    "fontSize": "0.8rem",
+                }),
+            ])
         return (
             plot_fit(result),
             plot_components(result),

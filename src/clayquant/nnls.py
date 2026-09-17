@@ -300,11 +300,23 @@ def nnls_fit(
         selection &= np.asarray(mask, dtype=bool)
     # Library patterns are only defined on their own grid.
     selection &= (two_theta >= library.two_theta[0]) & (two_theta <= library.two_theta[-1])
-    if selection.sum() < len(library.entries):
-        raise ValueError(
-            f"{selection.sum()} points selected for {len(library.entries)} library entries; "
-            f"widen the fitting range or reduce the library"
-        )
+    # More entries than points is not an error, and refusing it was wrong.  This
+    # library is meant to be over-complete: it spans layer spacing, orientation,
+    # crystallite thickness and composition so that the fit can choose among
+    # them, and spanning one more layer spacing per host was enough to put the
+    # entry count above the number of points in a thirty degree window and stop
+    # the fit running at all.  A non-negative least squares is well posed either
+    # way, because the non-negativity is itself a constraint and the solution
+    # sits on a face of the positive cone; what an under-determined one loses is
+    # not the fit but the uniqueness of *which* entries carry a phase.  So it is
+    # said out loud in the result rather than refused or passed over in silence.
+    crowded = (
+        f"{int(selection.sum())} points for {len(library.entries)} library entries, so which "
+        f"entries carry a phase is not determined by the data. The fit and the phase totals "
+        f"are still meaningful; read a fitted spacing or orientation as a range rather than a "
+        f"value, or narrow the library."
+        if selection.sum() < len(library.entries) else ""
+    )
 
     design = library.matrix(two_theta[selection]).T  # (n_points, n_entries)
     target = observed[selection]
@@ -400,6 +412,7 @@ def nnls_fit(
             "measurement": measured.name,
             "n_points": int(selection.sum()),
             "n_entries": len(library.entries),
+            "crowded": crowded,
             "background_subtracted": background is not None,
             "unweighable_entries": [
                 entry.name for entry, coefficient in zip(library.entries, coefficients)

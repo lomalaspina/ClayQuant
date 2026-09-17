@@ -134,11 +134,15 @@ class PhaseEvidence:
     presence: float = 0.0
     intensity_agreement: float = 0.0
     position_offset: float = 0.0
-    """Bodily shift in degrees the screen gave this phase to line it up.
+    """Correction in degrees the screen applied to the measured angles.
 
-    Distinct from :attr:`mean_offset`, which is what is left over *after* the
-    shift.  The same shift on every phase at once is a zero error that has not
-    been applied.
+    One number for the whole screen, not per phase, because a zero error moves
+    every reflection of every phase alike; it comes back equal to the error in
+    the measured angles, so ``-0.05`` means the peaks sat 0.05 deg low.  Large
+    and the zero error is worth correcting in its own step, where it is measured
+    against a reference instead of inferred from the whole pattern.  Distinct
+    from :attr:`mean_offset`, which is what a phase's own lines have left over
+    after both this and its cell scale.
     """
 
     @property
@@ -415,37 +419,60 @@ def _weighted_design(library, two_theta: np.ndarray, selection: np.ndarray,
     return (library.matrix(two_theta[selection]).T) * root[:, None]
 
 
-def _shifted_bank(
+def step_of(grid: np.ndarray) -> float:
+    """Median spacing of a two-theta grid, in degrees."""
+    return float(np.median(np.diff(grid))) if grid.size > 1 else 0.02
+
+
+def _rescaled(grid: np.ndarray, column: np.ndarray, scale: float) -> np.ndarray:
+    """A calculated pattern as it would be with the cell scaled by ``scale``.
+
+    A cell ``scale`` times larger puts every reflection at ``scale * d``, so the
+    value wanted at angle ``x`` is the original pattern at the angle whose
+    spacing is ``d(x) / scale``, and from Bragg's law that is
+    ``2 arcsin(scale * sin(x / 2))``.  So one interpolation does it, and it is
+    the right shape of freedom: a relative change in the cell, which is what the
+    unit cell allowance asks for, not a constant shift in angle.
+
+    The difference between the two matters here.  A cell scale moves a
+    reflection by ``2 tan(theta) * scale``, so it is small at low angle and large
+    at high; a zero error moves every reflection equally.  Neither can stand in
+    for the other exactly, and a cell allowance wide enough to cover a zero
+    error at the angles that carry the fit is what the allowance is for.
+    """
+    sine = scale * np.sin(np.radians(grid) / 2.0)
+    angles = np.where(np.abs(sine) < 1.0, 2.0 * np.degrees(np.arcsin(np.clip(sine, -1.0, 1.0))),
+                      np.nan)
+    resampled = np.interp(angles, grid, column, left=0.0, right=0.0)
+    return np.nan_to_num(resampled)
+
+
+def _scaled_bank(
     grid: np.ndarray,
     patterns: list[np.ndarray],
     points: np.ndarray,
     root: np.ndarray,
-    offsets: np.ndarray,
+    scales: np.ndarray,
 ) -> np.ndarray:
-    """Each candidate's weighted column at each trial offset.
+    """Each candidate's weighted column at each trial cell scale.
 
-    Shape ``(n_points, n_candidates, n_offsets)``.  Shifting the calculated
-    pattern bodily is the right shape of freedom to allow: a residual zero error
-    and a coherent cell difference both move every reflection of a phase the
-    same way, to first order, and nothing else is permitted here - the relative
-    intensities and the spacings within a phase stay as calculated.
-
-    It matters most for the sharpest phases, which is why it exists.  Quartz has
-    a handful of reflections 0.09 deg wide; a 0.06 deg zero error that has not
-    been applied moves them two thirds of a width and the fit then prefers
-    almost anything else, including a two-line phase whose 002 happens to sit
-    near the quartz 101.  A phase with fifty reflections is barely affected by
-    the same offset.  So without this the screen quietly favours the phases it
-    can least distinguish, and loses the one mineral nobody doubts is there.
+    Shape ``(n_points, n_candidates, n_scales)``.  Allowing the cell to differ
+    is what lets a phase be recognised when its published cell is not quite the
+    specimen's, and it is also what keeps the sharpest phases in the running:
+    quartz's reflections are 0.09 deg wide, and a fit that insists on the
+    published cell to better than that has nothing to do with whether quartz is
+    present.
     """
     return np.stack([
-        np.stack([np.interp(points - offset, grid, column) for offset in offsets], axis=1)
+        np.stack([
+            np.interp(points, grid, _rescaled(grid, column, scale)) for scale in scales
+        ], axis=1)
         for column in patterns
     ], axis=1) * root[:, None, None]
 
 
 def _best_shift_gain(bank: np.ndarray, residual: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """For each candidate, its best gain over the trial offsets, and which one."""
+    """For each candidate, its best gain over the trial cell scales, and which one."""
     inner = np.einsum("ipo,i->po", bank, residual)
     norm = np.einsum("ipo,ipo->po", bank, bank)
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -489,7 +516,10 @@ def screen_phases(
     max_phases: int = 25,
     cell_allowance: float = DEFAULT_CELL_ALLOWANCE,
     include_clays: bool = False,
-    align: float = 0.12,
+    scale_steps: int = 9,
+    align: float = 0.15,
+    min_agreement: float = 0.15,
+    only: set[str] | None = None,
 ) -> list[PhaseEvidence]:
     """Rank accompanying minerals by what each explains that nothing else does.
 
@@ -552,6 +582,8 @@ def screen_phases(
     for name, crystal in crystals.items():
         if is_clay_phase(name) and not include_clays:
             continue
+        if only is not None and name not in only:
+            continue
         try:
             one = powder_pattern(crystal, grid, reference, r_march_dollase=1.0, name=name)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the screen
@@ -566,6 +598,7 @@ def screen_phases(
     two_theta = pattern.two_theta
     raw = pattern.intensity.astype(float)
     observed = background.subtract(two_theta, raw) if background is not None else raw
+    wavelength = reference.emission.principal_wavelength
     low, high = two_theta_range
     selection = (two_theta >= low) & (two_theta <= high)
     selection &= (two_theta >= grid[0]) & (two_theta <= grid[-1])
@@ -577,52 +610,155 @@ def screen_phases(
     root = np.sqrt(1.0 / np.clip(raw[selection], 1.0, None))
     target = observed[selection] * root
     clays = _weighted_design(clay_library, two_theta, selection, root)
-    step = float(np.median(np.diff(grid))) if grid.size > 1 else 0.02
-    offsets = (np.array([0.0]) if align <= 0.0
-               else np.arange(-align, align + 0.5 * step, step))
-    bank = _shifted_bank(grid, calculated, two_theta[selection], root, offsets)
+    scales = (
+        np.array([1.0]) if cell_allowance <= 0.0
+        else np.linspace(1.0 - cell_allowance, 1.0 + cell_allowance, scale_steps)
+    )
+
+    # Two different things move a reflection away from where it was calculated,
+    # and one allowance cannot stand in for the other.  A cell that differs from
+    # the database entry moves every reflection of that phase in proportion to
+    # tan(theta), so it is small at low angle and large at high; a zero error
+    # moves every reflection of every phase by the same amount.  The cell
+    # allowance is the first and is per phase.  The second is fitted here, once,
+    # as a shift shared by everything - which is what it physically is - because
+    # the search has to work on a measurement whose zero error has not been
+    # corrected yet, and a 2 % cell allowance does not rescue it: a scale that
+    # lines up the low-angle lines throws the high-angle ones off.
+    #
+    # It is done by moving the measurement rather than the models, so one
+    # interpolation per trial serves the clay library and all two hundred
+    # candidates at once, and the criterion is the best gain any candidate can
+    # make against the clay residual - the quantity the whole screen turns on.
+    offset = 0.0
+    if align > 0.0:
+        trials = np.arange(-align, align + 1e-9, max(step_of(grid), 0.01))
+        best_offset, best_value = 0.0, -np.inf
+        for trial in trials:
+            shifted_observed = np.interp(two_theta[selection] + trial, two_theta, observed)
+            shifted_raw = np.interp(two_theta[selection] + trial, two_theta, raw)
+            trial_root = np.sqrt(1.0 / np.clip(shifted_raw, 1.0, None))
+            trial_target = shifted_observed * trial_root
+            trial_clays = (clay_library.matrix(two_theta[selection]).T) * trial_root[:, None]
+            trial_coefficients, _ = nnls(trial_clays, trial_target)
+            trial_residual = trial_target - trial_clays @ trial_coefficients
+            flat = np.column_stack([
+                np.interp(two_theta[selection], grid, column) for column in calculated
+            ]) * trial_root[:, None]
+            value = float(np.max(_matched_filter_gain(flat, trial_residual)))
+            if value > best_value:
+                best_offset, best_value = float(trial), value
+        offset = best_offset
+        if offset:
+            observed = np.interp(two_theta + offset, two_theta, observed)
+            raw = np.interp(two_theta + offset, two_theta, raw)
+            root = np.sqrt(1.0 / np.clip(raw[selection], 1.0, None))
+            target = observed[selection] * root
+            clays = _weighted_design(clay_library, two_theta, selection, root)
+
+    bank = _scaled_bank(grid, calculated, two_theta[selection], root, scales)
 
     total = float(target @ target)
     if total <= 0.0:
         return []
 
-    def refit(active: list[tuple[int, int]]) -> np.ndarray:
-        design = (clays if not active else np.column_stack(
-            [clays, *(bank[:, index, shift] for index, shift in active)]))
-        coefficients, _ = nnls(design, target)
-        return target - design @ coefficients
+    # How well each candidate's own line proportions are reproduced, computed
+    # once and used as a floor on entry, not as a weight on the gain.
+    #
+    # Both were tried.  Multiplying the gain by the agreement is the obvious
+    # thing and it is wrong, because this agreement is measured against the
+    # pattern as it stands, where every line has company: rutile's three
+    # reflections sit in a clean stretch and score 0.95, and quartz's six
+    # include several standing on clay basal peaks that raise them, so quartz
+    # scores 0.56.  Weighting by it therefore rewards phases in empty regions
+    # and demoted albite from second to sixteenth.  As a floor it does the one
+    # job it can do honestly: it excludes a phase the pattern contradicts
+    # outright - graphite at 0.00, whose second reflection has nothing under it
+    # at all - without ranking the rest.
+    quality = np.ones(len(candidates))
+    for index, name in enumerate(candidates):
+        try:
+            positions, heights = peak_list(crystals[name], two_theta_range, reference)
+            if positions.size == 0:
+                continue
+            strongest = np.sort(np.argsort(heights)[::-1][:12])
+            _, _, agreement, _ = _score_at_scale(
+                positions[strongest], heights[strongest], two_theta, observed,
+                wavelength, 1.0, 0.10, 4.0,
+            )
+        except Exception:  # noqa: BLE001 - a broken entry keeps its neutral weight
+            continue
+        quality[index] = float(agreement)
 
-    residual = refit([])
-    remaining = set(range(len(candidates)))
+    def fit(active: list[tuple[int, int]]) -> tuple[np.ndarray, np.ndarray]:
+        design = (clays if not active else np.column_stack(
+            [clays, *(bank[:, index, scale] for index, scale in active)]))
+        coefficients, _ = nnls(design, target)
+        return coefficients, target - design @ coefficients
+
+    # Selection runs on the gain, reporting runs on the share, and the two are
+    # not the same number.  A gain is what a phase adds *after* everything
+    # already chosen, so the second and third phase of a real assemblage have
+    # small gains however plainly they are present; stopping the rounds at the
+    # reporting threshold therefore cut the list to the first one or two phases
+    # and looked like the minerals had gone missing.  The rounds instead run to
+    # a floor far below it, and the threshold is applied at the end to the share
+    # each phase takes in one final joint fit - which is the quantity the
+    # threshold has always meant and is comparable between phases.
+    floor = min(min_share, 1e-4) / 10.0
+    _, residual = fit([])
+    remaining = {
+        index for index in range(len(candidates)) if quality[index] >= min_agreement
+    }
     active: list[tuple[int, int]] = []
     gains: dict[int, float] = {}
-    shifts: dict[int, float] = {}
+    scale_of: dict[int, float] = {}
     for _ in range(max_phases):
         if not remaining:
             break
         gain, chosen = _best_shift_gain(bank, residual)
         best = max(remaining, key=lambda index: gain[index])
         before = float(residual @ residual)
-        trial = refit([*active, (best, int(chosen[best]))])
+        _, trial = fit([*active, (best, int(chosen[best]))])
         removed = (before - float(trial @ trial)) / total
-        if removed < min_share:
+        if removed < floor:
             break
         active.append((best, int(chosen[best])))
         remaining.discard(best)
         gains[best] = removed
-        shifts[best] = float(offsets[int(chosen[best])])
+        scale_of[best] = float(scales[int(chosen[best])])
         residual = trial
 
+    if not active:
+        return []
+    coefficients, _ = fit(active)
+    areas = np.array([
+        np.trapezoid(column, two_theta[selection])
+        for column in (*clays.T, *(bank[:, index, scale].T for index, scale in active))
+    ])
+    contributions = np.clip(coefficients, 0.0, None) * np.clip(areas, 0.0, None)
+    scattering = float(np.sum(contributions))
+    shares = {
+        candidates[index]: (
+            float(contributions[clays.shape[1] + position] / scattering)
+            if scattering > 0.0 else 0.0
+        )
+        for position, (index, _scale) in enumerate(active)
+    }
+
     intensity = observed
-    wavelength = reference.emission.principal_wavelength
     findings: list[PhaseEvidence] = []
-    for index, _shift in active:
+    for index, _scale in active:
         name = candidates[index]
+        if shares[name] < min_share:
+            continue
         matches: list[PeakMatch] = []
         presence = agreement = 0.0
         try:
             positions, heights = peak_list(crystals[name], two_theta_range, reference)
-            positions = positions + shifts[index]
+            positions = _scale_positions(positions, wavelength, scale_of[index])
+            usable = np.isfinite(positions)
+            positions, heights = positions[usable], heights[usable]
             if len(positions):
                 strongest = np.sort(np.argsort(heights)[::-1][:12])
                 _, presence, agreement, matches = _score_at_scale(
@@ -641,13 +777,13 @@ def screen_phases(
             PhaseEvidence(
                 name=name,
                 is_clay=is_clay_phase(name),
-                score=gains[index],
+                score=shares[name],
                 matches=matches,
                 cell_allowance=cell_allowance,
-                cell_scale=1.0,
+                cell_scale=scale_of[index],
                 presence=presence,
                 intensity_agreement=agreement,
-                position_offset=shifts[index],
+                position_offset=offset,
             )
         )
     findings.sort(key=lambda evidence: evidence.score, reverse=True)
