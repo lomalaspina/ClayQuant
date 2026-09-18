@@ -73,12 +73,45 @@ from .crystal import Crystal
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
 __all__ = [
+    "COMMON_IN_CLAY_SEPARATES",
     "PeakMatch",
+    "StablePeak",
+    "stable_peaks",
+    "stable_phases",
     "PhaseEvidence",
     "detect_phases",
     "screen_phases",
     "DEFAULT_CELL_ALLOWANCE",
 ]
+
+COMMON_IN_CLAY_SEPARATES: tuple[str, ...] = (
+    # Silica
+    "Quartz", "Tridymite", "Cristobalite",
+    # Feldspars
+    "Albite", "Anorthite", "Labradorite", "Microcline", "Orthoclase", "Sanidine",
+    # Carbonates
+    "Calcite", "Dolomite", "Ankerite", "Aragonite", "Siderite", "Magnesite",
+    # Sulphates
+    "Gypsum", "Bassanite", "Anhydrite", "Barite", "Celestine",
+    # Oxides and hydroxides
+    "Rutile", "Anatase", "Ilmenite", "Hematite", "Magnetite", "Goethite",
+    "Gibbsite", "Boehmite", "Diaspore", "Corundum", "Spinel",
+    # Sulphides, halides, phosphates
+    "Pyrite", "Halite", "Sylvite", "Apatite-OH", "Fluorapatite",
+    # Silicates that survive a separation
+    "Zircon", "Sekaninaite", "Cordierite", "Riebeckite", "Hornblende", "Titanite",
+    "Epidote", "Pyrope", "Almandine", "Staurolite", "Tourmaline", "Monazite",
+)
+"""Phases a clay separate plausibly carries, as a starting restriction.
+
+Not a claim about any specimen - it is a list to edit, and the point of it is
+that editing a list of forty is possible and editing a list of two hundred is
+not.  A general-purpose structure library holds lead and copper sulphates,
+metals and cements, and on one real separate thirty-five of them explained more
+of the pattern than rutile did, which on a single scan is not a mistake the
+ranking makes but a fact about what one scan determines.  Names absent from the
+loaded database are simply skipped.
+"""
 
 DEFAULT_CELL_ALLOWANCE = 0.02
 """Relative cell deviation allowed when matching peak positions (2%)."""
@@ -133,6 +166,18 @@ class PhaseEvidence:
     cell_scale: float = 1.0
     presence: float = 0.0
     intensity_agreement: float = 0.0
+    explains_alone: float = 0.0
+    """Share of the pattern this phase accounts for against the clays alone.
+
+    The companion to :attr:`score`, which is what it adds once the other phases
+    are in.  A phase high here and low there is one whose lines are shared, and
+    that is a fact about the pattern rather than a verdict on the phase: rutile
+    on one real separate explains 1.4 per cent alone and 0.13 per cent after
+    albite, because albite has a reflection at 14 per cent of its own maximum
+    sitting on the rutile 110.  An unrestricted search cannot recover such a
+    phase, and the two numbers together are what say so.
+    """
+
     position_offset: float = 0.0
     """Correction in degrees the screen applied to the measured angles.
 
@@ -186,7 +231,8 @@ class PhaseEvidence:
             f"{self.name}: {100.0 * self.score:.1f}% "
             f"({self.n_matched}/{self.n_expected} expected lines found, "
             f"best S/N {self.best_signal_to_noise:.0f}, "
-            f"intensity agreement {self.intensity_agreement:.2f})"
+            f"intensity agreement {self.intensity_agreement:.2f}, "
+            f"{100.0 * self.explains_alone:.1f}% on its own)"
         )
 
 
@@ -520,6 +566,7 @@ def screen_phases(
     align: float = 0.15,
     min_agreement: float = 0.15,
     only: set[str] | None = None,
+    shortlist_size: int = 50,
 ) -> list[PhaseEvidence]:
     """Rank accompanying minerals by what each explains that nothing else does.
 
@@ -696,38 +743,81 @@ def screen_phases(
         coefficients, _ = nnls(design, target)
         return coefficients, target - design @ coefficients
 
-    # Selection runs on the gain, reporting runs on the share, and the two are
-    # not the same number.  A gain is what a phase adds *after* everything
-    # already chosen, so the second and third phase of a real assemblage have
-    # small gains however plainly they are present; stopping the rounds at the
-    # reporting threshold therefore cut the list to the first one or two phases
-    # and looked like the minerals had gone missing.  The rounds instead run to
-    # a floor far below it, and the threshold is applied at the end to the share
-    # each phase takes in one final joint fit - which is the quantity the
-    # threshold has always meant and is comparable between phases.
-    floor = min(min_share, 1e-4) / 10.0
-    _, residual = fit([])
+    # Selection is on the gain a phase actually achieves when everything already
+    # in the fit is free to readjust, not on its projection onto the residual.
+    # The projection - the matched filter - is what this used to choose by, and
+    # it over-credits: it is the reduction a phase would achieve if it could be
+    # scaled freely with nothing else moving, so a phase whose many lines each
+    # partly coincide with something is credited for all of them at once.  On a
+    # real separate it gave langite 6.6 per cent of the pattern and second
+    # place; its true gain, refitted, is 0.18 per cent and twelfth.
+    #
+    # The refit is done against the clay entries that are actually carrying
+    # intensity rather than the whole library - eighteen of four hundred and
+    # eighty-one on that separate - because a column at zero does not come off
+    # zero for a small addition elsewhere, and the full solve is fifty times
+    # dearer.  The full library is used for the residual between rounds and for
+    # the shares at the end.
+    coefficients, residual = fit([])
+    live = np.flatnonzero(coefficients > 0.0)
+    base = clays[:, live] if live.size else clays[:, :1] * 0.0
+
+    def true_gain(design: np.ndarray, index: int) -> tuple[float, int]:
+        """Best reduction in the weighted sum of squares this phase can add."""
+        before = float(np.sum((target - design @ nnls(design, target)[0]) ** 2))
+        best, best_scale = 0.0, 0
+        for scale in range(bank.shape[2]):
+            trial = np.column_stack([design, bank[:, index, scale]])
+            after = float(np.sum((target - trial @ nnls(trial, target)[0]) ** 2))
+            if before - after > best:
+                best, best_scale = before - after, scale
+        return best / total, best_scale
+
+    # What each phase explains on its own, against the clays and nothing else.
+    # Reported beside the incremental gain because the two together say what one
+    # cannot: a phase high on its own and low afterwards is one whose lines are
+    # shared, which is a fact about the pattern and not a verdict on the phase.
+    # Rutile on that separate explains 1.4 per cent alone and 0.13 per cent once
+    # albite is in, because albite has a reflection at 14 per cent of its own
+    # maximum sitting on the rutile 110 - and labradorite one at 35 per cent.
+    standalone = np.zeros(len(candidates))
+    alone_scale = np.zeros(len(candidates), dtype=int)
+    for index in range(len(candidates)):
+        if quality[index] < min_agreement:
+            continue
+        standalone[index], alone_scale[index] = true_gain(base, index)
+
     remaining = {
-        index for index in range(len(candidates)) if quality[index] >= min_agreement
+        index for index in range(len(candidates))
+        if quality[index] >= min_agreement and standalone[index] > 0.0
     }
     active: list[tuple[int, int]] = []
     gains: dict[int, float] = {}
     scale_of: dict[int, float] = {}
+    floor = min(min_share, 1e-4) / 10.0
     for _ in range(max_phases):
         if not remaining:
             break
-        gain, chosen = _best_shift_gain(bank, residual)
-        best = max(remaining, key=lambda index: gain[index])
-        before = float(residual @ residual)
-        _, trial = fit([*active, (best, int(chosen[best]))])
-        removed = (before - float(trial @ trial)) / total
-        if removed < floor:
+        design = (base if not active else np.column_stack(
+            [base, *(bank[:, index, scale] for index, scale in active)]))
+        # A cheap projection narrows the field; the true gain decides among the
+        # survivors.  The narrowing is generous on purpose - the phase that wins
+        # a later round on its true gain can sit well down the projection's
+        # order, and rutile sits thirty-eighth on it.
+        gain, _ = _best_shift_gain(bank, residual)
+        shortlist = sorted(remaining, key=lambda index: -gain[index])[:shortlist_size]
+        best, best_gain, best_scale = None, 0.0, 0
+        for index in shortlist:
+            value, scale = true_gain(design, index)
+            if value > best_gain:
+                best, best_gain, best_scale = index, value, scale
+        if best is None or best_gain < floor:
             break
-        active.append((best, int(chosen[best])))
+        active.append((best, best_scale))
         remaining.discard(best)
-        gains[best] = removed
-        scale_of[best] = float(scales[int(chosen[best])])
-        residual = trial
+        gains[best] = best_gain
+        scale_of[best] = float(scales[best_scale])
+        _, residual = fit(active)
 
     if not active:
         return []
@@ -783,8 +873,216 @@ def screen_phases(
                 cell_scale=scale_of[index],
                 presence=presence,
                 intensity_agreement=agreement,
+                explains_alone=float(standalone[index]),
                 position_offset=offset,
             )
         )
     findings.sort(key=lambda evidence: evidence.score, reverse=True)
     return findings
+
+
+# --- Treatment-stable phases -------------------------------------------------
+
+
+@dataclass
+class StablePeak:
+    """A reflection that stands at the same angle in every mount."""
+
+    two_theta: float
+    heights: tuple[float, ...]
+    signal_to_noise: float
+
+    @property
+    def height(self) -> float:
+        return float(np.mean(self.heights))
+
+
+def stable_peaks(
+    patterns: list[Pattern],
+    tolerance: float = 0.05,
+    min_signal_to_noise: float = 8.0,
+    minimum_height: float = 0.01,
+    separation: float = 0.10,
+) -> list[StablePeak]:
+    """Peaks that stand at the same angle in every mount given.
+
+    The point of the three mounts is that the clays move and nothing else does:
+    glycol takes the smectite interlayer from about 15 to 17 A and heating
+    collapses it to 10, while quartz, the feldspars, the carbonates and the
+    oxides sit exactly where they were.  So a peak at the same angle in all
+    three is evidence of a non-clay phase in a way that no amount of fitting one
+    mount can be - it is a different measurement, not a better statistic.
+
+    This is worth saying plainly because the alternative was tried at length.
+    Ranking candidates by how much of one pattern each explains cannot recover a
+    phase whose strong line is overlapped: rutile's 110 falls on a feldspar
+    reflection, so with albite in the fit rutile explains 0.13 per cent of the
+    pattern and thirty-five phases explain more.  Its two strong lines are
+    nevertheless at 27.44 and 36.08 degrees in the air-dried, glycolated and
+    heated scans alike, which settles it.
+
+    ``tolerance`` is the angular agreement required between mounts,
+    ``minimum_height`` a fraction of each pattern's strongest point, and
+    ``separation`` the half-width over which a point must be the largest to
+    count as a peak at all.
+
+    The thresholds have to be strict and the first attempt was not.  Taking
+    every local maximum at three sigma gave five hundred and twenty-seven
+    stable peaks on one specimen, at which density a 0.05 degree window catches
+    something near every calculated line, and forty phases came out at 100 per
+    cent coverage - belite, cerussite, mayenite, troilite.  A peak list that
+    matches everything distinguishes nothing.
+    """
+    if not patterns:
+        return []
+    found: list[list[tuple[float, float, float]]] = []
+    for pattern in patterns:
+        angles, heights, noises = [], [], []
+        intensity = np.asarray(pattern.intensity, dtype=float)
+        two_theta = np.asarray(pattern.two_theta, dtype=float)
+        threshold = minimum_height * float(np.max(intensity)) if intensity.size else 0.0
+        step = float(np.median(np.diff(two_theta))) if two_theta.size > 1 else 0.02
+        reach = max(1, int(round(separation / step)))
+        for index in range(reach, intensity.size - reach):
+            here = intensity[index]
+            if here < threshold:
+                continue
+            window = intensity[index - reach:index + reach + 1]
+            if here < window.max() or here <= window.min():
+                continue
+            noise = _local_noise(intensity, index)
+            if here < min_signal_to_noise * noise:
+                continue
+            angles.append(float(two_theta[index]))
+            heights.append(float(here))
+            noises.append(float(noise))
+        found.append(list(zip(angles, heights, noises)))
+
+    # A peak of the first mount is stable when every other mount has one within
+    # the tolerance.  The first mount is only the bookkeeping order; requiring
+    # agreement from all of them makes the result independent of which it is.
+    stable: list[StablePeak] = []
+    for angle, height, noise in found[0]:
+        partners = [(angle, height, noise)]
+        for others in found[1:]:
+            near = [item for item in others if abs(item[0] - angle) <= tolerance]
+            if not near:
+                partners = []
+                break
+            partners.append(min(near, key=lambda item: abs(item[0] - angle)))
+        if not partners:
+            continue
+        stable.append(StablePeak(
+            two_theta=float(np.mean([item[0] for item in partners])),
+            heights=tuple(item[1] for item in partners),
+            signal_to_noise=float(min(item[1] / max(item[2], 1e-9) for item in partners)),
+        ))
+    return stable
+
+
+def stable_phases(
+    mounts: list[Pattern],
+    crystals: dict[str, Crystal],
+    two_theta_range: tuple[float, float] = (4.0, 40.0),
+    instrument: Instrument | None = None,
+    tolerance: float = 0.05,
+    min_coverage: float = 0.30,
+    min_matched: int = 2,
+    min_intensity: float = 0.10,
+    min_signal_to_noise: float = 5.0,
+    minimum_height: float = 0.006,
+    separation: float = 0.09,
+    include_clays: bool = False,
+    only: set[str] | None = None,
+) -> tuple[list[PhaseEvidence], list[StablePeak]]:
+    """Rank phases by how much of each stands on peaks common to all mounts.
+
+    Each finding's ``score`` is its *coverage*: the share of the phase's own
+    expected intensity, over the reflections above ``min_intensity`` of its
+    strongest, that falls on a stable peak.  Coverage is a property of the phase
+    and the stable peak list alone, so - unlike a share of the pattern - it does
+    not change because a different candidate was added, and a minor phase whose
+    few lines are all present scores as highly as a major one.  That is the
+    whole point: rutile is 1.5 per cent of one real specimen and its coverage is
+    100 per cent, while anatase, faujasite, graphite and calciolangbeinite,
+    which an unrestricted fit of one scan ranked above it, have no stable line
+    at all.
+
+    ``min_intensity`` decides which of a phase's own reflections count, as a
+    fraction of its strongest, and it matters more than it looks: counting every
+    calculated line down to one per cent dilutes the coverage of a phase with a
+    long tail of weak reflections, which is most of them, and then says more
+    about the length of the tail than about the specimen.  At a tenth, quartz
+    and rutile both come out at 100 per cent on two stable reflections each.
+
+    ``min_matched`` guards the other way, because coverage alone would give a
+    phase with one strong line a perfect score.
+
+    Returns the findings, best coverage first, and the stable peaks themselves.
+    """
+    reference = instrument or Instrument()
+    peaks = stable_peaks(
+        mounts, tolerance=tolerance, min_signal_to_noise=min_signal_to_noise,
+        minimum_height=minimum_height, separation=separation,
+    )
+    inside = [
+        peak for peak in peaks
+        if two_theta_range[0] <= peak.two_theta <= two_theta_range[1]
+    ]
+    if not inside:
+        return [], peaks
+
+    angles = np.array([peak.two_theta for peak in inside])
+    findings: list[PhaseEvidence] = []
+    for name, crystal in crystals.items():
+        if is_clay_phase(name) and not include_clays:
+            continue
+        if only is not None and name not in only:
+            continue
+        try:
+            positions, heights = peak_list(crystal, two_theta_range, reference)
+        except Exception:  # noqa: BLE001 - a broken database entry must not stop the scan
+            continue
+        if positions.size == 0 or heights.max() <= 0.0:
+            continue
+        strong = heights >= min_intensity * heights.max()
+        positions, heights = positions[strong], heights[strong]
+        if positions.size == 0:
+            continue
+        explained = 0.0
+        hit: set[int] = set()
+        matches: list[PeakMatch] = []
+        for position, weight in zip(positions, heights):
+            index = int(np.argmin(np.abs(angles - position)))
+            found = abs(angles[index] - position) <= tolerance
+            peak = inside[index]
+            if found:
+                explained += float(weight)
+                hit.add(index)
+            matches.append(PeakMatch(
+                expected_two_theta=float(position),
+                expected_intensity=float(weight),
+                window=tolerance,
+                found_two_theta=float(peak.two_theta) if found else None,
+                height=float(peak.height) if found else 0.0,
+                noise=float(peak.height / peak.signal_to_noise)
+                if found and peak.signal_to_noise > 0 else 1.0,
+            ))
+        coverage = explained / float(np.sum(heights))
+        # Reflections, not distinct peaks: two lines of a phase can fall on one
+        # stable peak, and both are reflections the measurement accounts for.
+        # This is what "2 stable reflections" counts.
+        if sum(1 for match in matches if match.matched) < min_matched:
+            continue
+        if not hit or coverage < min_coverage:
+            continue
+        findings.append(PhaseEvidence(
+            name=name,
+            is_clay=is_clay_phase(name),
+            score=coverage,
+            matches=matches,
+            presence=coverage,
+            intensity_agreement=float("nan"),
+        ))
+    findings.sort(key=lambda evidence: (-evidence.score, -evidence.n_matched))
+    return findings, peaks

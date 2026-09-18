@@ -47,7 +47,12 @@ from ..background import (
     suggest_sonneveld_visser,
 )
 from ..bern import is_clay_phase
-from ..detection import detect_phases, screen_phases
+from ..detection import (
+    COMMON_IN_CLAY_SEPARATES,
+    detect_phases,
+    screen_phases,
+    stable_phases,
+)
 from ..calibration import (
     QUARTZ_100_D,
     QUARTZ_101_D,
@@ -193,6 +198,16 @@ def working(*children) -> dcc.Loading:
     )
 
 
+STABLE_TICK_COVERAGE = 0.5
+"""Least coverage a phase needs to arrive ticked in the three-mount search.
+
+Half a phase's own strong reflections standing on peaks that every treatment
+shares.  On one real separate it ticks quartz and rutile at 100 per cent and
+leaves albite at 43 per cent for the analyst, which is the right way round: a
+feldspar's dozen reflections overlap so much of the pattern that its coverage is
+not the thing to decide it on.
+"""
+
 MIN_TICK_AGREEMENT = 0.25
 """Least intensity agreement a phase needs to arrive ticked.
 
@@ -203,7 +218,8 @@ include quartz at 0.54, microcline at 0.76 and albite at 0.78.
 """
 
 
-def phases_to_tick(findings, screened: bool, tick_above: float) -> list[str]:
+def phases_to_tick(findings, screened: bool, tick_above: float,
+                   stable: bool = False) -> list[str]:
     """Which found phases arrive already ticked in the main-mineral dialog.
 
     Only the competitive screen pre-ticks anything.  A position-matching score
@@ -230,6 +246,15 @@ def phases_to_tick(findings, screened: bool, tick_above: float) -> list[str]:
     Such a phase is still listed - it is the analyst's call, and a real mineral
     can have an overlapped line set - but it does not arrive ticked.
     """
+    if stable:
+        # In the three-mount search the score is coverage, and the threshold is
+        # its own: half a phase's strong reflections standing on peaks that
+        # every treatment shares.  ``tick_above`` is a share of the pattern and
+        # means nothing here.
+        return [
+            evidence.name for evidence in findings
+            if evidence.score >= STABLE_TICK_COVERAGE and evidence.n_matched >= 2
+        ]
     if not screened:
         return []
     return [
@@ -991,9 +1016,31 @@ def main_minerals_tab() -> html.Div:
                     label("Search range (°2θ)"),
                     dcc.RangeSlider(id="detect-range", min=2.0, max=70.0, step=0.5,
                                     value=[4.0, 40.0]),
+                    label("Minimum coverage (%), three-mount search"),
+                    dcc.Slider(id="detect-coverage", min=5, max=95, step=5, value=30,
+                               marks={5: "5", 30: "30", 60: "60", 95: "95"}),
+                    html.Div(
+                        "With two or more mounts loaded the search uses the one thing "
+                        "three treatments give that no fit of a single scan can: the "
+                        "clays move and nothing else does, so a peak at the same angle "
+                        "in every mount belongs to a non-clay phase. Coverage is the "
+                        "share of a phase's own strong reflections that stand on such a "
+                        "peak, and it does not change because another candidate was "
+                        "added. It is what finds a minor phase whose strongest line is "
+                        "overlapped: rutile is 1.5 % of one separate and covers 100 %.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     label("Restrict the search to"),
                     dcc.Dropdown(id="detect-only", options=[], value=[], multi=True,
                                  placeholder="the whole database"),
+                    html.Div(
+                        [
+                            html.Button("Common in clay separates", id="detect-common",
+                                        n_clicks=0, style={"marginRight": "6px"}),
+                            html.Button("Clear", id="detect-clear", n_clicks=0),
+                        ],
+                        style={"marginTop": "6px"},
+                    ),
                     html.Div(
                         "An unrestricted search over two hundred candidates on one "
                         "scan is genuinely ambiguous, and naming the phases the "
@@ -1813,6 +1860,17 @@ def register_callbacks(app: Dash) -> None:
         return figure, html.Div([html.B(verdict), html.Div(result.summary()), note])
 
     @app.callback(
+        Output("detect-only", "value"),
+        Input("detect-common", "n_clicks"),
+        Input("detect-clear", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def preset_restriction(_common, _clear):
+        if "detect-clear" in callback_context.triggered[0]["prop_id"]:
+            return []
+        return [name for name in COMMON_IN_CLAY_SEPARATES if name in STATE.phase_database]
+
+    @app.callback(
         Output("db-status", "children"),
         Output("detect-only", "options"),
         Input("db-load", "n_clicks"),
@@ -1881,17 +1939,30 @@ def register_callbacks(app: Dash) -> None:
         State("detect-range", "value"),
         State("detect-tick", "value"),
         State("detect-only", "value"),
+        State("detect-coverage", "value"),
         prevent_initial_call=True,
     )
     def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above,
-                      only):
-        """Search for accompanying minerals, by competitive fit or by positions.
+                      only, min_coverage):
+        """Search for accompanying minerals, three ways, in order of preference.
 
-        Which of the two happens depends on whether a clay library is loaded, and
-        the difference is not a detail: the competitive fit put quartz and albite
-        first and second on a real separate, while position matching ranked
-        quartz 101st of 169 behind pyrite, boehmite, hematite and cementite.  The
-        dialog now says which test produced the list it is showing.
+        With two or more mounts loaded the search asks which peaks stand at the
+        same angle in all of them.  That is a different measurement rather than
+        a better statistic, and it is the only one of the three that can find a
+        minor phase whose strongest line is overlapped: rutile is 1.5 per cent
+        of one real separate, its 110 falls on a feldspar reflection, and no
+        amount of fitting one scan recovers it - thirty-five phases explain more
+        of that pattern than it does.  Its two lines are at 27.47 and 36.07
+        degrees in the air-dried, glycolated and heated scans alike, and on that
+        test it comes second of eight with 100 per cent coverage while
+        anatase, faujasite, graphite and calciolangbeinite have no stable line
+        at all.
+
+        With one mount and a clay library, the candidates are fitted in
+        competition with the clays.  With one mount and no library, peak
+        positions are matched, which is much the weakest of the three: it ranked
+        quartz 101st of 169 on the same separate.  The dialog says which test
+        produced the list it is showing.
         """
         if not STATE.phase_database:
             return no_update, None, error_message(
@@ -1902,12 +1973,29 @@ def register_callbacks(app: Dash) -> None:
             return no_update, None, error_message(
                 ValueError(f"{MOUNT_LABELS[mount]} is not loaded.")
             )
+
+        loaded = [
+            STATE.mounts[name].subtracted() for name in STATE.loaded_mounts()
+            if STATE.mounts[name].subtracted() is not None
+        ]
+        stable = len(loaded) >= 2
         # With a clay library loaded the candidates can be fitted in competition
         # with the clays, which discriminates far better than matching peak
         # positions; without one, fall back to position matching.
         screened = STATE.library is not None
+        peaks: list = []
         try:
-            if screened:
+            if stable:
+                findings, peaks = stable_phases(
+                    loaded,
+                    STATE.phase_database,
+                    two_theta_range=tuple(search_range),
+                    instrument=gui_instrument(),
+                    min_coverage=float(min_coverage) / 100.0,
+                    min_signal_to_noise=float(snr),
+                    only=set(only) if only else None,
+                )
+            elif screened:
                 findings = screen_phases(
                     STATE.mounts[mount].corrected(),
                     STATE.phase_database,
@@ -1963,6 +2051,8 @@ def register_callbacks(app: Dash) -> None:
                 html.Div(
                     [
                         html.H4(
+                            "Phases whose reflections stand at the same angle in every mount:"
+                            if stable else
                             "Evidence for the following main minerals has been found in the data:"
                             if screened else
                             "Phases whose expected lines fall where the data has peaks:",
@@ -1975,7 +2065,7 @@ def register_callbacks(app: Dash) -> None:
                         # Saying so where the list is read, rather than only in the
                         # status line under the button, is the difference between a
                         # shortlist and ten spurious phases entering a fit.
-                        None if screened else html.Div(
+                        None if (screened or stable) else html.Div(
                             [
                                 html.Strong("This is the weaker test. "),
                                 "No clay library is loaded, so these are matches on peak "
@@ -2029,7 +2119,7 @@ def register_callbacks(app: Dash) -> None:
                             # top of that list put galena, otavite and cassiterite
                             # in front of an operator of a clay separate, one click
                             # from entering the fit.
-                            value=phases_to_tick(findings, screened, tick_above),
+                            value=phases_to_tick(findings, screened, tick_above, stable),
                             style={"maxHeight": "260px", "overflowY": "auto"},
                             labelStyle={"display": "block", "fontSize": "0.85rem"},
                         ),
@@ -2055,11 +2145,17 @@ def register_callbacks(app: Dash) -> None:
                 )
             ]
         )
-        method = (
-            "fitted in competition with the clay library"
-            if screened
-            else "matched on peak positions (load a clay library for the sharper test)"
-        )
+        if stable:
+            method = (
+                f"scored on the {len(peaks)} peaks that stand at the same angle in all "
+                f"{len(loaded)} loaded mounts. The clays move between treatments and "
+                f"nothing else does, so this is the one test that finds a minor phase "
+                f"whose strongest line is overlapped"
+            )
+        elif screened:
+            method = "fitted in competition with the clay library, on one mount"
+        else:
+            method = "matched on peak positions (load a clay library for the sharper test)"
         return figure, dialog, html.Div(f"{len(findings)} candidate phases, {method}.")
 
     @app.callback(
