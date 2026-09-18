@@ -127,6 +127,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-17">A.17 Pure minerals</a>
 <a href="#a-18">A.18 External standard</a>
 <a href="#a-19">A.19 Background estimators</a>
+<a href="#a-20">A.20 Library over-completeness</a>
+<a href="#a-21">A.21 Smectite orientation</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -1585,6 +1587,41 @@ name an air-dried mount &mdash; and the rest of the name must agree exactly, so
 both XRDML and <span class="kw">.xy</span> exports of everything does not yield one of each. Any
 assignment can be overridden by hand, and a box already holding a mount of the same sample is left
 untouched.</p>
+
+<p><strong>The accompanying minerals are identified here, before anything has been set.</strong> As
+soon as the scans are in &mdash; and the structure database of &sect;<a href="#s4-3">4.3</a> is
+loaded, in whichever order &mdash; a panel beneath the plot lists the phases the specimen supports.
+No zero error, no background and no reference library: this is where Clayfit does it, and two things
+make it possible.</p>
+
+<p>Each mount is aligned on <em>its own</em> quartz lines. The 20.86 and 26.64&deg; pair is looked for
+within half a degree of where it belongs; a pair counts only when the two shifts it implies agree to
+0.10&deg;, and the strongest agreeing pair wins. So a displacement of a few hundredths of a degree
+&mdash; which is what an oriented mount gives &mdash; is gone before any phase is matched, and the
+three scans are aligned independently, which they must be, because a displacement belongs to the
+preparation and the three mounts are three preparations. A peak must carry 3 % of the strongest
+peak's prominence to be taken for quartz: without that floor, noise peaks aligned one real
+specimen's three mounts by +0.37&deg;, which is not a displacement any oriented mount has.</p>
+
+<p>And the test is <em>which peaks the three treatments share</em>, not how well one of them can be
+explained. The clays move between air, glycol and heat and nothing else does, so a line at the same
+angle in all three is evidence that no amount of fitting one scan can give: rutile's strongest line
+sits on an albite reflection, so a fit of a single scan ranks thirty-five phases above it, and its
+lines are nevertheless at the same angles in all three mounts.</p>
+
+<p>Each phase is reported with three numbers. <em>Coverage</em> is the share of its own calculated
+intensity standing on a stable peak, over the lines above 6 % of its strongest; <em>stable lines</em>
+is how many of its lines those are; and <em>cell</em> is the coherent scaling it needed, up to the
+2 % allowance of &sect;<a href="#a-6">A.6</a>. A phase at 0 % fits the database entry as written and
+one near 2 % needed most of the allowance to line up, which is weaker evidence &mdash; the allowance
+is there for a solid solution a per cent off its entry, not to rescue a phase that does not fit. The
+ranking is coverage &times; &radic;lines, so a phase resting on five lines outranks one resting on
+one at the same coverage. The panel also says when one mount's alignment disagrees with the others by
+more than a displacement should, naming the outlier rather than correcting it.</p>
+
+<p>This is an identification and not a quantification: it says what the specimen supports, and step 4
+is where the phases are chosen and fitted. Nothing here is applied to the data &mdash; the zero error
+is still set in step 2, against a reference, where it can be seen.</p>
 
 <div class="note"><strong>Why <em>Browse</em> opens a dialog and not a web page's file picker.</strong>
 A browser cannot tell a page where a folder is. Its file input element reports the names and contents
@@ -4134,6 +4171,108 @@ the range, and no amount of care with the model will make it better, because the
 about what the background <em>is</em> and not about how to fit it. Any specimen where the two
 estimators disagree by more than a few per cent is a specimen whose reported percentages carry that
 disagreement, and running both is now the cheapest way to find out.</p>
+
+<h3 id="a-20">A.20 What an over-complete clay library does to the accompanying minerals</h3>
+
+<p><strong>Reasoning.</strong> A reference library of 1751 patterns fitted over 1795 points is very
+nearly a square system, and one of 2501 is under-determined outright. A non-negative least squares
+with as many columns as rows can reproduce almost any measurement, and the question is what it uses
+to do it. The concern is not abstract: the interstratified series is 1440 of those columns, its
+patterns are broad, and a broad pattern with a free coefficient can absorb a sharp peak that belongs
+to something else. If that is happening, the accompanying minerals are being under-fitted not because
+their structures or their profiles are wrong but because the clay library got there first.</p>
+
+<p><strong>Method.</strong> One real glycolated mount, one background, one set of accompanying
+minerals (quartz, albite, rutile, sekaninaite calculated from the structure database at the
+measurement's own geometry), fitted twice: once against the whole library, once against a thinned one
+holding every sixth interstratified entry and four orientations rather than ten &mdash; 145 columns
+instead of 1755. Nothing else differs, so any change in what the accompanying minerals take is the
+library's freedom and not the specimen's composition.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th class="num">Share of the pattern,<br>full library (1755 columns)</th>
+<th class="num">Share of the pattern,<br>thinned (145 columns)</th><th class="num">Ratio</th></tr>
+<tr><td>Quartz</td><td class="num">1.50 %</td><td class="num">11.24 %</td><td class="num">7.5&times;</td></tr>
+<tr><td>Albite</td><td class="num">4.35 %</td><td class="num">5.65 %</td><td class="num">1.3&times;</td></tr>
+<tr><td>Rutile</td><td class="num">1.31 %</td><td class="num">2.63 %</td><td class="num">2.0&times;</td></tr>
+<tr><td>I/S</td><td class="num">50.1 %</td><td class="num">9.7 %</td><td class="num">0.19&times;</td></tr>
+<tr><td><var>R</var><sub>wp</sub></td><td class="num">55.0 %</td><td class="num">69.1 %</td><td class="num">&mdash;</td></tr>
+</table></div>
+
+<p><strong>Result.</strong> Quartz takes <strong>seven and a half times</strong> as much of the
+pattern once the clay library is thinned, and rutile twice as much, while the interstratified series
+falls to a fifth of what it had. The composition did not change between the two fits; only how much
+freedom the clays had to explain peaks that are not theirs.</p>
+
+<p><strong>And the residual says the opposite.</strong> <var>R</var><sub>wp</sub> is 14 points
+<em>worse</em> in the fit that gives the more defensible answer. That is the same bias that makes
+<var>R</var><sub>wp</sub> useless for choosing a background (&sect;<a href="#a-19">A.19</a>), in a
+different guise: a fit with more free columns explains more of the measurement whether or not the
+explanation is right, so the residual rewards exactly the freedom that does the damage. A lower
+<var>R</var><sub>wp</sub> from a larger library is not evidence of a better analysis and should not
+be read as one.</p>
+
+<p><strong>Conclusion, and what it does not settle.</strong> The mechanism is established: an
+over-complete clay library takes intensity from the accompanying minerals, and the effect on quartz
+is nearly an order of magnitude. What the experiment does <em>not</em> establish is which of the two
+answers is closer to the truth, because the thinning was arbitrary &mdash; every sixth entry, chosen
+to change the column count and nothing else. The fix is not a thinner library chosen by hand; it is a
+fit that cannot spend a clay family on a peak that is not the family's. Clayfit does this by
+selecting one member per family and fitting its scale, rather than taking a non-negative combination
+of all of them, and that is the change this points to. Until it is made, read the status line
+beneath the fit: where it says there are more library entries than points, the split of the pattern
+between the clays and the accompanying minerals carries this.</p>
+
+<h3 id="a-21">A.21 The orientation a smectite is weighed on</h3>
+
+<p><strong>Reasoning.</strong> The glycolated smectite is the one clay in the library whose every
+reflection is basal. The March-Dollase factor for a basal series is one constant &mdash;
+<var>r</var><sup>&minus;3</sup> &mdash; so the orientation scales the whole pattern without changing
+its shape. Three things follow, and the third is a defect.</p>
+
+<ul>
+<li>Storing the phase at ten orientations would give ten identical columns once each is normalised to
+unit maximum, and a non-negative fit would divide the phase among them arbitrarily. One entry is
+right.</li>
+<li>The fit therefore cannot measure this phase's texture, as it does for illite, chlorite and the
+kaolinites from their non-basal reflections. The orientation is an assumption.</li>
+<li>That assumption goes into the weight percent as its cube, and until now it was made at
+library-build time, at <var>r</var> = 1, a random powder.</li>
+</ul>
+
+<p><strong>Method and result.</strong> The scaling was measured rather than assumed: the same
+smectite pattern was calculated at <var>r</var> = 1, 0.3 and 0.1 and compared.</p>
+
+<div class="tablewrap"><table>
+<tr><th><var>r</var></th><th class="num">Maximum intensity</th>
+<th class="num">Ratio to <var>r</var> = 1</th><th class="num"><var>r</var><sup>&minus;3</sup></th>
+<th>Shape after normalising</th></tr>
+<tr><td>1.0</td><td class="num">8.039&times;10<sup>7</sup></td><td class="num">1</td><td class="num">1</td><td>&mdash;</td></tr>
+<tr><td>0.3</td><td class="num">2.977&times;10<sup>9</sup></td><td class="num">37.037</td><td class="num">37.037</td><td>identical to 10<sup>&minus;10</sup></td></tr>
+<tr><td>0.1</td><td class="num">8.039&times;10<sup>10</sup></td><td class="num">1000.000</td><td class="num">1000.000</td><td>identical to 10<sup>&minus;10</sup></td></tr>
+</table></div>
+
+<p>So a smectite stored at <var>r</var> = 1, fitted beside illite, chlorite and kaolinite that the
+same fit put at <var>r</var> = 0.1, was weighed on a basis <strong>one thousand times heavier</strong>
+than theirs. On one real glycol mount that turned 0.95 % of the scattering into <strong>22.3 % of the
+clay weight</strong>, on a specimen whose air-dried and glycolated scans show no expansion at all.
+The smectite was not being over-<em>fitted</em>: its coefficient was tiny and its amplitude 0.38 %.
+It was being over-<em>weighed</em>.</p>
+
+<p><strong>What was changed.</strong> The quantifier now puts such a phase on the
+coefficient-weighted mean <var>r</var> of the clays whose orientation the fit did choose, and says in
+the results panel that it did and by what factor. The library's own default moved from 1 to 0.1 to
+match, and the two routes are tested to give the same weight percent, so an old library is corrected
+and a new one needs no correcting. The assumption does not disappear &mdash; the data does not
+contain this phase's texture and no arithmetic can supply it &mdash; but it becomes <em>this smectite
+has the texture of the other platy clays in this mount</em>, which is measured, rather than one made
+before the specimen was seen.</p>
+
+<p><strong>What it does not license.</strong> A smectite that really is less oriented than the
+illite beside it will now be understated, in the same proportion. The reason to prefer the new
+assumption is not that it is always right but that it is the one under which the clay percentages of
+a single mount can be compared with each other at all: a table mixing one phase on a random-powder
+basis with five on an oriented one is not a composition.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 

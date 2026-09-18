@@ -223,6 +223,16 @@ all six curves at once, and the status line reports what the subtracted pattern
 still holds between the peaks — the number to compare two models by, since
 R_wp prefers whichever model subtracts least whatever the specimen.
 
+**Accompanying minerals** are identified as soon as the scans are read, before
+the zero error is set and without a reference library. Each mount is aligned on
+its own quartz lines — the 20.86 and 26.64° pair, accepted only when the two
+shifts they imply agree — and a phase is reported when its lines stand at the
+same angle in all three mounts. That is a different measurement from explaining
+one pattern, and it is the one that finds a phase whose strongest line is
+overlapped: rutile's 110 sits on an albite reflection, so a fit of one scan
+ranks thirty-five phases above it, and its lines are nevertheless at the same
+angles in the air-dried, glycolated and heated scans alike.
+
 **Kaolinite** is identified by the collapse of the 7.15 Å reflection on heating,
 scaled on a survivor reflection so the two mounts are comparable; what survives
 is chlorite 002. **Expandable clay** is identified by the shift of the low-angle
