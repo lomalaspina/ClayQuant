@@ -204,21 +204,24 @@ kaolinite is strong. Measured across eleven samples, the detected shifts are
 −0.02° to −0.06° and agree to 0.02° between the three mounts of a sample; where
 quartz is genuinely absent the tool says so rather than reporting a number.
 
-**Background.** Polynomial, Chebyshev and exponential components, with the `1/x`
-term accumulable on top of any of them, plus a non-parametric peak-stripped
-option — the direct-beam tail of an oriented mount is not a low-order polynomial.
-Models are fitted to a peak-stripped estimate, not to the raw counts: a clay
-pattern has no peak-free points below about 8°, and fitting the raw intensities
-there drags the background up into the basal reflections, removing the very
-signal being quantified.
+**Background.** Six models: exponential, polynomial, Chebyshev, asymmetric
+least squares, a percentile/Savitzky–Golay envelope, and the Sonneveld–Visser
+erosion. The first five are Clayfit's, reimplemented so that the same choice
+gives the same curve, and they are verified against transcriptions of Clayfit's
+own source point for point; the erosion is the addition. An `A/2θ` term can be
+added to any of them, with `A` set rather than fitted, so it cannot pay for
+itself by eating the 001 reflections that stand on the low-angle rise.
 
-The stripping has one property that matters more than any setting: where the
-background is convex — which the direct-beam tail is — the mean of two symmetric
-neighbours is never below the point itself, so the estimate leaves it *exactly*
-unchanged. A tail of 1820 counts falling to 339 comes back to within a count with
-no peaks present, and to within 30 counts with ten peaks up to 7000 counts high
-standing on it. The stripping width then means peak width and nothing else; 4° is
-the default, and the estimate is drawn on the plot so the choice is visible.
+They are six methods, not six components to be summed, and they do not agree
+with one another — on a real air-dried mount they sit as much as 1400 counts
+apart at 3°. The polynomial and the exponential are fitted to anchor points
+found by rolling a ball under the pattern; the Chebyshev series is fitted to
+I/2θ over the whole pattern, peaks included, then rescaled by one amplitude, so
+it is not obliged to pass through the anchors and usually dives below them. The
+order, 4 to 12, moves both and does not make them agree. The tab therefore draws
+all six curves at once, and the status line reports what the subtracted pattern
+still holds between the peaks — the number to compare two models by, since
+R_wp prefers whichever model subtracts least whatever the specimen.
 
 **Kaolinite** is identified by the collapse of the 7.15 Å reflection on heating,
 scaled on a survivor reflection so the two mounts are comparable; what survives

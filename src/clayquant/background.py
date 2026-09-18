@@ -40,12 +40,43 @@ adjusted, which is what the GUI is for.
 
 from __future__ import annotations
 
+import hashlib
 import math
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
 
 __all__ = [
+    "CLAYFIT_ALS_ASYMMETRY",
+    "CLAYFIT_ALS_ITERATIONS",
+    "CLAYFIT_ALS_SMOOTHNESS",
+    "CLAYFIT_ANCHOR_RADIUS",
+    "CLAYFIT_ANCHOR_STRIDE",
+    "CLAYFIT_INVERSE_X_AMPLITUDE",
+    "CLAYFIT_MODELS",
+    "CLAYFIT_MODEL_LABELS",
+    "CLAYFIT_ORDER",
+    "CLAYFIT_ORDER_LIMITS",
+    "QPA_BASELINE_ORDER",
+    "QPA_BASELINE_SMOOTH",
+    "QPA_FINAL_ORDER",
+    "QPA_FINAL_SMOOTH",
+    "QPA_LOWER_PERCENTILE",
+    "QPA_MODEL_NAME",
+    "QPA_PERCENTILE_WINDOW",
+    "ClayfitBackground",
+    "QpaBaseline",
+    "als_baseline_2d",
+    "background_anchors",
+    "chebyshev_baseline",
+    "clayfit_background",
+    "exponential_baseline",
+    "inverse_x_baseline",
+    "polynomial_baseline",
+    "qpa_percentile_baseline",
+    "rolling_ball",
+    "smooth_by_degrees",
     "ESTIMATORS",
     "ESTIMATOR_LABELS",
     "SONNEVELD_VISSER_BENDING",
@@ -1365,5 +1396,791 @@ def suggest_sonneveld_visser(
         step=step,
         floored=floored,
         capped=capped,
+        note=note,
+    )
+
+
+# --------------------------------------------------------------------------
+# The Clayfit background models
+# --------------------------------------------------------------------------
+#
+# Everything from here down is Clayfit's background step, reimplemented so that
+# the same choice made here and there gives the same curve.  It replaces an
+# earlier design in which one parametric model (above) was fitted to a
+# peak-stripped estimate of the background, and it is a different thing in two
+# ways that matter.
+#
+# First, Clayfit's menu is a menu of *algorithms*, not of bases.  "Polynomial"
+# is a least-squares polynomial through a set of anchor points, in raw 2theta.
+# "Chebyshev" is a Chebyshev series fitted to ``I/2theta`` over the *whole*
+# pattern - peaks included - which is then rescaled by a single amplitude fitted
+# to the anchor points.  The two therefore do not agree, and cannot: only the
+# first is constrained to pass near the anchor points, and only the second sees
+# the peaks.  An earlier version of this module offered "Polynomial" and
+# "Chebyshev" as two bases for the same unconstrained least-squares fit, where
+# they do span the same space and do give the same curve, and the note here said
+# so.  That was a statement about that implementation, not about the two
+# methods, and it does not describe Clayfit - where the order slider visibly
+# moves both curves and the two sit in different places.
+#
+# Second, the anchor points are found by a rolling ball rather than by peak
+# stripping, and the order runs from 4 to 12 with 6 the default.
+#
+# The one deliberate difference, besides Sonneveld-Visser being offered as a
+# sixth model, is that :meth:`ClayfitBackground.subtract` clips the corrected
+# pattern at zero for every model rather than for the percentile model alone.
+# That is a requirement of what comes after it here - the weights of the
+# non-negative least squares are 1/counts - and it changes the corrected
+# pattern, never the background curve, which is what the two programs are being
+# compared on.
+
+CLAYFIT_ANCHOR_RADIUS = 0.5
+"""Rolling-ball radius, as a fraction of the pattern's own extent.
+
+The ball rolls under the pattern scaled into the unit square, so the radius is
+dimensionless and means the same thing on any scan: 0.5 is Clayfit's value and
+a ball of half the width of the whole pattern.
+"""
+
+CLAYFIT_ANCHOR_STRIDE = 5
+"""Points between the samples the ball rolls on - Clayfit's ``array[::5]``.
+
+The rolling ball compares every pair of samples against every sample, so the
+work grows as the cube of their number; on a 2200-point scan every fifth point
+is 440 samples and about a second.  It also sets the finest feature the ball can
+enter, which on a 0.017 deg scan is 0.08 deg - narrower than any reflection.
+"""
+
+CLAYFIT_ORDER = 6
+"""Default polynomial/Chebyshev order.  Clayfit's ``polydegree``."""
+
+CLAYFIT_ORDER_LIMITS = (4, 12)
+"""Order range Clayfit accepts, and the range of its slider."""
+
+CLAYFIT_INVERSE_X_AMPLITUDE = 500.0
+"""Default amplitude ``A`` of the additive ``A/2theta`` term.
+
+Set rather than fitted, which is the point of it: it is there to be turned up
+until the low-angle rise is accounted for, and a fitted ``A`` would instead be
+free to eat the 001 reflections that sit on that rise.
+"""
+
+CLAYFIT_ALS_SMOOTHNESS = 1.0
+CLAYFIT_ALS_ASYMMETRY = 0.001
+CLAYFIT_ALS_ITERATIONS = 100
+"""Clayfit's ``baseline_als_2d(lam=1, p=0.001, niter=100)``.
+
+``lam`` looks small only because the second-difference operator is divided by
+the square of the step: at 0.0167 deg that is a factor of 3600, so the
+smoothing is comparable to ``lam`` of 10^7 on an unscaled grid.
+"""
+
+QPA_PERCENTILE_WINDOW = 1.50
+QPA_LOWER_PERCENTILE = 15.0
+QPA_BASELINE_SMOOTH = 0.30
+QPA_BASELINE_ORDER = 2
+QPA_FINAL_SMOOTH = 0.08
+QPA_FINAL_ORDER = 2
+"""Clayfit's percentile/Savitzky-Golay defaults, in degrees and orders."""
+
+QPA_MODEL_NAME = "qpa"
+"""Clayfit calls it "QPA percentile + Savitzky-Golay"."""
+
+CLAYFIT_MODELS = (
+    "exponential",
+    "polynomial",
+    "chebyshev",
+    "als",
+    QPA_MODEL_NAME,
+    "sonneveld-visser",
+)
+"""The models the background step offers, in Clayfit's own order.
+
+The first five are Clayfit's; Sonneveld-Visser is the addition.
+"""
+
+CLAYFIT_MODEL_LABELS = {
+    "exponential": "Exponential",
+    "polynomial": "Polynomial",
+    "chebyshev": "Chebyshev",
+    "als": "ALS",
+    QPA_MODEL_NAME: "QPA percentile + Savitzky-Golay",
+    "sonneveld-visser": "Sonneveld-Visser",
+}
+
+_ANCHOR_CACHE: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def rolling_ball(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    radius: float = CLAYFIT_ANCHOR_RADIUS,
+) -> np.ndarray:
+    """Indices of the points a ball of ``radius`` touches rolling underneath.
+
+    The pattern is scaled into the unit square, so ``radius`` is a fraction of
+    its own extent rather than a number of degrees or counts.  For every pair of
+    points a circle of that radius is passed through both; of its two possible
+    centres the lower one that lies under the pattern is taken, and the pair is
+    a pair of contact points when no other point lies inside that circle.  What
+    comes back is the set of all such points: the lower envelope of the pattern
+    at the scale the ball can follow.
+
+    This is Clayfit's ``rolling_ball``, and the two agree point for point.  It
+    is written over whole arrays rather than in a compiled loop because the
+    quadratic part - a circle through each of the 10^5 pairs - is the cheap
+    part, and the cubic part is done in chunks.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if radius <= 0.0:
+        raise ValueError("the rolling-ball radius must be positive")
+    count = x.size
+    if count < 3:
+        return np.arange(count)
+
+    span_x = float(x.max() - x.min())
+    span_y = float(y.max() - y.min())
+    if span_x <= 0.0 or span_y <= 0.0:
+        # A flat pattern has no envelope to find; every point is on it.
+        return np.arange(count)
+    u = (x - x.min()) / span_x
+    v = (y - y.min()) / span_y
+
+    first, second = np.triu_indices(count, k=1)
+    separation = np.hypot(u[second] - u[first], v[second] - v[first])
+    # Points further apart than the diameter admit no such circle, and
+    # coincident points give no direction to offset the centre along.
+    reachable = (separation < 2.0 * radius - 1e-9) & (separation >= 1e-9)
+    first, second, separation = first[reachable], second[reachable], separation[reachable]
+    if first.size == 0:
+        return np.arange(count)
+
+    step_u = u[second] - u[first]
+    step_v = v[second] - v[first]
+    offset = np.sqrt(np.maximum(radius**2 - (0.5 * separation) ** 2, 0.0))
+    normal_u = -step_v / separation
+    normal_v = step_u / separation
+    middle_u = 0.5 * (u[first] + u[second])
+    middle_v = 0.5 * (v[first] + v[second])
+    centre_u = np.stack((middle_u + offset * normal_u, middle_u - offset * normal_u))
+    centre_v = np.stack((middle_v + offset * normal_v, middle_v - offset * normal_v))
+
+    # Clayfit's own validity test: the centre must not sit above the pattern,
+    # judged at the sample nearest in x.
+    right = np.clip(np.searchsorted(u, centre_u), 1, count - 1)
+    left = right - 1
+    nearer_left = np.abs(centre_u - u[left]) <= np.abs(u[right] - centre_u)
+    beneath = centre_v <= v[np.where(nearer_left, left, right)]
+
+    both = beneath[0] & beneath[1]
+    lower = centre_v[0] < centre_v[1]
+    take_first = (both & lower) | (beneath[0] & ~beneath[1])
+    usable = take_first | (both & ~lower) | (beneath[1] & ~beneath[0])
+    chosen_u = np.where(take_first, centre_u[0], centre_u[1])[usable]
+    chosen_v = np.where(take_first, centre_v[0], centre_v[1])[usable]
+    first, second = first[usable], second[usable]
+    if first.size == 0:
+        return np.arange(count)
+
+    empty = np.zeros(first.size, dtype=bool)
+    # Four million distances at a time, which is a few tens of megabytes.
+    block = max(1, 4_000_000 // count)
+    for start in range(0, first.size, block):
+        stop = min(start + block, first.size)
+        distance = np.hypot(
+            u[None, :] - chosen_u[start:stop, None],
+            v[None, :] - chosen_v[start:stop, None],
+        )
+        inside = distance < radius - 1e-6
+        rows = np.arange(stop - start)
+        # The two contact points lie on the circle, not inside it, but floating
+        # point puts them either side of that; Clayfit excludes them explicitly.
+        inside[rows, first[start:stop]] = False
+        inside[rows, second[start:stop]] = False
+        empty[start:stop] = ~inside.any(axis=1)
+
+    return np.unique(np.concatenate((first[empty], second[empty])))
+
+
+def background_anchors(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    radius: float = CLAYFIT_ANCHOR_RADIUS,
+    stride: int = CLAYFIT_ANCHOR_STRIDE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The anchor points the polynomial and exponential models are fitted to.
+
+    Clayfit's ``find_bkg_points(array[::5], r=0.5)``: every ``stride``-th point
+    of the pattern is offered to the rolling ball, and the points it touches are
+    the anchors.  On a clay mount there are typically twenty to thirty of them,
+    which is what makes the order of the polynomial fitted through them
+    meaningful and why an order above 12 is refused.
+
+    Results are cached on the contents of the pattern, so moving the order
+    slider does not roll the ball again.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    stride = max(1, int(stride))
+    key = (
+        hashlib.blake2b(np.ascontiguousarray(x).tobytes(), digest_size=16).digest(),
+        hashlib.blake2b(np.ascontiguousarray(y).tobytes(), digest_size=16).digest(),
+        float(radius),
+        stride,
+    )
+    cached = _ANCHOR_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    sampled_x, sampled_y = x[::stride], y[::stride]
+    contacts = rolling_ball(sampled_x, sampled_y, radius=radius)
+    anchors = (sampled_x[contacts].copy(), sampled_y[contacts].copy())
+    if len(_ANCHOR_CACHE) > 32:
+        _ANCHOR_CACHE.clear()
+    _ANCHOR_CACHE[key] = anchors
+    return anchors
+
+
+def polynomial_baseline(
+    two_theta: np.ndarray,
+    anchor_two_theta: np.ndarray,
+    anchor_intensity: np.ndarray,
+    order: int = CLAYFIT_ORDER,
+) -> np.ndarray:
+    """Least-squares polynomial of ``order`` through the anchor points.
+
+    Clayfit's ``poly_bkg``: ``np.polyfit`` on the anchors, evaluated on the
+    pattern, in raw 2theta rather than in a scaled variable.  Raw 2theta is
+    worth naming because it is what makes the higher orders behave as they do -
+    at order 12 the monomials of an argument running from 3 to 40 span 18 orders
+    of magnitude, so the fit is ill-conditioned and the curve is free to move a
+    long way between anchors.  That is the same arithmetic Clayfit does.
+    """
+    anchor_x = np.asarray(anchor_two_theta, dtype=float)
+    anchor_y = np.asarray(anchor_intensity, dtype=float)
+    order = int(order)
+    if order < 0:
+        raise ValueError("the order must not be negative")
+    if anchor_x.size <= order:
+        raise ValueError(
+            f"{anchor_x.size} anchor points for an order-{order} polynomial; "
+            f"lower the order or widen the rolling ball"
+        )
+    with warnings.catch_warnings():
+        # np.polyfit warns that a high-order fit in raw 2theta is badly
+        # conditioned, which is true and is the method being reproduced.
+        warnings.simplefilter("ignore", np.exceptions.RankWarning)
+        coefficients = np.polyfit(anchor_x, anchor_y, order)
+    return np.polyval(coefficients, np.asarray(two_theta, dtype=float))
+
+
+def chebyshev_baseline(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    anchor_two_theta: np.ndarray,
+    anchor_intensity: np.ndarray,
+    order: int = CLAYFIT_ORDER,
+) -> np.ndarray:
+    """A Chebyshev shape fitted to ``I/2theta``, rescaled to the anchor points.
+
+    Clayfit's ``cheby_bkg``, which is TOPAS's way of writing a background with a
+    ``1/x`` term built in:
+
+    1. a Chebyshev series of ``order`` is least-squares fitted to
+       ``intensity / two_theta`` over the *whole* pattern, peaks included;
+    2. that shape is multiplied by ``2theta`` implicitly - the series is the
+       background *divided* by the angle - and one amplitude is fitted to the
+       anchor points.
+
+    Because the shape is fitted to the whole pattern it follows the peaks, and
+    because only an amplitude is then free the curve is not obliged to pass
+    through the anchors.  That is why it sits well below the measurement on a
+    pattern with strong basal reflections, and why it moves when the order
+    changes: the shape is refitted at every order.
+
+    The amplitude is solved in closed form rather than by ``curve_fit``, which
+    is the same answer for a model linear in its one parameter.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if np.any(x <= 0.0):
+        raise ValueError("the Chebyshev background needs positive 2theta values")
+    order = int(order)
+    if order < 0:
+        raise ValueError("the order must not be negative")
+    shape = np.polynomial.chebyshev.Chebyshev.fit(x, y / x, order)
+    at_anchors = shape(np.asarray(anchor_two_theta, dtype=float))
+    anchor_y = np.asarray(anchor_intensity, dtype=float)
+    denominator = float(np.dot(at_anchors, at_anchors))
+    if denominator <= 0.0:
+        raise ValueError("the Chebyshev shape vanishes at every anchor point")
+    amplitude = float(np.dot(at_anchors, anchor_y)) / denominator
+    return amplitude * shape(x)
+
+
+def exponential_baseline(
+    two_theta: np.ndarray,
+    anchor_two_theta: np.ndarray,
+    anchor_intensity: np.ndarray,
+) -> np.ndarray:
+    """``a exp(-b 2theta) + c`` fitted to the anchor points.
+
+    Clayfit's ``exp_bkg``, with its starting values: ``c`` the lowest anchor,
+    ``a`` the range of the anchors and ``b`` the reciprocal of the highest
+    angle.  It is Clayfit's default model and the one that describes an oriented
+    mount's background best over the first few degrees, where the direct-beam
+    tail falls faster than any low-order polynomial through the same points.
+
+    Raises :class:`RuntimeError` when the fit does not converge, which is what
+    Clayfit catches to fall back on the polynomial.
+    """
+    from scipy.optimize import curve_fit
+
+    anchor_x = np.asarray(anchor_two_theta, dtype=float)
+    anchor_y = np.asarray(anchor_intensity, dtype=float)
+    if anchor_x.size < 3:
+        raise RuntimeError("an exponential background needs at least three anchor points")
+
+    def model(angle, amplitude, decay, floor):
+        return amplitude * np.exp(-decay * angle) + floor
+
+    floor = float(anchor_y.min())
+    start = [float(anchor_y.max()) - floor, 1.0 / (float(anchor_x.max()) or 1.0), floor]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        parameters, _ = curve_fit(model, anchor_x, anchor_y, p0=start, maxfev=5000)
+    return model(np.asarray(two_theta, dtype=float), *parameters)
+
+
+def als_baseline_2d(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    smoothness: float = CLAYFIT_ALS_SMOOTHNESS,
+    asymmetry: float = CLAYFIT_ALS_ASYMMETRY,
+    iterations: int = CLAYFIT_ALS_ITERATIONS,
+) -> np.ndarray:
+    """Asymmetric least squares with Clayfit's scaling and parameters.
+
+    The same method as :func:`als_baseline` with two differences, both
+    Clayfit's: the second-difference operator is divided by the square of the
+    mean step, so ``smoothness`` is in physical units and 1 is a strong
+    smoothing rather than none; and a point exactly on the baseline is given
+    weight zero rather than being counted on either side.
+    """
+    from scipy import sparse
+    from scipy.sparse.linalg import spsolve
+
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if smoothness <= 0.0:
+        raise ValueError("smoothness must be positive")
+    if asymmetry <= 0.0:
+        raise ValueError("asymmetry must be positive")
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+    size = y.size
+    if size < 5:
+        return y.copy()
+    step = float(np.mean(np.diff(x)))
+    if step <= 0.0:
+        raise ValueError("two_theta must be increasing")
+
+    second = sparse.diags(
+        [1.0, -2.0, 1.0], [0, -1, -2], shape=(size, size - 2), format="csr"
+    ) / step**2
+    penalty = smoothness * (second @ second.T)
+    weights = np.ones(size)
+    baseline = y.copy()
+    for _ in range(iterations):
+        system = sparse.diags(weights, 0, format="csc") + penalty
+        baseline = spsolve(system.tocsc(), weights * y)
+        updated = asymmetry * (y > baseline) + (1.0 - asymmetry) * (y < baseline)
+        if np.array_equal(updated, weights):
+            break
+        weights = updated
+    return np.asarray(baseline, dtype=float)
+
+
+def _odd_window(points: int, minimum: int) -> int:
+    value = max(int(minimum), int(points))
+    return value if value % 2 else value + 1
+
+
+def _savgol_window(
+    length: int,
+    step: float,
+    window_degrees: float,
+    order: int,
+    minimum_points: int,
+) -> int:
+    """Points in a Savitzky-Golay window of ``window_degrees``, Clayfit's rule."""
+    if window_degrees == 0.0:
+        return 0
+    largest_odd = length if length % 2 else length - 1
+    least_for_order = order + 1
+    if least_for_order % 2 == 0:
+        least_for_order += 1
+    requested = _odd_window(round(window_degrees / step), max(minimum_points, least_for_order))
+    window = min(largest_odd, requested)
+    if window <= order:
+        raise ValueError("the Savitzky-Golay order is too high for this pattern")
+    return window
+
+
+def smooth_by_degrees(
+    values: np.ndarray,
+    step: float,
+    window_degrees: float,
+    order: int,
+    minimum_points: int = 5,
+) -> tuple[np.ndarray, int]:
+    """Savitzky-Golay smoothing over a window given in degrees, not in points.
+
+    Clayfit's ``smooth_by_degrees``.  A window of zero degrees means no
+    smoothing and returns the signal unchanged, which is how the percentile
+    model's two smoothing stages are switched off.
+    """
+    from scipy.signal import savgol_filter
+
+    signal = np.asarray(values, dtype=float)
+    if signal.ndim != 1 or signal.size < 3 or not np.all(np.isfinite(signal)):
+        raise ValueError("the signal must be a finite one-dimensional array")
+    if not np.isfinite(step) or step <= 0.0:
+        raise ValueError("the angular step must be finite and positive")
+    if not np.isfinite(window_degrees) or window_degrees < 0.0:
+        raise ValueError("the smoothing window must be finite and non-negative")
+    order = int(order)
+    if order < 0:
+        raise ValueError("the Savitzky-Golay order must not be negative")
+    points = _savgol_window(signal.size, float(step), float(window_degrees), order,
+                            minimum_points)
+    if points == 0:
+        return signal.copy(), 0
+    return np.asarray(savgol_filter(signal, points, order), dtype=float), points
+
+
+@dataclass
+class QpaBaseline:
+    """The percentile background, what it left, and the windows it used."""
+
+    baseline: np.ndarray
+    corrected: np.ndarray
+    smoothed: np.ndarray
+    step: float
+    percentile_points: int
+    baseline_smooth_points: int
+    final_smooth_points: int
+
+
+def qpa_percentile_baseline(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    window: float = QPA_PERCENTILE_WINDOW,
+    baseline_smooth: float = QPA_BASELINE_SMOOTH,
+    baseline_order: int = QPA_BASELINE_ORDER,
+    final_smooth: float = QPA_FINAL_SMOOTH,
+    final_order: int = QPA_FINAL_ORDER,
+    percentile: float = QPA_LOWER_PERCENTILE,
+) -> QpaBaseline:
+    """Clayfit's percentile/Savitzky-Golay background, for quantification.
+
+    A running ``percentile``-th percentile over ``window`` degrees, smoothed by
+    a Savitzky-Golay filter over ``baseline_smooth`` degrees; the corrected
+    pattern is clipped at zero and smoothed again over ``final_smooth``
+    degrees.  It is the one model here whose corrected pattern is smoothed,
+    which is what Clayfit's "QPA" means: the pattern is being prepared for a
+    quantitative fit rather than displayed.
+
+    A fifteenth percentile over 1.5 deg cannot be raised by a reflection that
+    occupies less than that fraction of the window, and follows a structured
+    background far more closely than a polynomial through twenty anchor points
+    can.  The price is that it follows a broad reflection too, which is why the
+    window is a parameter: on an oriented mount with a smectite band it has to
+    be wide enough that the band is not taken for background.
+    """
+    from scipy.ndimage import percentile_filter
+
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if y.size < 3:
+        raise ValueError("at least three points are needed")
+    if not np.isfinite(window) or window <= 0.0:
+        raise ValueError("the percentile window must be finite and positive")
+    if not 0.0 <= percentile <= 100.0:
+        raise ValueError("the percentile must lie between 0 and 100")
+
+    step = float(np.median(np.diff(x)))
+    if step <= 0.0:
+        raise ValueError("two_theta must be increasing")
+    percentile_points = _odd_window(round(float(window) / step), 21)
+    baseline = np.asarray(
+        percentile_filter(y, percentile=float(percentile), size=percentile_points,
+                          mode="nearest"),
+        dtype=float,
+    )
+    baseline, baseline_points = smooth_by_degrees(
+        baseline, step, baseline_smooth, baseline_order, minimum_points=7
+    )
+    corrected = np.clip(y - baseline, 0.0, None)
+    smoothed, final_points = smooth_by_degrees(
+        corrected, step, final_smooth, final_order, minimum_points=5
+    )
+    return QpaBaseline(
+        baseline=baseline,
+        corrected=corrected,
+        smoothed=smoothed,
+        step=step,
+        percentile_points=percentile_points,
+        baseline_smooth_points=baseline_points,
+        final_smooth_points=final_points,
+    )
+
+
+def inverse_x_baseline(two_theta: np.ndarray, amplitude: float) -> np.ndarray:
+    """The additive ``A / 2theta`` term, with ``A`` set rather than fitted."""
+    x = np.asarray(two_theta, dtype=float)
+    if not np.all(np.isfinite(x)):
+        raise ValueError("the 2theta values must all be finite")
+    if np.any(x <= 0.0):
+        raise ValueError("the 1/x background needs positive 2theta values")
+    if not np.isfinite(amplitude) or amplitude < 0.0:
+        raise ValueError("the 1/x amplitude must be finite and non-negative")
+    return float(amplitude) / x
+
+
+@dataclass
+class ClayfitBackground:
+    """A background calculated by one of Clayfit's models.
+
+    It carries the interface of :class:`BackgroundFit`, so it can be stored and
+    subtracted anywhere one is expected, and additionally the anchor points and
+    the ``A/x`` amplitude, which are what the operator is adjusting.
+    """
+
+    two_theta: np.ndarray
+    baseline: np.ndarray
+    kind: str
+    order: int | None = None
+    anchor_two_theta: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    anchor_intensity: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    inverse_x_amplitude: float = 0.0
+    smooth_degrees: float = 0.0
+    smooth_order: int = QPA_FINAL_ORDER
+    smooth_points: int = 0
+    note: str = ""
+    """Set when a model fell back on another, as the exponential does."""
+
+    def __post_init__(self) -> None:
+        self.two_theta = np.asarray(self.two_theta, dtype=float)
+        self.baseline = np.asarray(self.baseline, dtype=float)
+        if self.two_theta.shape != self.baseline.shape:
+            raise ValueError("two_theta and baseline must have the same shape")
+
+    @property
+    def model(self) -> str:
+        parts = [CLAYFIT_MODEL_LABELS.get(self.kind, self.kind)]
+        if self.order is not None:
+            parts.append(f"order {self.order:d}")
+        if self.inverse_x_amplitude > 0.0:
+            parts.append(f"+ {self.inverse_x_amplitude:g}/2θ")
+        if self.anchor_two_theta.size:
+            parts.append(f"{self.anchor_two_theta.size:d} anchor points")
+        return f"{parts[0]} ({', '.join(parts[1:])})" if len(parts) > 1 else parts[0]
+
+    @property
+    def components(self) -> list[str]:
+        names = [CLAYFIT_MODEL_LABELS.get(self.kind, self.kind)]
+        if self.inverse_x_amplitude > 0.0:
+            names.append("A/2theta")
+        return names
+
+    @property
+    def n_terms(self) -> int:
+        """Free parameters fitted to the anchor points.
+
+        The polynomial has ``order + 1``; the Chebyshev model has one, its
+        amplitude, however high the order, because the shape is fitted to the
+        pattern and not to the anchors; the exponential has three; the
+        percentile and erosion models fit nothing.  The ``A/x`` amplitude is
+        never fitted and never counted.
+        """
+        if self.kind == "polynomial":
+            return int(self.order or 0) + 1
+        if self.kind == "chebyshev":
+            return 1
+        if self.kind == "exponential":
+            return 3
+        return 0
+
+    @property
+    def points(self) -> np.ndarray:
+        """Which points of the pattern the background was judged against."""
+        if self.anchor_two_theta.size == 0:
+            return np.ones(self.two_theta.shape, dtype=bool)
+        mask = np.zeros(self.two_theta.shape, dtype=bool)
+        mask[np.searchsorted(self.two_theta, self.anchor_two_theta).clip(
+            0, self.two_theta.size - 1)] = True
+        return mask
+
+    @property
+    def target(self) -> np.ndarray:
+        """The curve the model was fitted to, for drawing.
+
+        For the models fitted to anchor points there is no such curve - the
+        anchors are the data - so the background itself is returned and the view
+        has nothing extra to draw.
+        """
+        return self.baseline
+
+    def __call__(self, two_theta: np.ndarray) -> np.ndarray:
+        return np.interp(
+            np.asarray(two_theta, dtype=float),
+            self.two_theta,
+            self.baseline,
+            left=self.baseline[0],
+            right=self.baseline[-1],
+        )
+
+    def subtract(self, two_theta: np.ndarray, intensity: np.ndarray) -> np.ndarray:
+        """The corrected pattern, clipped at zero and smoothed where asked.
+
+        Clayfit clips only the percentile model's corrected pattern; here every
+        model is clipped, because the non-negative least squares that follows
+        weights each point by 1/counts and a negative count has no meaning as a
+        variance.  The background curve is unaffected.
+        """
+        angles = np.asarray(two_theta, dtype=float)
+        corrected = np.clip(np.asarray(intensity, dtype=float) - self(angles), 0.0, None)
+        if self.smooth_degrees > 0.0 and angles.size > 2:
+            step = float(np.median(np.diff(angles)))
+            if step > 0.0:
+                corrected, _ = smooth_by_degrees(
+                    corrected, step, self.smooth_degrees, self.smooth_order
+                )
+                corrected = np.clip(corrected, 0.0, None)
+        return corrected
+
+    def r_squared(self, two_theta: np.ndarray, intensity: np.ndarray | None = None) -> float:
+        """How well the model describes the anchor points it was fitted to.
+
+        Against the anchors, not against the pattern: the background is meant to
+        pass through the lower envelope, and measuring it against data that
+        still carries the peaks would reward a model that ran up into them.
+        For the models that fit nothing there is nothing to report.
+        """
+        if self.anchor_two_theta.size < 3 or self.n_terms == 0:
+            return float("nan")
+        observed = self.anchor_intensity
+        predicted = self(self.anchor_two_theta)
+        total = float(np.sum((observed - observed.mean()) ** 2))
+        if total <= 0.0:
+            return float("nan")
+        return 1.0 - float(np.sum((observed - predicted) ** 2)) / total
+
+
+def clayfit_background(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    kind: str = "exponential",
+    order: int = CLAYFIT_ORDER,
+    inverse_x_amplitude: float = 0.0,
+    radius: float = CLAYFIT_ANCHOR_RADIUS,
+    stride: int = CLAYFIT_ANCHOR_STRIDE,
+    qpa_window: float = QPA_PERCENTILE_WINDOW,
+    qpa_baseline_smooth: float = QPA_BASELINE_SMOOTH,
+    qpa_baseline_order: int = QPA_BASELINE_ORDER,
+    qpa_final_smooth: float = QPA_FINAL_SMOOTH,
+    qpa_final_order: int = QPA_FINAL_ORDER,
+    granularity: int = SONNEVELD_VISSER_GRANULARITY,
+    bending: float = SONNEVELD_VISSER_BENDING,
+) -> ClayfitBackground:
+    """Calculate one of the background models, as Clayfit's background step does.
+
+    ``kind`` is one of :data:`CLAYFIT_MODELS`.  ``order`` drives the polynomial
+    and the Chebyshev model and is ignored by the rest; the ``qpa_*`` arguments
+    drive the percentile model, ``granularity`` and ``bending`` the erosion.
+    ``inverse_x_amplitude`` is added to whichever model was chosen, and is a
+    setting rather than a fitted coefficient.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.shape != y.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    if kind not in CLAYFIT_MODELS:
+        raise ValueError(
+            f"unknown background model {kind!r}; expected one of {', '.join(CLAYFIT_MODELS)}"
+        )
+    low, high = CLAYFIT_ORDER_LIMITS
+    if kind in ("polynomial", "chebyshev") and not low <= int(order) <= high:
+        raise ValueError(f"the polynomial/Chebyshev order must be from {low} to {high}")
+
+    anchor_x = np.array([], dtype=float)
+    anchor_y = np.array([], dtype=float)
+    used_order: int | None = None
+    smooth_degrees = 0.0
+    note = ""
+
+    if kind in ("exponential", "polynomial", "chebyshev"):
+        anchor_x, anchor_y = background_anchors(x, y, radius=radius, stride=stride)
+
+    if kind == "polynomial":
+        baseline = polynomial_baseline(x, anchor_x, anchor_y, order=int(order))
+        used_order = int(order)
+    elif kind == "chebyshev":
+        baseline = chebyshev_baseline(x, y, anchor_x, anchor_y, order=int(order))
+        used_order = int(order)
+    elif kind == "exponential":
+        try:
+            baseline = exponential_baseline(x, anchor_x, anchor_y)
+        except (RuntimeError, ValueError) as exc:
+            # Clayfit's own fallback, and worth reporting rather than hiding:
+            # the two curves are not interchangeable.
+            baseline = polynomial_baseline(x, anchor_x, anchor_y, order=int(order))
+            used_order = int(order)
+            note = (f"The exponential fit did not converge ({exc}); "
+                    f"the order-{int(order)} polynomial is shown instead.")
+    elif kind == "als":
+        baseline = als_baseline_2d(x, y)
+    elif kind == QPA_MODEL_NAME:
+        result = qpa_percentile_baseline(
+            x, y,
+            window=qpa_window,
+            baseline_smooth=qpa_baseline_smooth,
+            baseline_order=qpa_baseline_order,
+            final_smooth=qpa_final_smooth,
+            final_order=qpa_final_order,
+        )
+        baseline = result.baseline
+        smooth_degrees = float(qpa_final_smooth)
+    else:
+        baseline = sonneveld_visser_baseline(
+            x, y, granularity=int(granularity), bending=float(bending)
+        )
+
+    amplitude = float(inverse_x_amplitude)
+    if amplitude > 0.0:
+        baseline = baseline + inverse_x_baseline(x, amplitude)
+
+    return ClayfitBackground(
+        two_theta=x,
+        baseline=baseline,
+        kind=kind,
+        order=used_order,
+        anchor_two_theta=anchor_x,
+        anchor_intensity=anchor_y,
+        inverse_x_amplitude=amplitude,
+        smooth_degrees=smooth_degrees,
+        smooth_order=int(qpa_final_order),
         note=note,
     )

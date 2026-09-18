@@ -40,11 +40,22 @@ from dash import Dash, Input, Output, State, callback_context, dcc, html, no_upd
 from dash.exceptions import PreventUpdate
 
 from ..background import (
-    ESTIMATOR_LABELS,
+    CLAYFIT_ANCHOR_RADIUS,
+    CLAYFIT_ANCHOR_STRIDE,
+    CLAYFIT_INVERSE_X_AMPLITUDE,
+    CLAYFIT_MODELS,
+    CLAYFIT_MODEL_LABELS,
+    CLAYFIT_ORDER,
+    CLAYFIT_ORDER_LIMITS,
+    QPA_BASELINE_ORDER,
+    QPA_BASELINE_SMOOTH,
+    QPA_FINAL_ORDER,
+    QPA_FINAL_SMOOTH,
+    QPA_MODEL_NAME,
+    QPA_PERCENTILE_WINDOW,
+    ClayfitBackground,
+    clayfit_background,
     SONNEVELD_VISSER_ITERATIONS,
-    BackgroundModel,
-    StrippedBackground,
-    baseline_estimate,
     sonneveld_visser_reach,
     suggest_sonneveld_visser,
 )
@@ -139,44 +150,42 @@ def style_axes(figure: go.Figure, y_title: str = "Intensity") -> go.Figure:
     return figure
 
 
-def background_model_from_controls(
-    kind: str, degree: int, decay: float, use_inverse: bool, inverse_offset: float
-) -> BackgroundModel:
-    """Build a :class:`BackgroundModel` from the control values."""
-    return BackgroundModel(
-        polynomial_degree=degree if kind == "polynomial" else None,
-        chebyshev_degree=degree if kind == "chebyshev" else None,
-        exponential_decay=decay if kind == "exponential" else None,
-        inverse=bool(use_inverse),
-        inverse_offset=inverse_offset,
-    )
+def background_settings_from_controls(
+    kind, order, inverse, amplitude, radius, stride,
+    qpa_window, qpa_baseline_smooth, qpa_baseline_order,
+    qpa_final_smooth, qpa_final_order, granularity, bending,
+) -> dict:
+    """The keyword arguments the Background tab's controls describe.
+
+    Gathered into one dictionary so that the same settings can be applied to
+    another mount without the caller reading thirteen values off the screen
+    again.
+    """
+    return {
+        "kind": str(kind),
+        "order": int(order),
+        "inverse_x_amplitude": (float(amplitude)
+                                if bool(inverse) and "on" in inverse else 0.0),
+        "radius": float(radius),
+        "stride": int(stride),
+        "qpa_window": float(qpa_window),
+        "qpa_baseline_smooth": float(qpa_baseline_smooth),
+        "qpa_baseline_order": int(qpa_baseline_order),
+        "qpa_final_smooth": float(qpa_final_smooth),
+        "qpa_final_order": int(qpa_final_order),
+        "granularity": int(granularity),
+        "bending": float(bending),
+    }
 
 
-def fit_background_from_controls(pattern, kind, degree, decay, use_inverse, offset,
-                                 snip, granularity, bending, estimator="snip"):
+def fit_background_from_controls(pattern, **settings) -> ClayfitBackground:
     """The background the Background tab's controls describe.
 
-    Sonneveld-Visser is a component in its own right rather than something a
-    polynomial is then fitted to, which is how HighScore presents it and what
-    the method is for: the eroded curve *is* the background, so there is nothing
-    left to fit and no degree to choose.  The other components are fitted to a
-    peak-stripped estimate as before.
-
-    The 1/x term is not accumulated on top of Sonneveld-Visser, and not because
-    it would be hard to: the erosion leaves a convex background exactly as it
-    found it (Sec. A.11, Sec. A.19), and the low-angle rise from air scatter and
-    the direct beam is convex, so it is already in the curve.  Adding a fitted
-    1/x on top would be counting it twice.
+    One call, because each of the six models is a complete method in its own
+    right rather than a component to be combined with the others - which is the
+    respect in which this follows Clayfit and the earlier design here did not.
     """
-    if kind == "sonneveld-visser":
-        return StrippedBackground.fit(
-            pattern.two_theta, pattern.intensity,
-            granularity=int(granularity), bending=float(bending),
-        )
-    model = background_model_from_controls(kind, int(degree), float(decay),
-                                           bool(use_inverse), float(offset))
-    return model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip),
-                     estimator=str(estimator))
+    return clayfit_background(pattern.two_theta, pattern.intensity, **settings)
 
 
 def working(*children) -> dcc.Loading:
@@ -360,21 +369,28 @@ def between_the_peaks(pattern, fit) -> float:
 
 
 def background_report(pattern, fit, background) -> str:
-    """Describe the fitted background in the terms the operator has to judge it by.
+    """Describe the background in the terms the operator has to judge it by.
 
-    A single R\u00b2 against the stripped estimate is close to 1 for almost any
-    model - the estimate is smooth and the fit has several free terms - so it
-    reads as success even when the background is a thousand counts below the
-    measurement at the low-angle end, which is where the choice actually
-    matters.  What is reported instead is the size of the disagreement in
-    counts, separately for the low-angle end, and what the model leaves behind
-    there as signal.
+    Three numbers, in the order in which they decide whether the curve is in
+    the right place.
+
+    How well it passes through the anchor points, in counts, for the models that
+    are fitted to them.  R² is reported too but is close to 1 for almost any of
+    them, so it reads as success even where the curve is a thousand counts
+    below the measurement at the low-angle end, which is where the choice
+    actually matters.
+
+    What is left as signal at the start of the scan, where an oriented mount
+    carries the direct-beam tail *and* the strongest basal reflections, and a
+    background a few hundred counts too high removes the thing being measured.
+
+    And what the subtracted pattern still holds between the peaks, where it
+    should hold nothing.  That is the number to compare two models by;
+    R_wp is not, because a lower baseline raises the observed intensity in its
+    denominator as much as in its numerator, so it prefers the model that
+    subtracts least whatever the specimen.
     """
     two_theta = pattern.two_theta
-    residual = fit.target - background
-    overall = float(np.sqrt(np.mean(residual ** 2)))
-    low = two_theta <= two_theta[0] + 1.0
-    low_rms = float(np.sqrt(np.mean(residual[low] ** 2))) if low.any() else float("nan")
     left_over = between_the_peaks(pattern, fit)
 
     start = float(two_theta[0])
@@ -383,18 +399,22 @@ def background_report(pattern, fit, background) -> str:
     left = max(0.0, measured_start - model_start)
     share = 100.0 * left / measured_start if measured_start > 0 else 0.0
 
-    # A non-parametric background is the estimate, so "follows it to 0 counts"
-    # would be a tautology dressed as a result; what it is described by instead
-    # is the parameters that produced it.
-    if fit.n_terms == 0:
-        heading = f"{fit.model}. "
-        agreement = ""
-    else:
-        heading = f"{' + '.join(fit.components)}, {fit.n_terms} terms. "
+    heading = f"{fit.model}. "
+    anchors = getattr(fit, "anchor_two_theta", None)
+    if anchors is not None and anchors.size and fit.n_terms:
+        residual = fit.anchor_intensity - fit(anchors)
         agreement = (
-            f"Follows the estimate to {overall:.0f} counts RMS "
-            f"({low_rms:.0f} counts over the lowest 1\u00b0). "
+            f"Passes the {anchors.size:d} anchor points to "
+            f"{float(np.sqrt(np.mean(residual ** 2))):.0f} counts RMS "
+            f"(R² {fit.r_squared(two_theta):.3f}). "
         )
+    elif anchors is not None and anchors.size:
+        # The Chebyshev shape is fitted to the pattern, not to the anchors, so
+        # its distance from them is a property of the method and not a misfit.
+        agreement = f"Anchored on {anchors.size:d} rolling-ball points. "
+    else:
+        agreement = "Nothing is fitted: the curve is the estimate itself. "
+
     text = (
         heading
         + agreement
@@ -403,19 +423,37 @@ def background_report(pattern, fit, background) -> str:
         f"{measured_start:.0f} measured counts, leaving {left:.0f} ({share:.0f}%) "
         f"as signal. Between the peaks the subtracted pattern still holds "
         f"{left_over:.0f} counts, where it should hold none - that is the number "
-        f"to judge a background estimate by, and Rwp is not, because Rwp prefers "
+        f"to judge a background by, and Rwp is not, because Rwp prefers "
         f"a lower baseline whatever the specimen."
         )
     )
+    if getattr(fit, "note", ""):
+        text += " " + fit.note
     if share > 25.0:
         text += (
             " That is a large share to carry into the fit. Unless a real reflection "
             "lies at the start of the scan, the background should be following the "
             "direct-beam tail there: check the orange curve against the measurement."
         )
-    above = float(np.mean(background > pattern.intensity))
-    if above > 0.02:
-        text += f" Warning: the model sits above the data at {100.0 * above:.0f}% of points."
+    # How far above the measurement the curve runs, judged against the counting
+    # noise rather than by counting the points: a background fitted to a lower
+    # envelope crosses above the noise somewhere on any real scan, and a
+    # warning that fires on that is a warning that fires always.  What matters
+    # is whether it sits above *systematically*, because that intensity is
+    # signal being removed.
+    excess = background - pattern.intensity
+    over = excess > 0.0
+    if over.any():
+        noise = np.sqrt(np.maximum(pattern.intensity[over], 1.0))
+        sigmas = float(np.median(excess[over] / noise))
+        counts = float(np.median(excess[over]))
+        text += (f" It runs above the measurement over {100.0 * float(over.mean()):.0f}% "
+                 f"of the scan, by {counts:.0f} counts where it does "
+                 f"({sigmas:.1f} times the counting noise).")
+        if sigmas > 1.0:
+            text += (" More than the noise, so that is signal being removed rather "
+                     "than the curve threading through it: compare it against the "
+                     "other models in the plot before using it.")
     return text
 
 
@@ -823,6 +861,18 @@ def zero_tab() -> html.Div:
 
 
 def background_tab() -> html.Div:
+    """Clayfit's background step: six models, one order, one A/x amplitude.
+
+    The models are not components to be added together and they do not agree
+    with one another, which is the point of showing all six curves at once: the
+    polynomial passes through the anchor points, the Chebyshev shape is fitted
+    to the whole pattern including the peaks and then rescaled, the exponential
+    follows the direct-beam tail, the asymmetric least squares and the erosion
+    follow the measurement, and the percentile model is the one meant for a
+    quantitative fit.  Choosing between them is a judgement about the specimen,
+    so the program shows what each one does rather than picking for you.
+    """
+    low, high = CLAYFIT_ORDER_LIMITS
     return html.Div(
         [
             html.Div(
@@ -834,61 +884,34 @@ def background_tab() -> html.Div:
                         value="air",
                     ),
                     html.Hr(),
-                    label("Background estimate to fit"),
-                    dcc.Dropdown(
-                        id="bg-estimator",
-                        options=[
-                            {"label": "Peak-stripped (SNIP)", "value": "snip"},
-                            {"label": "Rolling percentile", "value": "percentile"},
-                            {"label": "Asymmetric least squares", "value": "als"},
-                            {"label": "Sonneveld\u2013Visser", "value": "sonneveld-visser"},
-                        ],
-                        value="snip",
-                        clearable=False,
-                    ),
-                    html.Div(
-                        "The main component is fitted to this, not to the measurement, so "
-                        "it is what decides how much structure there is for a higher "
-                        "degree to follow. A 4\u00b0 peak-strip of a clay pattern is very "
-                        "smooth - on one scan it sits 200 counts below the measured "
-                        "background at 22 and 30\u00b0, and a fourth-degree polynomial "
-                        "already describes it, so higher degrees move the curve by tens of "
-                        "counts and nothing visible. The rolling percentile and the "
-                        "asymmetric least squares follow a structured background much more "
-                        "closely, and then the degree matters: on the same scan going from "
-                        "6 to 8 moves the fitted curve by 108 counts.",
-                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
-                    ),
-                    label("Main component"),
+                    label("Background model"),
                     dcc.Dropdown(
                         id="bg-kind",
-                        options=[
-                            {"label": "Polynomial (same fit as Chebyshev)",
-                             "value": "polynomial"},
-                            {"label": "Chebyshev (same fit as Polynomial)",
-                             "value": "chebyshev"},
-                            {"label": "Exponential", "value": "exponential"},
-                            {"label": "Sonneveld–Visser", "value": "sonneveld-visser"},
-                            {"label": "None (1/x only)", "value": "none"},
-                        ],
-                        value="chebyshev",
+                        options=[{"label": CLAYFIT_MODEL_LABELS[name], "value": name}
+                                 for name in CLAYFIT_MODELS],
+                        value="exponential",
                         clearable=False,
                     ),
                     html.Div(
-                        [
-                            label("Degree"),
-                            dcc.Slider(id="bg-degree", min=0, max=12, step=1, value=4,
-                                       marks={0: "0", 4: "4", 8: "8", 12: "12"}),
-                        ],
-                        id="bg-degree-box",
+                        "The five models above Sonneveld–Visser are Clayfit's, and the "
+                        "same choice here gives the same curve there. They are separate "
+                        "methods, not two bases for one fit: Polynomial is a least-squares "
+                        "polynomial through the anchor points in raw 2θ, Chebyshev is a "
+                        "series fitted to I/2θ over the whole pattern - peaks included - "
+                        "and then rescaled by one amplitude, so it is not obliged to pass "
+                        "through the anchors and usually sits below them. The order moves "
+                        "both.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     html.Div(
                         [
-                            label("Exponential decay (1/°)"),
-                            dcc.Slider(id="bg-decay", min=0.02, max=1.0, step=0.02, value=0.2,
-                                       marks={0.02: "0.02", 0.5: "0.5", 1.0: "1"}),
+                            label(f"Order ({low}–{high})"),
+                            dcc.Slider(id="bg-order", min=low, max=high, step=1,
+                                       value=CLAYFIT_ORDER,
+                                       marks={value: str(value)
+                                              for value in range(low, high + 1, 2)}),
                         ],
-                        id="bg-decay-box",
+                        id="bg-order-box",
                     ),
                     html.Div(
                         [
@@ -907,37 +930,87 @@ def background_tab() -> html.Div:
                         ],
                         id="bg-sv-box",
                     ),
+                    html.Div(
+                        [
+                            label("Percentile window (°2θ)"),
+                            dcc.Slider(id="bg-qpa-window", min=0.2, max=6.0, step=0.1,
+                                       value=QPA_PERCENTILE_WINDOW,
+                                       marks={0.2: "0.2", 1.5: "1.5", 3: "3", 6: "6"}),
+                            label("Background smoothing (°2θ) and order"),
+                            dcc.Slider(id="bg-qpa-baseline-smooth", min=0.0, max=1.5, step=0.02,
+                                       value=QPA_BASELINE_SMOOTH,
+                                       marks={0: "0", 0.3: "0.30", 0.75: "0.75", 1.5: "1.5"}),
+                            dcc.Slider(id="bg-qpa-baseline-order", min=0, max=6, step=1,
+                                       value=QPA_BASELINE_ORDER,
+                                       marks={value: str(value) for value in range(7)}),
+                            label("Corrected-pattern smoothing (°2θ) and order"),
+                            dcc.Slider(id="bg-qpa-final-smooth", min=0.0, max=0.5, step=0.01,
+                                       value=QPA_FINAL_SMOOTH,
+                                       marks={0: "0", 0.08: "0.08", 0.25: "0.25", 0.5: "0.5"}),
+                            dcc.Slider(id="bg-qpa-final-order", min=0, max=6, step=1,
+                                       value=QPA_FINAL_ORDER,
+                                       marks={value: str(value) for value in range(7)}),
+                            html.Div(
+                                "This is the one model that also smooths the corrected "
+                                "pattern, which is what Clayfit's \"QPA\" means: the "
+                                "pattern is being prepared for a quantitative fit rather "
+                                "than displayed. Set the percentile window wider than the "
+                                "broadest reflection that has to survive - a fifteenth "
+                                "percentile follows a smectite band as readily as it "
+                                "follows the background.",
+                                style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                            ),
+                        ],
+                        id="bg-qpa-box",
+                    ),
                     html.Hr(),
                     html.Div(
                         [
                             dcc.Checklist(
                                 id="bg-inverse",
-                                options=[{"label": "  Accumulate 1/x term", "value": "on"}],
-                                value=["on"],
+                                options=[{"label": "  Add A/2θ term", "value": "on"}],
+                                value=[],
                             ),
-                            label("1/x offset (°2θ)"),
-                            dcc.Slider(id="bg-offset", min=0.0, max=10.0, step=0.25, value=1.0,
-                                       marks={0: "0", 5: "5", 10: "10"}),
+                            label("Amplitude A (counts × °2θ)"),
+                            dcc.Input(id="bg-amplitude", type="number",
+                                      value=CLAYFIT_INVERSE_X_AMPLITUDE, min=0.0, step=50.0,
+                                      style={"width": "100%"}),
+                            html.Div(
+                                "Set, not fitted, and that is deliberate: the term is "
+                                "there to be turned up until the low-angle rise is "
+                                "accounted for, and a fitted A would be free to eat the "
+                                "001 reflections that stand on that rise instead. At the "
+                                "default it adds A/3 ≈ 167 counts at 3° and a tenth of "
+                                "that at 30°.",
+                                style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                            ),
                         ],
                         id="bg-inverse-box",
                     ),
                     html.Hr(),
                     html.Div(
                         [
-                            label("Stripping width (°2θ)"),
-                            dcc.Slider(id="bg-snip", min=0.5, max=10.0, step=0.5, value=4.0,
-                                       marks={0.5: "0.5", 5: "5", 10: "10"}),
+                            label("Rolling-ball radius"),
+                            dcc.Slider(id="bg-radius", min=0.05, max=1.0, step=0.05,
+                                       value=CLAYFIT_ANCHOR_RADIUS,
+                                       marks={0.05: "0.05", 0.5: "0.5", 1.0: "1"}),
+                            label("Points between ball samples"),
+                            dcc.Slider(id="bg-stride", min=1, max=20, step=1,
+                                       value=CLAYFIT_ANCHOR_STRIDE,
+                                       marks={1: "1", 5: "5", 10: "10", 20: "20"}),
                             html.Div(
-                                "The blue dashed curve is what the model is fitted to. "
-                                "Set this just above the width of the broadest "
-                                "reflection you want kept: narrower leaves peak wings "
-                                "standing in the background. It does not control the "
-                                "low-angle tail, which is background at any width and "
-                                "is kept as such.",
+                                "The anchor points the polynomial and the exponential are "
+                                "fitted to, and the amplitude of the Chebyshev shape. A "
+                                "ball of radius 0.5 - half the width of the pattern, the "
+                                "pattern being scaled into a unit square - rolling on "
+                                "every fifth point is Clayfit's setting and finds twenty "
+                                "to thirty points on a clay mount. A smaller ball enters "
+                                "the gaps between reflections and follows the measurement "
+                                "more closely; a larger one spans them and cuts under.",
                                 style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                             ),
                         ],
-                        id="bg-snip-box",
+                        id="bg-anchor-box",
                     ),
                     html.Button("Apply to this mount", id="bg-apply", n_clicks=0,
                                 style={"marginTop": "10px"}),
@@ -1616,35 +1689,36 @@ def register_callbacks(app: Dash) -> None:
         )
 
     @app.callback(
-        Output("bg-degree-box", "style"),
-        Output("bg-decay-box", "style"),
+        Output("bg-order-box", "style"),
         Output("bg-sv-box", "style"),
-        Output("bg-snip-box", "style"),
+        Output("bg-qpa-box", "style"),
+        Output("bg-anchor-box", "style"),
         Output("bg-inverse-box", "style"),
         Input("bg-kind", "value"),
     )
     def show_the_controls_that_apply(kind):
-        """Hide the parameters the chosen component does not have.
+        """Hide the parameters the chosen model does not have.
 
-        Sonneveld-Visser has a granularity and a bending factor and no degree;
-        the polynomials have a degree and no decay.  Leaving all of them on
-        screen invites someone to move a slider that does nothing, which then
-        looks like a defect in the program.
+        Each model has its own; leaving all of them on screen invites someone to
+        move a slider that does nothing, which then reads as a defect in the
+        program.  The order belongs to the two polynomial models, the
+        granularity and bending factor to the erosion, the five windows to the
+        percentile model, and the rolling ball to the three models that are
+        fitted to its anchor points.
+
+        The A/2theta term is offered on every model except the erosion, which is
+        where Clayfit offers it.  It is withheld there because the erosion
+        returns a convex background exactly as it found it, and the low-angle
+        rise from air scatter and the direct beam is convex, so it is already in
+        the curve: adding A/2theta on top would count it twice.
         """
         hidden = {"display": "none"}
         shown = {}
         return (
             shown if kind in ("polynomial", "chebyshev") else hidden,
-            shown if kind == "exponential" else hidden,
             shown if kind == "sonneveld-visser" else hidden,
-            # The stripping width is what the fitted components are fitted to,
-            # so it is meaningless for the one component that is not fitted.
-            hidden if kind == "sonneveld-visser" else shown,
-            # Nor is the 1/x term accumulated on Sonneveld-Visser: the erosion
-            # returns a convex background exactly as it found it, and the
-            # low-angle rise from air scatter and the direct beam is convex, so
-            # it is already in the curve.  A fitted 1/x on top would count it
-            # twice, and a control that quietly does nothing reads as a defect.
+            shown if kind == QPA_MODEL_NAME else hidden,
+            shown if kind in ("exponential", "polynomial", "chebyshev") else hidden,
             hidden if kind == "sonneveld-visser" else shown,
         )
 
@@ -1719,44 +1793,43 @@ def register_callbacks(app: Dash) -> None:
         # reads as the model not being applied at all.
         Input("load-status", "children"),
         Input("zero-status", "children"),
-        Input("bg-estimator", "value"),
         Input("bg-kind", "value"),
-        Input("bg-degree", "value"),
-        Input("bg-decay", "value"),
+        Input("bg-order", "value"),
         Input("bg-inverse", "value"),
-        Input("bg-offset", "value"),
-        Input("bg-snip", "value"),
+        Input("bg-amplitude", "value"),
+        Input("bg-radius", "value"),
+        Input("bg-stride", "value"),
+        Input("bg-qpa-window", "value"),
+        Input("bg-qpa-baseline-smooth", "value"),
+        Input("bg-qpa-baseline-order", "value"),
+        Input("bg-qpa-final-smooth", "value"),
+        Input("bg-qpa-final-order", "value"),
         Input("bg-granularity", "value"),
         Input("bg-bending", "value"),
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
     )
-    def update_background(mount, _loaded, _zeroed, estimator, kind, degree, decay,
-                          inverse, offset, snip, granularity, bending,
-                          _apply, _apply_all):
+    def update_background(mount, _loaded, _zeroed, kind, order, inverse, amplitude,
+                          radius, stride, qpa_window, qpa_baseline_smooth,
+                          qpa_baseline_order, qpa_final_smooth, qpa_final_order,
+                          granularity, bending, _apply, _apply_all):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
-        use_inverse = bool(inverse) and "on" in inverse
-        if kind == "none" and not use_inverse:
-            return empty_figure("Select a component or enable the 1/x term"), error_message(
-                ValueError("A background model needs at least one component.")
-            )
         pattern = state.corrected()
-
-        def background_for(this_pattern):
-            return fit_background_from_controls(
-                this_pattern, kind, degree, decay, use_inverse, offset,
-                snip, granularity, bending, estimator,
+        try:
+            settings = background_settings_from_controls(
+                kind, order, inverse, amplitude, radius, stride,
+                qpa_window, qpa_baseline_smooth, qpa_baseline_order,
+                qpa_final_smooth, qpa_final_order, granularity, bending,
             )
+        except (TypeError, ValueError) as exc:
+            return empty_figure("Check the background settings"), error_message(exc)
 
         try:
-            fit = background_for(pattern)
+            fit = fit_background_from_controls(pattern, **settings)
         except Exception as exc:  # noqa: BLE001
             return empty_figure("Fit failed"), error_message(exc)
-        # BackgroundFit.model is the model object; StrippedBackground.model is a
-        # description, there being nothing fitted.  Only the former is state.
-        model = fit.model if isinstance(fit.model, BackgroundModel) else None
 
         triggered = [item["prop_id"] for item in callback_context.triggered]
         applied = ""
@@ -1764,14 +1837,10 @@ def register_callbacks(app: Dash) -> None:
             for other in STATE.loaded_mounts():
                 other_state = STATE.mounts[other]
                 other_pattern = other_state.corrected()
-                other_fit = background_for(other_pattern)
-                other_state.background_model = (
-                    other_fit.model if isinstance(other_fit.model, BackgroundModel) else None
-                )
+                other_fit = fit_background_from_controls(other_pattern, **settings)
                 other_state.background_fit = other_fit
             applied = " Applied to all loaded mounts."
         elif any("bg-apply" in prop for prop in triggered):
-            state.background_model = model
             state.background_fit = fit
             applied = f" Applied to {MOUNT_LABELS[mount]}."
         if applied:
@@ -1789,44 +1858,45 @@ def register_callbacks(app: Dash) -> None:
         # on top of each other indistinguishably.
         figure.add_scatter(x=pattern.two_theta, y=pattern.intensity, name="measured",
                            line={"color": "#444444", "width": 1})
-        figure.add_scatter(x=pattern.two_theta, y=background,
-                           name="background" if kind == "sonneveld-visser" else "background model",
-                           line={"color": "#ff7f0e", "width": 3})
-        # Drawn after the model, because a good model lies on top of it: dashes
-        # over the orange line are what shows the two agree.  Sonneveld-Visser
-        # *is* the curve, so there is no second thing to compare it against and
-        # a dashed line exactly on top of it would only suggest there were.
-        if kind != "sonneveld-visser":
+        # Every model that was not chosen, faintly.  The choice between them is
+        # the choice that matters and it cannot be made without seeing them:
+        # on a clay mount they differ by hundreds of counts in the middle of
+        # the range, which is more than any order changes anything.
+        for name, colour in (("exponential", "#1f77b4"), ("polynomial", "#2ca02c"),
+                             ("chebyshev", "#9467bd"), ("als", "#8c564b"),
+                             (QPA_MODEL_NAME, "#e377c2"),
+                             ("sonneveld-visser", "#17becf")):
+            if name == kind:
+                continue
+            try:
+                other = fit_background_from_controls(
+                    pattern, **{**settings, "kind": name}
+                )(pattern.two_theta)
+            except Exception:  # noqa: BLE001 - a comparison must not break the view
+                continue
             figure.add_scatter(
-                x=pattern.two_theta,
-                y=fit.target,
-                name=f"{ESTIMATOR_LABELS[estimator]} estimate "
-                     f"(width {float(snip):g}\u00b0)",
-                line={"color": "#1f77b4", "width": 2, "dash": "dash"},
+                x=pattern.two_theta, y=other,
+                name=CLAYFIT_MODEL_LABELS[name],
+                line={"color": colour, "width": 1, "dash": "dot"},
+                opacity=0.55,
             )
-            # The estimates not chosen, faintly, because the choice between
-            # them is the choice that matters and it cannot be made without
-            # seeing them: they differ by a couple of hundred counts in the
-            # middle of the range on a clay pattern, which is more than any
-            # polynomial degree changes anything.
-            for name, colour in (("percentile", "#2ca02c"), ("als", "#9467bd"),
-                                 ("snip", "#8c564b"), ("sonneveld-visser", "#e377c2")):
-                if name == estimator:
-                    continue
-                try:
-                    other = baseline_estimate(
-                        pattern.two_theta, pattern.intensity,
-                        window=float(snip), estimator=name,
-                    )
-                except Exception:  # noqa: BLE001 - a comparison must not break the view
-                    continue
-                figure.add_scatter(
-                    x=pattern.two_theta, y=other,
-                    name=ESTIMATOR_LABELS[name],
-                    line={"color": colour, "width": 1, "dash": "dot"},
-                    opacity=0.55,
-                )
-        figure.add_scatter(x=pattern.two_theta, y=fit.subtract(pattern.two_theta, pattern.intensity),
+        figure.add_scatter(x=pattern.two_theta, y=background,
+                           name=CLAYFIT_MODEL_LABELS[kind],
+                           line={"color": "#ff7f0e", "width": 3})
+        # The anchor points, because they are what three of the six models are
+        # fitted to and the only thing the operator can move them by is the
+        # rolling ball: a polynomial that misses the measurement usually misses
+        # it where the ball found no point to hold it down.
+        if fit.anchor_two_theta.size:
+            figure.add_scatter(
+                x=fit.anchor_two_theta, y=fit.anchor_intensity,
+                name=f"anchor points ({fit.anchor_two_theta.size})",
+                mode="markers",
+                marker={"color": "#d62728", "size": 7, "symbol": "circle-open",
+                        "line": {"width": 2}},
+            )
+        figure.add_scatter(x=pattern.two_theta,
+                           y=fit.subtract(pattern.two_theta, pattern.intensity),
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
 

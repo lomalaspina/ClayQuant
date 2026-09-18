@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .background import BackgroundModel
+from .background import clayfit_background
 from .crystal import LayerModel
 from .mixed_layer import MixedLayerStack, lognormal_csds
 from .models import CHLORITE_OCTAHEDRA, chlorite_layer
@@ -84,7 +84,7 @@ def measure_basal_series(
     orders: tuple[int, ...] = (1, 2, 3, 4, 5),
     reference: int = 2,
     half_width: float = 1.0,
-    background: "BackgroundModel | None" = None,
+    background: str = "exponential",
 ) -> BasalSeries:
     """Integrate the 00l reflections of a measured pattern of one pure phase.
 
@@ -102,9 +102,15 @@ def measure_basal_series(
     at 0.35 deg, 1.22 at 0.6 deg and 1.34 at 1.0 deg, so a conclusion drawn at
     0.35 deg was measuring the window.  Check the sensitivity to this number
     before believing a result that depends on it.
+
+    ``background`` names one of :data:`clayquant.background.CLAYFIT_MODELS`, the
+    default being the same exponential the Background tab opens on.  It matters
+    more here than the name suggests: what is being measured is the *ratio* of
+    the basal orders, and the 001 of an oriented mount sits on the direct-beam
+    tail while the 005 sits on a flat background, so a model that misses the
+    tail biases the first order alone.
     """
-    model = background or BackgroundModel(chebyshev_degree=4, inverse=True, inverse_offset=1.0)
-    fit = model.fit(pattern.two_theta, pattern.intensity, snip_window=4.0)
+    fit = clayfit_background(pattern.two_theta, pattern.intensity, kind=background)
     stripped = np.clip(fit.subtract(pattern.two_theta, pattern.intensity), 0.0, None)
 
     kept, angles, areas = [], [], []

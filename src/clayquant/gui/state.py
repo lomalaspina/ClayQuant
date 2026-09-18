@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..background import BackgroundFit, BackgroundModel
+from ..background import BackgroundFit, ClayfitBackground
 from ..io import SUPPORTED_SUFFIXES, read_pattern
 from ..library import PatternLibrary
 from ..pattern import Pattern
@@ -34,8 +34,13 @@ class MountState:
 
     raw: Pattern | None = None
     zero_error: float = 0.0
-    background_model: BackgroundModel | None = None
-    background_fit: BackgroundFit | None = None
+    background_fit: ClayfitBackground | BackgroundFit | None = None
+    """The background applied to this mount, or ``None`` while it has none.
+
+    Annotated for both because the Background tab produces a
+    :class:`~clayquant.background.ClayfitBackground` while a script driving
+    the library directly may still fit a :class:`BackgroundFit`; the two
+    carry the same interface and only ``subtract`` is used here."""
 
     @property
     def is_loaded(self) -> bool:

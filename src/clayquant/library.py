@@ -964,13 +964,11 @@ def main(argv: list[str] | None = None) -> int:
         # guess and must not get wrong: the geometry, which the file records,
         # and the peak width, which its peaks measure.  No data from it enters
         # the library.
-        from .background import BackgroundModel
+        from .background import clayfit_background
         from .io import read_pattern, resolve_user_path
 
         pattern = read_pattern(resolve_user_path(arguments.measurement))
-        background = BackgroundModel(
-            chebyshev_degree=4, inverse=True, inverse_offset=1.0
-        ).fit(pattern.two_theta, pattern.intensity, snip_window=4.0)
+        background = clayfit_background(pattern.two_theta, pattern.intensity)
         instrument, note = instrument_from_measurement(
             pattern, background=background, specimen_length=arguments.specimen_length
         )

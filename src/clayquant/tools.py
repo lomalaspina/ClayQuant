@@ -165,7 +165,7 @@ def build_library_job(values: dict[str, str], say=print):
     instrument = None
     measurement = values.get("measurement", "").strip()
     if measurement:
-        from .background import BackgroundModel
+        from .background import clayfit_background
         from .io import read_pattern, resolve_user_path
         from .library import instrument_from_measurement
 
@@ -173,9 +173,10 @@ def build_library_job(values: dict[str, str], say=print):
         # The width is measured at the half maximum of the peaks, so it is read
         # off the pattern with its background gone; taken with the background
         # still there the half maximum sits too high up the peak and the width
-        # comes out too narrow.
-        fit = BackgroundModel(chebyshev_degree=4, inverse=True, inverse_offset=1.0).fit(
-            pattern.two_theta, pattern.intensity, snip_window=4.0)
+        # comes out too narrow.  The default model of the Background tab, so
+        # that the width the library is built for is the width the fit will be
+        # measured against.
+        fit = clayfit_background(pattern.two_theta, pattern.intensity)
         instrument, note = instrument_from_measurement(pattern, background=fit)
         say(f"Instrument taken from {Path(measurement).name}:")
         say(f"  {note}")

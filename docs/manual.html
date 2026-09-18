@@ -1634,46 +1634,89 @@ or calibrate on another reflection. See &sect;<a href="#a-5">A.5</a>.</div>
 
 <h3 id="s5-4">5.4 Step 3 &mdash; Background</h3>
 
-<p>Choose a model and adjust it until it follows the background without cutting into the peaks. The
-components are described in &sect;<a href="#s6">6</a>; the <span class="kw">1/x</span> term, which
-describes the low-angle rise from air scatter and the direct beam, can be added to any of the others.
-A non-parametric peak-stripped background is also available for backgrounds no low-order function
-follows.</p>
+<p>Six models are offered. Five of them are Clayfit's, and the same choice made here and there gives
+the same curve; the sixth, Sonneveld&ndash;Visser, is the addition (&sect;<a href="#a-19">A.19</a>).
+They are <em>six methods</em>, not six components to be added together and not several bases for one
+fit, and they do not agree with one another &mdash; on a real air-dried mount they sit as much as
+1400&nbsp;counts apart at 3&deg;. The plot therefore draws all six at once, the chosen one as a thick
+orange line and the other five faintly, because choosing between them is a judgement about the
+specimen and cannot be made without seeing what each does.</p>
 
-<p>Models are fitted not to the raw counts but to a peak-stripped estimate of the background, then
-refined asymmetrically. This matters: a clay pattern has no peak-free points below about 8&deg;, so
-fitting the raw intensities there drags the background up into the basal reflections and removes the
-very signal being quantified. Peak stripping errs the other way, underestimating the background
-beneath a broad strong low-angle reflection, which is the safe direction but means the low-angle
-background should always be checked by eye.</p>
+<div class="tablewrap"><table>
+<tr><th>Model</th><th>What it is fitted to</th><th>What it does on an oriented mount</th></tr>
+<tr><td><em>Exponential</em></td><td>The anchor points</td>
+<td><var>a</var>&thinsp;e<sup>&minus;<var>b</var>&thinsp;2&theta;</sup>&thinsp;+&thinsp;<var>c</var>.
+Follows the direct-beam tail, which falls faster over the first few degrees than any low-order
+polynomial through the same points can. Clayfit's default and this program's.</td></tr>
+<tr><td><em>Polynomial</em></td><td>The anchor points</td>
+<td>A least-squares polynomial of the chosen order, in <em>raw</em> 2&theta;. Passes closest of the
+six through the anchor points &mdash; 20 to 50&nbsp;counts RMS at order 6.</td></tr>
+<tr><td><em>Chebyshev</em></td><td>The whole pattern, then one amplitude on the anchors</td>
+<td>A Chebyshev series fitted to <var>I</var>/2&theta; over every point of the pattern, peaks
+included, then rescaled by a single amplitude fitted to the anchor points. TOPAS's way of writing a
+background with a 1/<var>x</var> term built in. Because only an amplitude is free it is <em>not</em>
+obliged to pass through the anchors, and on a pattern with strong basal reflections it dives several
+hundred counts below them in the middle of the range while overshooting the measurement at the
+start.</td></tr>
+<tr><td><em>ALS</em></td><td>The whole pattern</td>
+<td>Asymmetric least squares: the smoothest curve that stays under the data. Follows a structured
+background closely, and cuts well under the low-angle tail &mdash; 2105 of 3505&nbsp;counts at
+3&deg; on the mount measured here, leaving 40&nbsp;% of the direct beam to be explained as
+diffraction.</td></tr>
+<tr><td><em>QPA percentile + Savitzky&ndash;Golay</em></td><td>The whole pattern</td>
+<td>A running fifteenth percentile over 1.5&deg;, smoothed. The one model that also smooths the
+<em>corrected</em> pattern, which is what Clayfit's &ldquo;QPA&rdquo; means: the pattern is being
+prepared for a quantitative fit rather than displayed.</td></tr>
+<tr><td><em>Sonneveld&ndash;Visser</em></td><td>Nothing</td>
+<td>The erosion of &sect;<a href="#a-19">A.19</a>, driven by HighScore's <em>granularity</em> and
+<em>bending factor</em>. Returns a convex background exactly as it found it, so it keeps the whole
+direct-beam tail.</td></tr>
+</table></div>
 
-<p><strong>Sonneveld&ndash;Visser</strong> is the exception among the components, and is chosen in
-the same list. It is not a function fitted to a stripped estimate: the eroded curve <em>is</em> the
-background, as it is in HighScore, so there is no degree to choose and no stripping width &mdash; the
-two parameters are the same two HighScore exposes, <em>granularity</em> and <em>bending factor</em>,
-and the panel shows those instead. The <span class="kw">1/x</span> term is not offered with it
-either, and not for want of arithmetic: the erosion returns a convex background exactly as it found
-it, and the low-angle rise from air scatter and the direct beam is convex, so it is already in the
-curve and a fitted <span class="kw">1/x</span> on top would count it twice.</p>
+<p><strong>The anchor points.</strong> Three of the six are fitted to a set of anchor points rather
+than to the measurement, and those points are found by rolling a ball underneath the pattern:
+the pattern is scaled into a unit square, a ball of the given radius is rolled along its underside,
+and the points it touches are the anchors. On a clay mount there are twenty to thirty of them, and
+they are drawn in the plot as red circles. They are what to look at when a polynomial misses the
+measurement, because it usually misses it where the ball found no point to hold it down. A smaller
+ball enters the gaps between reflections and follows the measurement more closely; a larger one spans
+them and cuts under. Radius 0.5 rolling on every fifth point is Clayfit's setting and the
+default.</p>
 
-<p>Both of those are proposed when the patterns are loaded, read off the glycol mount &mdash;
-the granularity from the width of the broadest reflection that stands above the noise, the bending
-factor from which value eight mounts' worth of real fits preferred. The line beneath the sliders says
-what was measured and whether the measurement or a safety limit decided the answer, and a slider
-moved by hand afterwards is left alone (&sect;<a href="#a-19">A.19</a>).</p>
+<p><strong>The order</strong> drives the polynomial and the Chebyshev model and runs from 4 to 12, 6
+being the default, as in Clayfit. It moves <em>both</em> curves: the polynomial because its
+coefficients are refitted, the Chebyshev because its shape is. It does not make them agree.</p>
 
-<p>Which to use is a real choice and not a matter of taste. Measured over 39 patterns,
-Sonneveld&ndash;Visser puts the baseline higher almost everywhere &mdash; by a tenth of the intensity
-range on a diffuse specimen &mdash; and on this laboratory's mounts the fitted components on a
-peak-stripped estimate give a lower <var>R</var><sub>wp</sub> on every mount tried, because what sits
-immediately above the baseline in an oriented mount is the broad basal intensity being quantified.
-The other use of it is as a check: the difference between the two, on one pattern at one width,
-measures how much of the background is a matter of method rather than of measurement, and a specimen
-where they disagree by more than a few per cent is one whose percentages carry that disagreement
-(&sect;<a href="#a-19">A.19</a>).</p>
+<p><strong>The A/2&theta; term</strong> can be added to any model but the erosion. It is
+<em>set</em>, not fitted, and that is the point of it: the term is there to be turned up until the
+low-angle rise from air scatter and the direct beam is accounted for, whereas a fitted amplitude
+would be free to eat the 001 reflections that stand on that rise instead. At the default
+<var>A</var>&nbsp;=&nbsp;500 it adds 167&nbsp;counts at 3&deg; and 17 at 30&deg;. It is not offered
+with Sonneveld&ndash;Visser, and not for want of arithmetic: the erosion leaves a convex background
+untouched and the low-angle rise is convex, so it is already in the curve and adding the term would
+count it twice.</p>
 
-<p><em>Apply to all mounts</em> uses the same model for the three mounts, which is appropriate when
-they were measured under identical conditions.</p>
+<p><strong>What replaced what.</strong> Earlier versions fitted one parametric model &mdash;
+polynomial, Chebyshev or exponential, optionally with a 1/<var>x</var> term &mdash; to a
+peak-stripped estimate of the background, and offered <em>Polynomial</em> and <em>Chebyshev</em> as
+two bases for that one fit. Under an unconstrained least-squares fit to the same target with the same
+number of free terms those two bases span the same space and give the same curve, so the two menu
+entries did nothing, and the note here said as much. That was a true statement about that
+implementation and a misleading one about the methods, which is why it is gone: in Clayfit the two
+entries are different algorithms, the order visibly moves both, and the two curves sit in different
+places. The peak stripping itself is not gone &mdash; it is still what measures the widths that set
+Sonneveld&ndash;Visser's starting values, and what strips the calculated continuum when the library
+is built (&sect;<a href="#a-11">A.11</a>) &mdash; but it is no longer interposed between a model and
+the measurement.</p>
+
+<p>Sonneveld&ndash;Visser's two parameters are still proposed when the patterns are loaded, read off
+the glycol mount: the granularity from the width of the broadest reflection that stands above the
+noise, the bending factor from which value eight mounts' worth of real fits preferred. The line
+beneath the sliders says what was measured and whether the measurement or a safety limit decided the
+answer, and a slider moved by hand afterwards is left alone (&sect;<a href="#a-19">A.19</a>).</p>
+
+<p><em>Apply to all mounts</em> uses the same model and the same settings for the three mounts, which
+is appropriate when they were measured under identical conditions.</p>
 
 <h3 id="s5-5">5.5 Step 4 &mdash; Main minerals</h3>
 
@@ -1804,19 +1847,45 @@ is present in the folder.</td></tr>
 <div class="tablewrap"><table>
 <tr><th>Control</th><th>Identifier</th><th>Default</th><th>Meaning</th></tr>
 <tr><td>Mount</td><td class="kw">bg-mount</td><td>Air-dried</td><td>Mount displayed and fitted.</td></tr>
-<tr><td>Main component</td><td class="kw">bg-kind</td><td>Chebyshev</td>
-<td><em>Polynomial</em>: &Sigma;<var>c<sub>k</sub>u<sup>k</sup></var> in the angle scaled to [&minus;1,1].
-<em>Chebyshev</em>: &Sigma;<var>c<sub>k</sub>T<sub>k</sub></var>(<var>u</var>), better conditioned at high degree and the usual Rietveld choice.
-<em>Exponential</em>: a single decaying term.
-<em>Peak-stripped</em>: non-parametric; the stripped estimate is used directly and follows any shape, at the cost of having no parameters.</td></tr>
-<tr><td>Degree</td><td class="kw">bg-degree</td><td>4</td>
-<td>Degree of the polynomial or Chebyshev component; degree <var>n</var> contributes <var>n</var>+1 terms. Raise it only as far as the background demands: an over-flexible background follows peaks.</td></tr>
-<tr><td>Exponential decay (1/&deg;)</td><td class="kw">bg-decay</td><td>0.20</td>
-<td>Decay constant of the exponential component, in reciprocal degrees.</td></tr>
-<tr><td>Add 1/x term</td><td class="kw">bg-inverse</td><td>on</td>
-<td>Accumulates <var>c</var>/(2&theta;+<var>x</var><sub>0</sub>) on top of the main component. This describes the low-angle rise from air scatter and the direct beam and can be combined with any of the others.</td></tr>
-<tr><td>1/x offset (&deg;2&theta;)</td><td class="kw">bg-offset</td><td>1.0</td>
-<td>The offset <var>x</var><sub>0</sub>, which keeps the term finite as the angle approaches zero.</td></tr>
+<tr><td>Background model</td><td class="kw">bg-kind</td><td>Exponential</td>
+<td>One of the six of &sect;<a href="#s5-4">5.4</a>: <em>Exponential</em>, <em>Polynomial</em>,
+<em>Chebyshev</em>, <em>ALS</em>, <em>QPA percentile + Savitzky&ndash;Golay</em>,
+<em>Sonneveld&ndash;Visser</em>. The first five are Clayfit's and give the same curve there.</td></tr>
+<tr><td>Order</td><td class="kw">bg-order</td><td>6</td>
+<td>Polynomial and Chebyshev only, 4 to 12 as in Clayfit. Drives both, and separately: the
+polynomial's coefficients and the Chebyshev shape are each refitted at each order. Raise it only as
+far as the background demands &mdash; in raw 2&theta; the monomials of an argument running from 3 to
+40 span eighteen orders of magnitude at order 12, so the curve is free to move a long way between
+anchor points.</td></tr>
+<tr><td>Add A/2&theta; term</td><td class="kw">bg-inverse</td><td>off</td>
+<td>Adds <var>A</var>/2&theta; on top of the chosen model. Offered with every model but
+Sonneveld&ndash;Visser, which already carries the low-angle rise.</td></tr>
+<tr><td>Amplitude A</td><td class="kw">bg-amplitude</td><td>500</td>
+<td>The amplitude, in counts&nbsp;&times;&nbsp;&deg;2&theta;. Set, not fitted (&sect;<a href="#s5-4">5.4</a>).</td></tr>
+<tr><td>Rolling-ball radius</td><td class="kw">bg-radius</td><td>0.5</td>
+<td>Radius of the ball that finds the anchor points, as a fraction of the pattern's own extent: the
+pattern is scaled into a unit square first, so the number means the same thing on any scan. 0.5 is
+Clayfit's value and a ball half the width of the pattern.</td></tr>
+<tr><td>Points between ball samples</td><td class="kw">bg-stride</td><td>5</td>
+<td>The ball rolls on every <var>n</var>th point &mdash; Clayfit's <span class="kw">array[::5]</span>.
+It bounds the work, which grows as the cube of the number of samples, and the finest feature the ball
+can enter, which on a 0.017&deg; scan is 0.08&deg;.</td></tr>
+<tr><td>Percentile window (&deg;2&theta;)</td><td class="kw">bg-qpa-window</td><td>1.50</td>
+<td>Percentile model only. Width of the running window. A fifteenth percentile cannot be raised by a
+reflection occupying less than that fraction of the window, so set it wider than the broadest
+reflection that has to survive: it follows a smectite band as readily as it follows the
+background.</td></tr>
+<tr><td>Background smoothing and order</td>
+<td><span class="kw">bg-qpa-baseline-smooth</span>, <span class="kw">bg-qpa-baseline-order</span></td>
+<td>0.30&deg;, 2</td>
+<td>Percentile model only. Savitzky&ndash;Golay window and polynomial order applied to the percentile
+envelope, the window given in degrees and converted to an odd number of points for the scan's
+step.</td></tr>
+<tr><td>Corrected-pattern smoothing and order</td>
+<td><span class="kw">bg-qpa-final-smooth</span>, <span class="kw">bg-qpa-final-order</span></td>
+<td>0.08&deg;, 2</td>
+<td>Percentile model only, and the one place where a background model alters the corrected pattern
+rather than only the curve subtracted from it. Set the window to zero to switch it off.</td></tr>
 <tr><td>Granularity (points per interval)</td><td class="kw">bg-granularity</td>
 <td>0&ndash;50, read from the glycol scan</td>
 <td>Sonneveld&ndash;Visser only. Its starting value is proposed from the glycol mount when the
@@ -1836,34 +1905,36 @@ convex background, which is the paper's first form; 1 is the value the paper its
 patterns 0 to 4 moves the baseline by well under 1 % of the intensity range and 0 to 100 by
 2.3&ndash;12.4 %, against granularity's 30 % (&sect;<a href="#a-19">A.19</a>). Set granularity
 first, and note that every mount tested fitted best at 0.</td></tr>
-<tr><td>Stripping width (&deg;2&theta;)</td><td class="kw">bg-snip</td><td>4.0</td>
-<td>Width of the widest feature the stripping treats as a peak. The components are fitted to the
-stripped estimate and follow it to a few counts, so this control, not the choice of component, is
-what decides where the background lies. Set it just above the width of the broadest reflection to be
-kept: narrower leaves peak wings standing in the background and eats into the reflections. It does
-<em>not</em> control the low-angle tail, which is convex and is therefore preserved at any width
-(&sect;<a href="#a-11">A.11</a>). Measured over eleven mounts the fit flattens by about 4&deg;, which
-is the default.</td></tr>
 <tr><td>Apply to this mount / Apply to all mounts</td><td><span class="kw">bg-apply</span>, <span class="kw">bg-apply-all</span></td><td>&mdash;</td>
-<td>Stores the fitted background. <em>All</em> uses the same model for the three mounts, appropriate when they were measured under identical conditions.</td></tr>
+<td>Stores the background. <em>All</em> uses the same model and settings for the three mounts, appropriate when they were measured under identical conditions.</td></tr>
 </table></div>
 
-<p><strong>Reading the plot.</strong> Four curves are drawn: the <em>measured</em> pattern in grey,
-the <em>background model</em> as a thick orange line, the <em>peak-stripped estimate</em> as a blue
-dashed line drawn over it, and the <em>subtracted</em> result in green. The dashes should lie on the
-orange line; where they part, the chosen components cannot follow the shape of the background and the
-degree or the component should be changed. The blue curve is the quantity the stripping-width slider
-controls, and the one the model is fitted to.</p>
+<p><strong>Reading the plot.</strong> The <em>measured</em> pattern is grey; the chosen model is a
+thick orange line; the five models not chosen are faint dotted lines, so that what the choice costs
+is visible without making it; the <em>anchor points</em> are red circles, present for the three
+models fitted to them; and the <em>subtracted</em> result is green. Judge the orange line against the
+grey one at the start of the scan, where an oriented mount carries the direct-beam tail and the
+strongest basal reflections together, and against the red circles in the middle, where the gaps
+between reflections are the only evidence of where the background lies.</p>
 
-<p><strong>Reading the status line.</strong> It reports how closely the model follows the stripped
-estimate, in counts, overall and over the lowest degree separately, and then what the model leaves at
-the low-angle end: the background value at the first measured point, the measurement there, and the
-difference as a percentage. That difference is the intensity the fit will be asked to explain as
-diffraction, and on a scan that opens on the direct-beam tail it should be small - a few percent.
-A large share there means the background is not following the tail. A goodness-of-fit figure is deliberately <em>not</em> reported for the background: it is
-close to unity for almost any choice, because the estimate is smooth and the model has several free
-terms, and it would read as success while the background sat a thousand counts below the measurement
-at 3&deg;.</p>
+<p><strong>Reading the status line.</strong> Three numbers, in the order in which they decide whether
+the curve is in the right place. How closely it passes the anchor points, in counts RMS, for the
+three models that are fitted to them &mdash; with <var>R</var><sup>2</sup>, which is reported but is
+close to 1 for almost any of them and therefore reads as success even where the curve is a thousand
+counts below the measurement at 3&deg;. What is left as signal at the first measured point, as counts
+and as a percentage: on a scan that opens on the direct-beam tail that share should be a few per
+cent, and a large one means the background is not following the tail. And what the subtracted pattern
+still holds <em>between the peaks</em>, taken as the median of its lowest two fifths, where it should
+hold nothing &mdash; that is the number to compare two models by.
+<var>R</var><sub>wp</sub> is not, because a lower baseline raises the observed intensity in its
+denominator as much as in its numerator, so it prefers whichever model subtracts least whatever the
+specimen; on one real scan it ranked the worst of four estimators first
+(&sect;<a href="#a-19">A.19</a>). The line closes with how far the curve runs above the measurement,
+judged against the counting noise rather than by counting points: a background fitted to a lower
+envelope crosses above the noise somewhere on any real scan, and what matters is whether it sits
+above systematically, because that intensity is signal being removed. Measured on three real mounts,
+the exponential runs 2.0 to 3.4 times the noise above, the Chebyshev 1.1 to 2.6, the polynomial 0.5
+to 0.8, the percentile and ALS models 0.3 to 0.4, and the erosion never.</p>
 
 <h3>6.4 Tab 4 &mdash; Main minerals</h3>
 <div class="tablewrap"><table>
@@ -2449,6 +2520,25 @@ that form. <strong>Pass.</strong></td></tr>
 <tr><td>All background components can be combined</td><td>Polynomial, Chebyshev, exponential and 1/x
 simultaneously &mdash; the worst case for conditioning of the linear solve.</td><td>Fits without
 degeneracy. <strong>Pass.</strong></td></tr>
+<tr><td colspan="3"><em>Those two rows test the additive-component model of
+<span class="kw">clayquant.background.BackgroundModel</span>, which the Background tab no longer
+uses; it is retained for scripts and for the synthetic-workflow test above. The Clayfit models the
+tab does use are verified separately in the row below.</em></td></tr>
+<tr><td>The Clayfit background models give the same curve as Clayfit</td>
+<td>The five models taken from Clayfit have to agree with it, or a result obtained here cannot be
+compared with one obtained there. Where the algorithm is short enough to transcribe it is
+transcribed literally from Clayfit's own source &mdash; the nested loops of the rolling ball, its
+nearest-point validity test and its tolerances; the asymmetric least squares with its step-scaled
+second-difference operator &mdash; and the two implementations are compared point for point. The
+percentile model is checked against the values Clayfit's own test suite asserts.</td>
+<td>The rolling ball agrees at radius 0.2, 0.5 and 0.9; the asymmetric least squares to 10<sup>&minus;6</sup>;
+the percentile model exactly, window counts included. 58 automated tests.
+<strong>Pass.</strong></td></tr>
+<tr><td>Polynomial and Chebyshev are <em>not</em> the same curve</td>
+<td>The claim this program previously got wrong, and the reason the background step was rewritten.
+The two differ at every order from 4 to 12, and the order moves both.</td>
+<td>They differ by more than 50 counts at every order and by 404 on a real mount at order 6; each
+curve moves at four or more of the eight order steps. <strong>Pass.</strong></td></tr>
 <tr><td>NNLS recovers a known composition</td><td>The central claim of the method: a synthetic mixture
 of known proportions must be recovered. Tests the design matrix, the solver and the share
 computation.</td><td>Recovers the composition. <strong>Pass.</strong></td></tr>
@@ -3670,7 +3760,21 @@ per preparation or one per mineral will be answerable.</p>
 
 <h3 id="a-19">A.19 A second background estimator, and what it changes</h3>
 
-<p><strong>Reasoning.</strong> The background is fitted to a stripped estimate, and
+<div class="note"><strong>Written against the earlier background step, and kept.</strong> The
+reasoning below starts from a design in which one parametric model was fitted to a peak-stripped
+estimate of the background, which is no longer what the Background tab does
+(&sect;<a href="#s5-4">5.4</a>): it now offers Clayfit's five models, each fitted to the measurement
+or to rolling-ball anchor points, with the erosion described here as a sixth. Three things in this
+section are unaffected and are why it is kept. The erosion itself, which is that sixth model,
+unchanged. Its two parameters and where their starting values are read from, which is still how the
+tab proposes them. And the argument about <var>R</var><sub>wp</sub> &mdash; that it prefers whichever
+estimate subtracts least and therefore cannot choose between two of them &mdash; which is why the
+status line reports what the subtracted pattern holds between the peaks instead. The measured
+comparison between the erosion and the stripped estimate is a record of the design it was made in;
+the comparison that matters now is between the six curves the tab draws together.</div>
+
+<p><strong>Reasoning.</strong> In the design this was written for, the background is fitted to a
+stripped estimate, and
 &sect;<a href="#a-11">A.11</a> establishes that the estimate <em>is</em> the background: the
 components follow it to a few counts, so whatever the estimator decides, the analysis inherits. That
 makes the estimator the single most consequential choice in the workflow and leaves it untested
