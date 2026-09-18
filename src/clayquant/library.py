@@ -510,7 +510,7 @@ def build_library(
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
-    smectite_orientation: float = 1.0,
+    smectite_orientation: float = 0.1,
     progress: bool = False,
 ) -> PatternLibrary:
     """Calculate the full reference library.
@@ -536,7 +536,15 @@ def build_library(
         Layer repeat of the glycolated smectite in A; defaults to the 16.86 A
         measured by Reynolds (1965).
     smectite_orientation:
-        March-Dollase parameter the pure smectite pattern is calculated at.  It
+        March-Dollase parameter the pure smectite pattern is calculated at.  The
+        default is 0.1, the orientation a fit typically gives the other platy
+        clays on an oriented mount, rather than the 1 of a random powder that it
+        used to be: the two differ by a factor of 1000 in the mass behind one
+        fitted coefficient, and 1 put a smectite carrying 0.95 % of the
+        scattering at 22 % of the clay weight on a real mount.  The quantifier
+        rebases it onto the texture the fit actually measured
+        (:func:`clayquant.quantification.rebase_fixed_orientation`), so this
+        value decides the basis only when that is switched off.  It
         does not change the pattern's shape - every reflection is basal, so the
         factor is one constant - and it does set the basis its weight percent is
         on, because a basal series scales as ``r ** -3``.  The default of 1 is a
@@ -801,9 +809,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--smectite-orientation",
         type=float,
-        default=1.0,
+        default=0.1,
         help="March-Dollase parameter for the pure smectite pattern; it sets the "
-             "basis its weight percent is on, not its shape (default: 1, a random powder)",
+             "basis its weight percent is on, not its shape (default: 0.1, the "
+             "texture a fit usually gives the other platy clays)",
     )
     parser.add_argument(
         "--smectite-thickness",

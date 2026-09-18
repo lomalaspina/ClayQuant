@@ -56,6 +56,8 @@ __all__ = [
     "quantify",
     "CLAY_LIBRARY_PHASES",
     "CLAYFIT_ANCHOR_ORIENTATION",
+    "FIXED_ORIENTATION_PHASES",
+    "rebase_fixed_orientation",
     "CLAYFIT_SCALE_FACTORS",
     "clayfit_weight_fractions",
 ]
@@ -435,6 +437,16 @@ class Quantification:
     is then over-stated against phases that are all under-stated together.
     """
 
+    rebased_orientation: dict = field(default_factory=dict)
+    """Phases put on the other clays' texture, as ``{phase: (from_r, to_r)}``.
+
+    Empty when nothing needed it.  Worth reporting rather than doing silently:
+    the correction is cubic in ``r``, so between a library built at 1 and clays
+    fitted at 0.1 it moves a weight percent by a factor of a thousand, and a
+    reader comparing two runs needs to know which basis each is on
+    (:func:`rebase_fixed_orientation`).
+    """
+
     unaccounted: float = 0.0
     """Weight percent of the *spiked* specimen the fitted phases do not account for.
 
@@ -649,6 +661,7 @@ def quantify(
     clay_phases: set[str] | None = None,
     calibration: "Calibration | None" = None,
     internal_standard: tuple[str, float] | None = None,
+    rebase_orientation: bool = True,
 ) -> Quantification:
     """Group a fit by phase and normalise it on both bases.
 
@@ -671,6 +684,13 @@ def quantify(
         account for.  The phase must be one the fit found: a standard that was
         added and not fitted leaves the analysis relative, and says so through
         :attr:`Quantification.absolute` rather than by raising.
+    rebase_orientation:
+        Put a phase stored at one fixed orientation - the glycolated smectite -
+        on the texture the fit measured for the other platy clays, rather than
+        on whatever the library was built with.  See
+        :func:`rebase_fixed_orientation`; the factor is cubic, so this is worth
+        several orders of magnitude and not a refinement.  Pass ``False`` to see
+        the library's own basis.
     """
     calibration = calibration or Calibration()
     masses = (
@@ -723,14 +743,18 @@ def quantify(
         share.entries.append(name)
 
     shares = sorted(totals.values(), key=lambda share: share.scattering, reverse=True)
+    for share in shares:
+        if share.coefficient > 0.0:
+            share.orientation = weighted_orientation.get(share.phase, 0.0) / share.coefficient
+            share.host_fraction = weighted_fraction.get(share.phase, 0.0) / share.coefficient
+    # Before any share is taken: the rebasing changes a mass, and every weight
+    # percent below is a share of the total mass.
+    rebased = rebase_fixed_orientation(shares) if rebase_orientation else {}
     clay_scattering = sum(share.scattering for share in shares if share.is_clay)
     clay_amplitude = sum(share.amplitude for share in shares if share.is_clay)
     total_mass = sum(share.mass for share in shares)
     clay_mass = sum(share.mass for share in shares if share.is_clay)
     for share in shares:
-        if share.coefficient > 0.0:
-            share.orientation = weighted_orientation.get(share.phase, 0.0) / share.coefficient
-            share.host_fraction = weighted_fraction.get(share.phase, 0.0) / share.coefficient
         if total_mass > 0.0:
             share.weight = 100.0 * share.mass / total_mass
         if share.is_clay:
@@ -765,12 +789,85 @@ def quantify(
         standard_weight=standard_weight,
         absolute_scale=scale,
         unaccounted=(100.0 - sum(share.absolute_weight for share in shares)) if scale else 0.0,
+        rebased_orientation=rebased,
     )
 
 
 # --- Clayfit's family calibration, carried over ------------------------------
 
 CLAYFIT_ANCHOR_ORIENTATION = 0.1
+
+FIXED_ORIENTATION_PHASES = ("smectite_EG",)
+"""Phases whose library pattern is one entry at one assumed orientation.
+
+A pure basal series has the same shape at every March-Dollase ``r`` - every
+reflection is enhanced by the same ``r**-3`` - so storing it at ten orientations
+would give ten identical columns and the fit could not choose between them.  The
+glycolated smectite is the only such phase here, and it is stored once.
+
+The consequence is that its ``r`` is an *assumption*, not a measurement, and the
+assumption goes straight into its weight: the pattern at ``r = 0.1`` is exactly
+1000 times as intense as the same pattern at ``r = 1``, so the mass behind one
+fitted coefficient differs by that factor.  Left at the library's value beside an
+illite the fit put at 0.1, a smectite stored at 1 is reported with a thousand
+times too much mass relative to it, which on one real mount turned 0.95 % of the
+scattering into 22 % of the clay weight.  :func:`rebase_fixed_orientation` is
+what puts it back on the same basis.
+"""
+
+
+def rebase_fixed_orientation(
+    shares: "list[PhaseShare]",
+    phases: "tuple[str, ...]" = FIXED_ORIENTATION_PHASES,
+) -> dict[str, tuple[float, float]]:
+    """Put a fixed-orientation phase on the texture the fit found for the others.
+
+    The fit measures ``r`` for illite, chlorite and the kaolinites, from their
+    non-basal reflections; it cannot measure it for a phase whose every
+    reflection is basal, because the orientation scales such a pattern without
+    changing its shape.  Reporting that phase at whatever ``r`` the library
+    happened to be built with therefore puts it on a different basis from the
+    clays it is being compared with, and the difference is ``(r_library /
+    r_fitted)**3`` - a factor of 1000 between 1 and 0.1.
+
+    The assumption made here instead is that a platy clay in one oriented mount
+    has the texture the other platy clays in that mount have, and that is
+    measured: the mass is rescaled to the coefficient-weighted mean ``r`` of the
+    clay phases whose orientation the fit did choose.  It is still an
+    assumption, and it is the one worth making, because the alternative is an
+    assumption made at library-build time by someone who has not seen the
+    specimen.
+
+    Modifies the shares in place and returns ``{phase: (r_from, r_to)}`` for
+    those it rebased, so the caller can say what it did.
+    """
+    measured = [
+        share for share in shares
+        if share.is_clay and share.phase not in phases
+        and share.coefficient > 0.0 and share.orientation > 0.0
+    ]
+    if not measured:
+        return {}
+    weight = sum(share.coefficient for share in measured)
+    if weight <= 0.0:
+        return {}
+    target = sum(share.coefficient * share.orientation for share in measured) / weight
+    if not 0.0 < target <= 1.0:
+        return {}
+
+    rebased: dict[str, tuple[float, float]] = {}
+    for share in shares:
+        if share.phase not in phases or share.mass <= 0.0:
+            continue
+        stored = float(share.orientation)
+        if stored <= 0.0 or abs(stored - target) < 1e-9:
+            continue
+        # The pattern is I(r) = r**-3 I(1), stored at unit maximum, so the same
+        # fitted coefficient implies a mass smaller by (target / stored)**3.
+        share.mass *= (target / stored) ** 3
+        rebased[share.phase] = (stored, target)
+        share.orientation = target
+    return rebased
 """March-Dollase parameter Clayfit's scale factors are anchored on (its PO_01)."""
 
 CLAYFIT_SCALE_FACTORS: dict[str, float] = {

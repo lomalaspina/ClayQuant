@@ -685,7 +685,30 @@ def _quantification_table(quantification, result) -> html.Div:
                 "r = 1. Read the r column beside each weight. Treat these as estimates until the "
                 "preparation has been calibrated against mixtures of known composition. "
                 f"Calibration in use: {quantification.calibration.source}.",
-            ],
+            ]
+            + (
+                [
+                    html.Br(),
+                    html.Br(),
+                    html.B("Smectite has been put on the texture the other clays were "
+                           "fitted at. "),
+                    "; ".join(
+                        f"{phase} was stored at r = {stored:g} and is weighed at "
+                        f"r = {target:g}, a factor of {(stored / target) ** 3:.0f} "
+                        f"less mass for the same fitted intensity"
+                        for phase, (stored, target) in
+                        quantification.rebased_orientation.items()
+                    )
+                    + ". Every reflection of a glycolated smectite is basal, so its "
+                    "pattern has the same shape at every r and the fit cannot measure "
+                    "its texture - the library has to assume one. Leaving that "
+                    "assumption at the library's value beside clays the fit put at a "
+                    "tenth is what turns a per cent of the scattering into a fifth of "
+                    "the clay weight.",
+                ]
+                if quantification.rebased_orientation
+                else []
+            ),
             style={"background": "#fff4e5", "border": "1px solid #ffb74d", "padding": "8px",
                    "borderRadius": "6px", "fontSize": "0.8rem", "margin": "10px 0"},
         )
