@@ -59,8 +59,10 @@ __all__ = [
     "ILLITE_SMECTITE_FRACTIONS",
     "CHLORITE_SMECTITE_FRACTIONS",
     "CSDS_MEANS",
+    "DEFAULT_PEAK_SHAPE",
     "HOST_THICKNESSES",
     "describe_instrument_mismatch",
+    "instrument_from_measurement",
     "CONTINUUM_WINDOW",
     "scaled_to_d001",
     "NORMALIZATION_FLOOR",
@@ -790,6 +792,13 @@ def main(argv: list[str] | None = None) -> int:
         "--csds-beta", type=float, default=0.35, help="width of the lognormal CSDS in ln(N)"
     )
     parser.add_argument(
+        "--measurement",
+        default=None,
+        help="a scan from the instrument the samples will be measured on; its "
+             "goniometer radius and divergence slit are read from the file and its "
+             "peaks are measured for the width. No data from it enters the library.",
+    )
+    parser.add_argument(
         "--smectite-orientation",
         type=float,
         default=1.0,
@@ -945,11 +954,35 @@ def main(argv: list[str] | None = None) -> int:
     )
     instrument = Instrument(
         emission=CU_KA_5LINE,
-        peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0),
+        peak_shape=DEFAULT_PEAK_SHAPE,
         lp_mode="powder",
         lines_per_emission=arguments.emission_subsampling,
         divergence=divergence,
     )
+    if arguments.measurement:
+        # A scan from the instrument settles the two things the library cannot
+        # guess and must not get wrong: the geometry, which the file records,
+        # and the peak width, which its peaks measure.  No data from it enters
+        # the library.
+        from .background import BackgroundModel
+        from .io import read_pattern, resolve_user_path
+
+        pattern = read_pattern(resolve_user_path(arguments.measurement))
+        background = BackgroundModel(
+            chebyshev_degree=4, inverse=True, inverse_offset=1.0
+        ).fit(pattern.two_theta, pattern.intensity, snip_window=4.0)
+        instrument, note = instrument_from_measurement(
+            pattern, background=background, specimen_length=arguments.specimen_length
+        )
+        if not arguments.quiet:
+            print(f"instrument from {Path(arguments.measurement).name}: {note}")
+    elif not arguments.quiet:
+        print(
+            f"no --measurement given: calculating for a "
+            f"{arguments.goniometer_radius:g} mm goniometer radius, a "
+            f"{arguments.divergence_slit:g} deg divergence slit and a generic peak "
+            f"width. Pass a scan from your instrument if that is not it."
+        )
     library = build_library(
         grid=two_theta_grid(arguments.start, arguments.stop, arguments.step),
         instrument=instrument,
@@ -967,8 +1000,52 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
+
+
+DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
+"""Width model used when there is no measurement to take one from."""
+
+
+def instrument_from_measurement(
+    pattern,
+    background=None,
+    specimen_length: float = 20.0,
+) -> tuple[Instrument, str]:
+    """An instrument taken from a measurement: its geometry and its peak widths.
+
+    The geometry comes from the file, which records the goniometer radius and
+    the divergence slit; only the specimen length has to be supplied, because
+    nothing in a data file knows how long the smear was.  The width model is
+    scaled to the pattern's own isolated peaks by
+    :func:`~clayquant.profile.fit_peak_shape`, over the background-subtracted
+    intensity when a background has been fitted.
+
+    Returns the instrument and a sentence saying what was taken from where, for
+    the status line: a value silently guessed is a value nobody checks.
+    """
+    from .profile import fit_peak_shape
+
+    metadata = getattr(pattern, "metadata", {}) or {}
+    radius = float(metadata.get("goniometer_radius", 280.0))
+    slit = float(metadata.get("divergence_slit", 0.5))
+    wavelength = float(metadata.get("wavelength", 1.540596))
+    intensity = pattern.intensity
+    if background is not None:
+        intensity = background.subtract(pattern.two_theta, pattern.intensity)
+    widths = fit_peak_shape(pattern.two_theta, intensity, wavelength,
+                            default=DEFAULT_PEAK_SHAPE)
+    instrument = Instrument(
+        emission=CU_KA_5LINE,
+        peak_shape=widths.shape,
+        lp_mode="powder",
+        divergence=Divergence(specimen_length=specimen_length,
+                              goniometer_radius=radius, divergence=slit),
+    )
+    return instrument, (
+        f"Geometry from the file: {radius:.0f} mm goniometer radius, "
+        f"{slit:g} deg divergence slit, specimen taken as {specimen_length:g} mm. "
+        f"{widths.note}"
+    )
 
 
 def describe_instrument_mismatch(library, instrument) -> str:
@@ -1029,3 +1106,7 @@ def describe_instrument_mismatch(library, instrument) -> str:
         "reference peaks have the right width, or the fit will be short of "
         "intensity at every strong peak."
     )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

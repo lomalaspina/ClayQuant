@@ -15,7 +15,7 @@ from clayquant.gui.app import DEFAULT_PEAK_SHAPE, gui_instrument, instrument_fro
 from clayquant.gui.state import STATE
 from clayquant.library import HOST_THICKNESSES
 from clayquant.pattern import Pattern
-from clayquant.profile import pseudo_voigt
+from clayquant.profile import PeakShape, pseudo_voigt
 
 
 def a_pattern(radius=240.0, slit=0.25, widths=0.12):
@@ -192,3 +192,127 @@ def test_a_library_built_with_the_defaults_is_recognised_as_such():
     complaint = describe_instrument_mismatch(library, instrument)
     assert "goniometer radius 280" in complaint
     assert "divergence slit 0.5" in complaint
+
+
+def _text(node) -> str:
+    if isinstance(node, str):
+        return node
+    children = getattr(node, "children", None)
+    if children is None:
+        return ""
+    if isinstance(children, (list, tuple)):
+        return "\n".join(_text(child) for child in children)
+    return _text(children)
+
+
+def a_library(radius=240.0, slit=0.5, width=0.09):
+    from clayquant.library import PatternLibrary
+
+    return PatternLibrary(
+        two_theta=np.arange(4.0, 40.0, 0.02), entries=[],
+        metadata={
+            "peak_shape": {"u": 0.0, "v": 0.0, "w": width**2, "eta": 0.5,
+                           "size_c": None, "size_ab": None},
+            "geometry": {"specimen_length": 20.0, "goniometer_radius": radius,
+                         "divergence": slit},
+        },
+    )
+
+
+def test_the_strip_says_so_when_nothing_is_loaded():
+    from clayquant.gui.app import instrument_strip
+
+    said = _text(instrument_strip())
+    assert "none loaded" in said
+    assert "280 mm" in said
+
+
+def test_the_strip_shows_the_measurement_geometry_and_widths():
+    from clayquant.gui.app import instrument_strip
+
+    STATE.instrument, STATE.instrument_note = instrument_from_measurement(
+        a_pattern(radius=240.0, slit=0.25, widths=0.11)
+    )
+    said = _text(instrument_strip())
+    assert "240 mm radius" in said
+    assert "0.25" in said
+    assert "0.11" in said
+
+
+def test_the_strip_reports_a_library_that_disagrees():
+    from clayquant.gui.app import instrument_strip
+
+    STATE.instrument, _ = instrument_from_measurement(a_pattern(radius=240.0, slit=0.25))
+    STATE.library = a_library(radius=280.0, slit=0.5)
+    try:
+        said = _text(instrument_strip())
+        assert "do not match" in said
+        assert "280 mm radius" in said and "240 mm radius" in said
+    finally:
+        STATE.library = None
+
+
+def test_the_strip_is_quiet_when_the_two_agree():
+    from clayquant.gui.app import instrument_strip
+
+    pattern = a_pattern(radius=240.0, slit=0.25, widths=0.12)
+    STATE.instrument, _ = instrument_from_measurement(pattern)
+    width = float(STATE.instrument.peak_shape.fwhm(np.array([26.0]), 1.540596)[0])
+    STATE.library = a_library(radius=240.0, slit=0.25, width=width)
+    try:
+        assert "do not match" not in _text(instrument_strip())
+    finally:
+        STATE.library = None
+
+
+def test_the_strip_says_when_a_library_remembers_nothing():
+    from clayquant.gui.app import instrument_strip
+    from clayquant.library import PatternLibrary
+
+    STATE.instrument, _ = instrument_from_measurement(a_pattern())
+    STATE.library = PatternLibrary(
+        two_theta=np.arange(4.0, 40.0, 0.02), entries=[], metadata={})
+    try:
+        assert "does not record" in _text(instrument_strip())
+    finally:
+        STATE.library = None
+
+
+def test_the_library_cli_takes_its_instrument_from_a_scan():
+    """The whole point of this change: the icon must not need the GUI.
+
+    The library is built from a desktop icon before ClayQuant is opened, so the
+    instrument cannot come from a loaded mount - it has to come from a scan the
+    icon asks for.  Anything else makes a matched library depend on doing two
+    things in the right order, which is not a requirement to put on anyone.
+    """
+    import tempfile
+    from pathlib import Path as _Path
+
+    from clayquant.library import PatternLibrary, main
+
+    folder = _Path(tempfile.mkdtemp())
+    scan = folder / "scan.xy"
+    pattern = a_pattern(radius=240.0, slit=0.25, widths=0.13)
+    scan.write_text(
+        "\n".join(f"{angle:.4f} {value:.3f}"
+                  for angle, value in zip(pattern.two_theta, pattern.intensity)),
+        encoding="utf-8",
+    )
+    out = folder / "library.npz"
+    assert main([
+        "--measurement", str(scan), "-o", str(out), "--stop", "14", "--step", "0.1",
+        "--csds-means", "15", "--quiet",
+    ]) == 0
+    library = PatternLibrary.load(out)
+    # The .xy format carries no geometry, so the radius falls back; the widths
+    # are measured from the peaks either way, and that is the part no file
+    # records and no default can supply.
+    assert library.metadata["peak_shape"]["w"] > 0.0
+    modelled = float(PeakShape(
+        u=library.metadata["peak_shape"]["u"],
+        v=library.metadata["peak_shape"]["v"],
+        w=library.metadata["peak_shape"]["w"],
+        size_ab=library.metadata["peak_shape"]["size_ab"],
+    ).fwhm(np.array([26.0]), 1.540596)[0])
+    assert modelled == pytest.approx(0.13, abs=0.03)

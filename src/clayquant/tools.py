@@ -162,8 +162,30 @@ def build_library_job(values: dict[str, str], say=print):
             say(f"  {key}: {crystal.name}")
         for note in skipped:
             say(f"  skipped: {note}")
+    instrument = None
+    measurement = values.get("measurement", "").strip()
+    if measurement:
+        from .background import BackgroundModel
+        from .io import read_pattern, resolve_user_path
+        from .library import instrument_from_measurement
+
+        pattern = read_pattern(resolve_user_path(measurement))
+        # The width is measured at the half maximum of the peaks, so it is read
+        # off the pattern with its background gone; taken with the background
+        # still there the half maximum sits too high up the peak and the width
+        # comes out too narrow.
+        fit = BackgroundModel(chebyshev_degree=4, inverse=True, inverse_offset=1.0).fit(
+            pattern.two_theta, pattern.intensity, snip_window=4.0)
+        instrument, note = instrument_from_measurement(pattern, background=fit)
+        say(f"Instrument taken from {Path(measurement).name}:")
+        say(f"  {note}")
+    else:
+        say("No scan given, so the library is calculated for a 280 mm goniometer radius,")
+        say("a 0.5 deg divergence slit and a generic peak width. If that is not your")
+        say("instrument, run this again with a scan from it: the reference peaks will")
+        say("otherwise be the wrong width for every fit made against this library.")
     say("Calculating; this takes a few minutes.")
-    library = build_library()
+    library = build_library(instrument=instrument)
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     library.save(output)
     say(library.describe())
@@ -233,12 +255,28 @@ def _panel(step: str):
         ttk.Label(
             body,
             text=("Calculate the reference pattern library the fit chooses from.\n"
-                  "This takes a few minutes and only has to be done once per setting."),
+                  "This takes a few minutes and only has to be done once per instrument\n"
+                  "setting - not once per sample."),
             justify="left",
         ).pack(anchor="w", padx=12, pady=(0, 6))
         row(body, "Write the library to", "output",
             str(project_root() / "library" / "clays.npz"),
             "save", [("Pattern library", "*.npz")])
+        row(body, "A scan from your instrument", "measurement", "", "open",
+            [("Diffraction data", "*.xrdml *.xy *.raw *.dat *.txt"),
+             ("XRDML", "*.xrdml"), ("All files", "*.*")])
+        ttk.Label(
+            body,
+            text=("Any scan measured on the instrument and setting the samples will be.\n"
+                  "It is read for the goniometer radius and the divergence slit, which the\n"
+                  "file records, and its peaks are measured for the width - and nothing\n"
+                  "else: no data from it goes into the library. Without it the library is\n"
+                  "calculated for a 280 mm radius, a 0.5 deg slit and a generic width, and\n"
+                  "if that is not your instrument the reference peaks are the wrong width\n"
+                  "for every fit you do with it."),
+            justify="left",
+            foreground="#555555",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
         row(body, "Refinement (optional)", "refinement", "", "open",
             [("TOPAS output", "*.out")])
 

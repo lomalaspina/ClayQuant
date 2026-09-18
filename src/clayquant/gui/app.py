@@ -69,10 +69,12 @@ from ..diagnostics import (
 from ..emission import CU_KA_5LINE
 from ..io import resolve_user_path
 from ..library import (
+    DEFAULT_PEAK_SHAPE,
     PREFERRED_ORIENTATIONS,
     PatternLibrary,
     build_library,
     describe_instrument_mismatch,
+    instrument_from_measurement,
 )
 from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, random_transition
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
@@ -264,6 +266,74 @@ def phases_to_tick(findings, screened: bool, tick_above: float,
     ]
 
 
+def instrument_strip():
+    """The instrument in use and the one the library holds, side by side.
+
+    A plain function rather than only a callback body, so what it says in each
+    of its states can be tested: nothing loaded, a measurement with no library,
+    a library that records nothing, and a library that disagrees.
+    """
+    from ..library import DEFAULT_PEAK_SHAPE
+
+    def widths(shape) -> str:
+        return ", ".join(
+            f"{angle:.0f}\u00b0: {float(shape.fwhm(np.array([angle]), 1.540596)[0]):.3f}\u00b0"
+            for angle in (8.0, 20.0, 26.0, 36.0)
+        )
+
+    rows = []
+    if STATE.instrument is None:
+        rows.append(html.Span(
+            "Measurement: none loaded \u2014 calculations use the 280 mm / 0.5\u00b0 "
+            "default and a generic peak width.",
+            style={"color": "#a15c00"},
+        ))
+    else:
+        divergence = STATE.instrument.divergence
+        rows.append(html.Span(
+            f"Measurement: {divergence.goniometer_radius:.0f} mm radius, "
+            f"{divergence.divergence:g}\u00b0 slit, "
+            f"{divergence.specimen_length:g} mm specimen \u2014 FWHM "
+            f"{widths(STATE.instrument.peak_shape)}"
+        ))
+    library = STATE.library
+    if library is None:
+        rows.append(html.Span("Library: none loaded.", style={"color": "#666"}))
+    else:
+        stored = library.metadata.get("peak_shape")
+        geometry = library.metadata.get("geometry")
+        if not stored or not geometry:
+            rows.append(html.Span(
+                "Library: does not record what it was calculated with, so it cannot "
+                "be checked against this measurement.",
+                style={"color": "#a15c00"},
+            ))
+        else:
+            shape = replace(
+                DEFAULT_PEAK_SHAPE,
+                u=float(stored.get("u", 0.0)), v=float(stored.get("v", 0.0)),
+                w=float(stored.get("w", 0.01)), eta=float(stored.get("eta", 0.5)),
+                size_c=stored.get("size_c"), size_ab=stored.get("size_ab"),
+            )
+            complaint = (
+                describe_instrument_mismatch(library, STATE.instrument)
+                if STATE.instrument is not None else ""
+            )
+            rows.append(html.Span(
+                f"Library: {geometry['goniometer_radius']:.0f} mm radius, "
+                f"{geometry['divergence']:g}\u00b0 slit \u2014 FWHM {widths(shape)}",
+                style={"color": "#a15c00" if complaint else "#1a7f37"},
+            ))
+            if complaint:
+                rows.append(html.Span(
+                    "These do not match. Rebuild the library with a scan from this "
+                    "instrument \u2014 the desktop icon asks for one \u2014 or the fit "
+                    "will be short of intensity at every strong peak.",
+                    style={"color": "#a15c00", "fontWeight": "600"},
+                ))
+    return html.Div([html.Div(row) for row in rows])
+
+
 def background_report(pattern, fit, background) -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
@@ -409,10 +479,6 @@ def _ask(arguments: list[str]) -> tuple[str | None, str | None]:
     return None, f"The chooser failed: {detail}"
 
 
-DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
-"""Width model used until a measurement is loaded to take one from."""
-
-
 def gui_instrument(
     specimen_length: float = 20.0,
     goniometer_radius: float = 280.0,
@@ -445,48 +511,6 @@ def gui_instrument(
             goniometer_radius=goniometer_radius,
             divergence=divergence_slit,
         ),
-    )
-
-
-def instrument_from_measurement(
-    pattern,
-    background=None,
-    specimen_length: float = 20.0,
-) -> tuple[Instrument, str]:
-    """An instrument taken from a measurement: its geometry and its peak widths.
-
-    The geometry comes from the file, which records the goniometer radius and
-    the divergence slit; only the specimen length has to be supplied, because
-    nothing in a data file knows how long the smear was.  The width model is
-    scaled to the pattern's own isolated peaks by
-    :func:`~clayquant.profile.fit_peak_shape`, over the background-subtracted
-    intensity when a background has been fitted.
-
-    Returns the instrument and a sentence saying what was taken from where, for
-    the status line: a value silently guessed is a value nobody checks.
-    """
-    from ..profile import fit_peak_shape
-
-    metadata = getattr(pattern, "metadata", {}) or {}
-    radius = float(metadata.get("goniometer_radius", 280.0))
-    slit = float(metadata.get("divergence_slit", 0.5))
-    wavelength = float(metadata.get("wavelength", 1.540596))
-    intensity = pattern.intensity
-    if background is not None:
-        intensity = background.subtract(pattern.two_theta, pattern.intensity)
-    widths = fit_peak_shape(pattern.two_theta, intensity, wavelength,
-                            default=DEFAULT_PEAK_SHAPE)
-    instrument = Instrument(
-        emission=CU_KA_5LINE,
-        peak_shape=widths.shape,
-        lp_mode="powder",
-        divergence=Divergence(specimen_length=specimen_length,
-                              goniometer_radius=radius, divergence=slit),
-    )
-    return instrument, (
-        f"Geometry from the file: {radius:.0f} mm goniometer radius, "
-        f"{slit:g} deg divergence slit, specimen taken as {specimen_length:g} mm. "
-        f"{widths.note}"
     )
 
 
@@ -1285,6 +1309,18 @@ def build_layout() -> html.Div:
                 style={"marginTop": "2px", "color": "#666"},
             ),
             *banner,
+            # The instrument, on every tab.  It decides the width and so the
+            # height of every calculated peak, it comes from two different
+            # places - the measurement and the library - and when those two
+            # disagree the fit is short of intensity at every strong peak with
+            # no other symptom.  A value that matters that much does not belong
+            # in a status line under a button that has to be pressed to see it.
+            html.Div(id="instrument-strip", style={
+                "margin": "6px 0 10px 0", "padding": "6px 10px",
+                "border": "1px solid #dddddd", "borderRadius": "6px",
+                "background": "#fafafa", "fontSize": "0.8rem", "color": "#444",
+            }),
+            dcc.Interval(id="instrument-tick", interval=1500, n_intervals=0),
             dcc.Tabs(
                 id="tabs",
                 value="load",
@@ -1858,6 +1894,13 @@ def register_callbacks(app: Dash) -> None:
             if marks else None
         )
         return figure, html.Div([html.B(verdict), html.Div(result.summary()), note])
+
+    @app.callback(
+        Output("instrument-strip", "children"),
+        Input("instrument-tick", "n_intervals"),
+    )
+    def show_instrument(_tick):
+        return instrument_strip()
 
     @app.callback(
         Output("detect-only", "value"),
