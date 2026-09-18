@@ -61,6 +61,8 @@ from ..background import (
 )
 from ..bern import is_clay_phase
 from ..detection import (
+    evidence_score,
+    screen_treatments,
     COMMON_IN_CLAY_SEPARATES,
     detect_phases,
     screen_phases,
@@ -826,9 +828,14 @@ def load_tab() -> html.Div:
                 ],
                 style=CONTROL_PANEL,
             ),
-            html.Div([working(dcc.Graph(id="load-graph",
-                                        figure=empty_figure("Load patterns to begin")))],
-                     style=GRAPH_BOX),
+            html.Div(
+                [
+                    working(dcc.Graph(id="load-graph",
+                                      figure=empty_figure("Load patterns to begin"))),
+                    working(html.Div(id="load-screen")),
+                ],
+                style=GRAPH_BOX,
+            ),
         ],
         style=ROW,
     )
@@ -1643,6 +1650,101 @@ def register_callbacks(app: Dash) -> None:
                 line={"color": COLORS[mount], "width": 1},
             )
         return style_axes(figure, "Counts"), html.Ul([html.Li(text) for text in messages])
+
+    @app.callback(
+        Output("load-screen", "children"),
+        Input("load-status", "children"),
+        Input("db-status", "children"),
+    )
+    def screen_on_load(_loaded, _database):
+        """Identify the accompanying minerals as soon as the scans are read.
+
+        Before the zero error, before a background and without a reference
+        library, which is where Clayfit does it and is possible for the reason
+        set out in :func:`clayquant.detection.screen_treatments`: each mount is
+        aligned on its own quartz lines, so nothing the operator has yet to set
+        is needed, and the test is which peaks the three treatments have in
+        common rather than how well one of them can be explained.
+
+        It fires on either input because it needs both, and which arrives first
+        is up to the operator: the structure database can be loaded before the
+        scans or after them.
+        """
+        loaded = STATE.loaded_mounts()
+        if len(loaded) < 2 or not STATE.phase_database:
+            STATE.screen = None
+            if len(loaded) >= 2:
+                return html.Div(
+                    "Load the structure database in step 4 and the accompanying "
+                    "minerals will be identified here, from the three scans alone - "
+                    "no zero error, no background and no reference library needed.",
+                    style={"fontSize": "0.82rem", "color": "#666", "marginTop": "8px"},
+                )
+            return ""
+
+        mounts = {name: STATE.mounts[name].raw for name in loaded}
+        try:
+            screen = screen_treatments(
+                mounts, STATE.phase_database, instrument=gui_instrument(),
+                only={name for name in COMMON_IN_CLAY_SEPARATES
+                      if name in STATE.phase_database} or None,
+            )
+        except Exception as exc:  # noqa: BLE001 - a screen must not stop the workflow
+            STATE.screen = None
+            return error_message(exc)
+        STATE.screen = screen
+        if not screen.findings:
+            return html.Div([html.B("No accompanying mineral was found. "), screen.note],
+                            style={"fontSize": "0.82rem", "color": "#666",
+                                   "marginTop": "8px"})
+
+        rows = [
+            html.Tr([
+                html.Td(evidence.name),
+                html.Td(f"{100.0 * evidence.score:.0f}%"),
+                html.Td(f"{evidence.n_matched} of {evidence.n_expected}"),
+                html.Td(f"{evidence.cell_deviation_percent:+.1f}%"),
+                html.Td(f"{evidence_score(evidence):.2f}"),
+            ])
+            for evidence in screen.findings[:15]
+        ]
+        width = ("" if not np.isfinite(screen.width)
+                 else f" The quartz lines are {screen.width:.3f}\u00b0 wide.")
+        return html.Div(
+            [
+                html.H4(f"{len(screen.findings)} accompanying minerals stand in all "
+                        f"{len(mounts)} mounts",
+                        style={"marginBottom": "4px"}),
+                html.Div(
+                    "Found before anything has been set, from the peaks the mounts have "
+                    "in common: the clays move between air, glycol and heat and nothing "
+                    "else does. Step 4 is where they are chosen and fitted; this is what "
+                    "the specimen supports." + width,
+                    style={"fontSize": "0.8rem", "color": "#555", "marginBottom": "6px"},
+                ),
+                html.Table(
+                    [
+                        html.Thead(html.Tr([
+                            html.Th("Phase"), html.Th("Coverage"),
+                            html.Th("Stable lines"), html.Th("Cell"), html.Th("Score"),
+                        ])),
+                        html.Tbody(rows),
+                    ],
+                    style={"fontSize": "0.85rem"},
+                ),
+                html.Div(screen.note, style={"fontSize": "0.78rem", "color": "#555",
+                                             "marginTop": "6px"}),
+                html.Div(
+                    "Coverage is the share of the phase's own calculated intensity that "
+                    "stands on a stable peak, and the score is that rewarded for resting "
+                    "on several lines. Cell is the coherent scaling the phase needed: at "
+                    "0% it fits the database entry as written, and one near the 2% "
+                    "allowance is weak evidence.",
+                    style={"fontSize": "0.78rem", "color": "#666", "marginTop": "4px"},
+                ),
+            ],
+            style={"marginTop": "10px"},
+        )
 
     @app.callback(
         Output("zero-slider", "value"),

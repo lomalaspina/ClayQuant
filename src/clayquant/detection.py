@@ -69,6 +69,7 @@ import numpy as np
 
 from .background import snip_baseline
 from .bern import is_clay_phase
+from .calibration import QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
 from .crystal import Crystal
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
@@ -82,7 +83,34 @@ __all__ = [
     "detect_phases",
     "screen_phases",
     "DEFAULT_CELL_ALLOWANCE",
+    "CLAYFIT_CLUSTER",
+    "CLAYFIT_INTENSITY_FLOOR",
+    "CLAYFIT_MATCH_TOLERANCE",
+    "CLAYFIT_MAX_ZERO_SHIFT",
+    "CLAYFIT_MIN_COVERAGE",
+    "CLAYFIT_MIN_MATCHES",
+    "CLAYFIT_QUARTZ_STRENGTH",
+    "CLAYFIT_SHIFT_AGREEMENT",
+    "QUARTZ_CALIBRATION",
+    "TreatmentPeaks",
+    "TripletScreen",
+    "match_across_treatments",
+    "quartz_zero_shift",
+    "evidence_score",
+    "screen_treatments",
+    "treatment_peaks",
 ]
+
+QUARTZ_CALIBRATION: tuple[float, float] = (
+    reference_two_theta(QUARTZ_100_D),
+    reference_two_theta(QUARTZ_101_D),
+)
+"""The two quartz lines the load-time screen aligns each mount on.
+
+The 100 at 20.86 and the 101 at 26.64 degrees, from the same spacings the zero
+error step calibrates on, so a shift measured here and one measured there are
+the same quantity.
+"""
 
 COMMON_IN_CLAY_SEPARATES: tuple[str, ...] = (
     # Silica
@@ -1086,3 +1114,479 @@ def stable_phases(
         ))
     findings.sort(key=lambda evidence: (-evidence.score, -evidence.n_matched))
     return findings, peaks
+
+
+# --- Clayfit's triplet screen ------------------------------------------------
+#
+# Clayfit identifies the accompanying minerals as soon as the three scans are
+# read, *before* the zero error is set, and the two things that let it are worth
+# naming because neither is obvious.
+#
+# It does not need the zero error because it measures one for each scan from
+# quartz and applies it there and then: the two strongest quartz lines are
+# looked for within half a degree of where they belong, the pair whose implied
+# shifts agree is taken, and every peak of that scan is moved by the mean of
+# them.  A displacement of a few hundredths of a degree - which is what an
+# oriented mount gives - is gone before any phase is matched, and the three
+# scans are each aligned independently, so they need not share a zero.
+#
+# And it is a screen on *stability* rather than on fit: a reflection counts only
+# when it is present in the air-dried, glycolated and heated scan alike.  That
+# is a different measurement from explaining one pattern, and it is the one that
+# finds a phase whose strongest line is overlapped.  Rutile's 110 sits on an
+# albite reflection, so an unrestricted fit of one scan ranks thirty-five phases
+# above it; its lines are nevertheless at the same angles in all three scans.
+
+CLAYFIT_MATCH_TOLERANCE = 0.11
+"""How far a measured peak may be from a calculated line, in degrees.
+
+Clayfit's ``MATCH_TOLERANCE_DEGREES``.  It has to cover what the quartz shift
+leaves behind - a specimen displacement is not constant in 2theta - plus the
+cell difference between the database entry and the specimen's own solid
+solution.  The screen also accepts a coherent cell scaling
+(``cell_allowance``), which is the more honest way to write the second of those.
+"""
+
+CLAYFIT_MAX_ZERO_SHIFT = 0.50
+"""Half-width of the window the quartz calibration lines are looked for in.
+
+Clayfit's ``MAX_ZERO_SHIFT_DEGREES``.  Generous on purpose: this runs before
+anything has been calibrated, and a mount that is half a degree out is a mount
+whose zero error the operator has not yet had a chance to see.
+"""
+
+CLAYFIT_SHIFT_AGREEMENT = 0.10
+"""How closely the two quartz lines must agree on the shift, in degrees.
+
+A pair that disagrees by more than this is two different reflections, not the
+quartz doublet, and taking their mean would calibrate on a coincidence.
+"""
+
+CLAYFIT_QUARTZ_STRENGTH = 0.03
+"""How prominent a peak must be, against the strongest, to be taken for quartz.
+
+Not Clayfit's - Clayfit takes the strongest agreeing pair whatever its absolute
+size - and added because on real mounts that is not enough.  See
+:func:`quartz_zero_shift` for the measurement it comes from.
+"""
+
+CLAYFIT_INTENSITY_FLOOR = 0.06
+"""Weakest calculated line the screen will ask to be present.
+
+Clayfit's ``detection_intensity_floor`` of 6 % of the phase's strongest, and it
+does two things.  It keeps the coverage denominator from filling with lines too
+weak to see, which would make every phase with a long tail look absent.  And it
+keeps the numerator honest, because a weak line has more company within 0.11
+degrees than a strong one and is correspondingly easier to match by accident.
+"""
+
+CLAYFIT_CLUSTER = 0.10
+"""Calculated lines closer than this count once, at the strongest of them.
+
+Clayfit's own comment names the case: albite has closely spaced line groups near
+24 and 28 degrees, and a measured peak that answers three of them at once should
+be three-quarters of the phase's evidence only if they are really resolved.
+"""
+
+CLAYFIT_MIN_MATCHES = 2
+CLAYFIT_MIN_COVERAGE = 0.30
+"""Clayfit's reporting thresholds: two stable reflections and 30 % coverage."""
+
+
+@dataclass
+class TreatmentPeaks:
+    """The peaks of one scan, and what they are worth."""
+
+    two_theta: np.ndarray
+    prominence: np.ndarray
+    width: np.ndarray
+
+    def __len__(self) -> int:
+        return int(self.two_theta.size)
+
+
+def treatment_peaks(
+    pattern: Pattern,
+    window: float = 0.055,
+    prominence_sigmas: float = 4.0,
+    prominence_share: float = 0.0025,
+) -> TreatmentPeaks:
+    """Peaks of one scan, found the way Clayfit finds them.
+
+    The pattern is background-corrected and smoothed by the percentile model of
+    :func:`clayquant.background.qpa_percentile_baseline` - which is what that
+    model is for - and the peaks are taken from the smoothed signal with a
+    prominence of four times the noise or a quarter of a per cent of the
+    strongest point, whichever is larger, and a minimum separation of ``window``
+    degrees.
+
+    The noise is measured from the first difference of the corrected signal,
+    ``1.4826 * median|dI| / sqrt(2)``, which is a robust estimate that a broad
+    feature does not inflate - the same reason the median absolute deviation is
+    used to seed :func:`clayquant.background.noise_level`.
+    """
+    from scipy.signal import find_peaks, peak_widths
+
+    from .background import qpa_percentile_baseline
+
+    two_theta = np.asarray(pattern.two_theta, dtype=float)
+    corrected = qpa_percentile_baseline(two_theta, pattern.intensity).smoothed
+    empty = np.array([], dtype=float)
+    if corrected.size < 8:
+        return TreatmentPeaks(empty, empty, empty)
+    step = float(np.median(np.diff(two_theta)))
+    noise = 1.4826 * float(np.median(np.abs(np.diff(corrected)))) / math.sqrt(2.0)
+    prominence = max(prominence_sigmas * noise,
+                     prominence_share * float(np.max(corrected)), 1.0)
+    indices, properties = find_peaks(
+        corrected, prominence=prominence, distance=max(1, int(round(window / step)))
+    )
+    if indices.size == 0:
+        return TreatmentPeaks(empty, empty, empty)
+    widths = peak_widths(corrected, indices, rel_height=0.5)[0] * step
+    return TreatmentPeaks(
+        two_theta=np.asarray(two_theta[indices], dtype=float),
+        prominence=np.asarray(properties["prominences"], dtype=float),
+        width=np.asarray(widths, dtype=float),
+    )
+
+
+def quartz_zero_shift(
+    peaks: TreatmentPeaks,
+    calibration: tuple[float, float] = QUARTZ_CALIBRATION,
+    reach: float = CLAYFIT_MAX_ZERO_SHIFT,
+    agreement: float = CLAYFIT_SHIFT_AGREEMENT,
+    strength: float = CLAYFIT_QUARTZ_STRENGTH,
+) -> tuple[float | None, tuple[int, ...]]:
+    """The zero shift one scan's quartz lines imply, and which peaks gave it.
+
+    Every peak within ``reach`` of the 20.86 and 26.64 degree quartz lines is a
+    candidate; each pair implies two shifts, and a pair is usable only when
+    those agree to ``agreement``.  Among the usable pairs the strongest wins,
+    with the disagreement as a tie-break::
+
+        score = sqrt(prominence_low * prominence_high) / (0.02 + disagreement)
+
+    The constant keeps a pair that agrees exactly from scoring infinitely, so
+    strength decides between two pairs that both agree well - which is the right
+    way round, because a strong pair that agrees to 0.01 degrees is better
+    evidence than a weak one that agrees to 0.001.
+
+    With no usable pair the isolated 20.86 line is returned on its own, as a
+    starting value rather than a calibration.  ``None`` means quartz was not
+    found at all.
+    """
+    if len(peaks) == 0:
+        return None, ()
+    low_reference, high_reference = calibration
+    # A scan of a clay separate holds forty to a hundred peaks, so within half a
+    # degree of each reference there are usually several candidates and a pair
+    # of them can agree on a shift by coincidence.  Measured on nine real
+    # mounts, the peak nearest the 26.64 line carries 1 to 100 per cent of the
+    # strongest peak's prominence, and the ones at the bottom of that range are
+    # noise that had been taken for quartz: on one specimen they aligned all
+    # three mounts by +0.37 deg, which is not a displacement any oriented mount
+    # has.  Requiring a candidate to carry `strength` of the strongest peak
+    # leaves a modest quartz in - the weakest real one measured was 3.3 per cent
+    # - and removes those.
+    floor = strength * float(np.max(peaks.prominence)) if len(peaks) else 0.0
+    strong = peaks.prominence >= floor
+    low = np.flatnonzero((np.abs(peaks.two_theta - low_reference) <= reach) & strong)
+    high = np.flatnonzero((np.abs(peaks.two_theta - high_reference) <= reach) & strong)
+
+    best: tuple[float, float, int, int] | None = None
+    for first in low:
+        for second in high:
+            low_shift = low_reference - float(peaks.two_theta[first])
+            high_shift = high_reference - float(peaks.two_theta[second])
+            disagreement = abs(low_shift - high_shift)
+            if disagreement > agreement:
+                continue
+            strength = math.sqrt(max(peaks.prominence[first], 0.0)
+                                 * max(peaks.prominence[second], 0.0))
+            score = strength / (0.02 + disagreement)
+            if best is None or score > best[0]:
+                best = (score, 0.5 * (low_shift + high_shift), int(first), int(second))
+    if best is not None:
+        return float(best[1]), (best[2], best[3])
+    if low.size:
+        index = int(low[int(np.argmax(peaks.prominence[low]))])
+        return low_reference - float(peaks.two_theta[index]), (index,)
+    return None, ()
+
+
+def _clustered_lines(
+    positions: np.ndarray,
+    heights: np.ndarray,
+    floor: float,
+    cluster: float,
+) -> list[tuple[float, float]]:
+    """Calculated lines above ``floor``, with near neighbours merged."""
+    if positions.size == 0 or heights.max() <= 0.0:
+        return []
+    strong = heights >= floor * heights.max()
+    lines = sorted(zip(positions[strong].tolist(), heights[strong].tolist()))
+    merged: list[tuple[float, float]] = []
+    for position, height in lines:
+        if merged and position - merged[-1][0] <= cluster:
+            if height > merged[-1][1]:
+                merged[-1] = (position, height)
+        else:
+            merged.append((position, height))
+    return merged
+
+
+def match_across_treatments(
+    name: str,
+    positions: np.ndarray,
+    heights: np.ndarray,
+    peaks_by_mount: dict[str, TreatmentPeaks],
+    shifts: dict[str, float],
+    tolerance: float = CLAYFIT_MATCH_TOLERANCE,
+    floor: float = CLAYFIT_INTENSITY_FLOOR,
+    cluster: float = CLAYFIT_CLUSTER,
+    scale: float = 1.0,
+) -> PhaseEvidence | None:
+    """How much of one phase stands on peaks present in every mount.
+
+    Each calculated line, strongest first, is looked for in every scan at once,
+    after that scan's own quartz shift; a line counts only when every scan has a
+    peak within ``tolerance`` of it that no stronger line has already claimed.
+    Coverage is the share of the phase's own calculated intensity that the
+    counted lines carry.
+
+    Claiming each measured peak once is what stops a phase with a dense
+    calculated pattern from scoring by coincidence: without it, one strong
+    measured peak answers every line that happens to lie near it.
+
+    ``scale`` applies a coherent cell scaling to the calculated positions, in
+    the sense of :func:`_scale_positions` - one number for the whole phase, not
+    a window per line.  It is how a solid solution whose cell differs from the
+    database entry is allowed for without widening the tolerance, which would
+    let everything match everything.
+    """
+    lines = _clustered_lines(positions, heights, floor, cluster)
+    if not lines:
+        return None
+    if scale != 1.0:
+        lines = [(2.0 * math.degrees(math.asin(min(1.0, scale * math.sin(
+            math.radians(0.5 * position))))), height) for position, height in lines]
+
+    claimed: dict[str, set[int]] = {mount: set() for mount in peaks_by_mount}
+    matches: list[PeakMatch] = []
+    explained = 0.0
+    for position, height in sorted(lines, key=lambda row: -row[1]):
+        found: dict[str, int] = {}
+        for mount, peaks in peaks_by_mount.items():
+            corrected = peaks.two_theta + shifts[mount]
+            if corrected.size == 0:
+                found = {}
+                break
+            index = int(np.argmin(np.abs(corrected - position)))
+            if abs(float(corrected[index]) - position) > tolerance:
+                found = {}
+                break
+            if index in claimed[mount]:
+                found = {}
+                break
+            found[mount] = index
+        matched = len(found) == len(peaks_by_mount)
+        if matched:
+            for mount, index in found.items():
+                claimed[mount].add(index)
+            explained += height
+        angle = float(np.mean([
+            peaks_by_mount[mount].two_theta[index] + shifts[mount]
+            for mount, index in found.items()
+        ])) if matched else None
+        strength = float(np.mean([
+            peaks_by_mount[mount].prominence[index] for mount, index in found.items()
+        ])) if matched else 0.0
+        matches.append(PeakMatch(
+            expected_two_theta=float(position),
+            expected_intensity=float(height),
+            window=tolerance,
+            found_two_theta=angle,
+            height=strength,
+            noise=1.0,
+        ))
+
+    total = sum(height for _, height in lines)
+    coverage = explained / total if total > 0 else 0.0
+    return PhaseEvidence(
+        name=name,
+        is_clay=is_clay_phase(name),
+        score=coverage,
+        matches=matches,
+        cell_scale=float(scale),
+        presence=coverage,
+        intensity_agreement=float("nan"),
+    )
+
+
+def evidence_score(evidence: PhaseEvidence) -> float:
+    """Clayfit's ranking: coverage, rewarded for resting on several lines.
+
+    ``coverage * sqrt(matched)``.  Coverage alone would put a phase whose one
+    strong line happens to land on a peak level with one whose five lines are
+    all there, and the second is the better evidence by more than coverage says:
+    a coincidence at one line is ordinary, and five coincidences at the angles
+    one phase predicts are not.  The square root rather than the count, because
+    the lines of one phase are not independent tests - they come from one cell,
+    so getting the cell wrong moves all of them together.
+    """
+    return float(evidence.score) * math.sqrt(max(evidence.n_matched, 0))
+
+
+@dataclass
+class TripletScreen:
+    """What the load-time screen found, and what it calibrated itself on."""
+
+    findings: list[PhaseEvidence]
+    shifts: dict[str, float]
+    """The zero shift measured from quartz on each mount, in degrees."""
+
+    calibrated: bool
+    """Whether every mount gave a full quartz pair rather than one line."""
+
+    width: float
+    """Median full width at half maximum of the quartz lines, in degrees."""
+
+    note: str = ""
+
+
+def screen_treatments(
+    mounts: dict[str, Pattern],
+    crystals: dict[str, Crystal],
+    two_theta_range: tuple[float, float] = (4.0, 40.0),
+    instrument: Instrument | None = None,
+    tolerance: float = CLAYFIT_MATCH_TOLERANCE,
+    min_coverage: float = CLAYFIT_MIN_COVERAGE,
+    min_matched: int = CLAYFIT_MIN_MATCHES,
+    floor: float = CLAYFIT_INTENSITY_FLOOR,
+    cell_allowance: float = DEFAULT_CELL_ALLOWANCE,
+    scale_steps: int = 5,
+    include_clays: bool = False,
+    only: set[str] | None = None,
+) -> TripletScreen:
+    """Identify the accompanying minerals from the mounts alone, before anything else.
+
+    Clayfit's screen, which runs as soon as the three scans are read: each scan
+    is aligned on its own quartz lines, every eligible structure is matched
+    against the peaks the scans have in common, and a phase is reported when at
+    least ``min_matched`` of its calculated lines are stable and they carry at
+    least ``min_coverage`` of its calculated intensity.
+
+    No reference library is needed and no background model has to have been
+    chosen, which is the point: the answer is available before the operator has
+    set anything, and the things it depends on - where quartz is, and which
+    peaks the three treatments share - are not things the operator sets.
+
+    ``cell_allowance`` additionally lets each phase's whole pattern be scaled
+    coherently, by up to that fraction of its cell, and takes the best scaling.
+    Most accompanying minerals are solid solutions whose cell differs from the
+    database entry, and scaling the pattern is the right way to allow for that:
+    a per-line window of the same size would be up to 1.6 degrees wide at high
+    angle and would match almost anything (Sec. A.6 of the manual).
+
+    Returns the findings by coverage, the shift measured on each mount, and the
+    quartz line width - which is a usable starting value for the instrument's
+    peak width before any fit has been made.
+    """
+    reference = instrument or Instrument()
+    peaks_by_mount = {name: treatment_peaks(pattern) for name, pattern in mounts.items()}
+    usable = {name: peaks for name, peaks in peaks_by_mount.items() if len(peaks)}
+    if not usable:
+        return TripletScreen([], {}, False, float("nan"),
+                             "No peaks rose above the noise in any mount.")
+
+    shifts: dict[str, float] = {}
+    widths: list[float] = []
+    paired = 0
+    for name, peaks in usable.items():
+        shift, indices = quartz_zero_shift(peaks)
+        if shift is None:
+            continue
+        shifts[name] = shift
+        if len(indices) == 2:
+            paired += 1
+        widths.extend(float(peaks.width[index]) for index in indices)
+    calibrated = bool(shifts) and paired == len(usable)
+    if not shifts:
+        return TripletScreen(
+            [], {}, False, float("nan"),
+            "Quartz was not found in any mount, so the scans could not be put on a "
+            "common angle scale and nothing was screened. Set the zero error by hand "
+            "and use the main-mineral search instead.",
+        )
+    # Only the mounts that were aligned can take part: a scan left on its own
+    # angle scale would fail every phase and drag every coverage to zero.
+    peaks_by_mount = {name: usable[name] for name in shifts}
+
+    scales = (np.linspace(1.0 - cell_allowance, 1.0 + cell_allowance, scale_steps)
+              if cell_allowance > 0.0 and scale_steps > 1 else np.array([1.0]))
+
+    findings: list[PhaseEvidence] = []
+    for name, crystal in crystals.items():
+        if is_clay_phase(name) and not include_clays:
+            continue
+        if only is not None and name not in only:
+            continue
+        try:
+            positions, heights = peak_list(crystal, two_theta_range, reference)
+        except Exception:  # noqa: BLE001 - one broken entry must not stop the screen
+            continue
+        best: PhaseEvidence | None = None
+        for scale in scales:
+            evidence = match_across_treatments(
+                name, positions, heights, peaks_by_mount, shifts,
+                tolerance=tolerance, floor=floor, scale=float(scale),
+            )
+            if evidence is None:
+                continue
+            if best is None or evidence.score > best.score:
+                best = evidence
+        if best is None:
+            continue
+        if best.n_matched < min_matched or best.score < min_coverage:
+            continue
+        findings.append(best)
+
+    findings.sort(key=lambda evidence: (-evidence_score(evidence), evidence.name))
+    width = float(np.median(widths)) if widths else float("nan")
+    aligned = ", ".join(f"{name} {shift:+.3f}°" for name, shift in sorted(shifts.items()))
+    if calibrated:
+        note = (f"Quartz located in every mount and each aligned on its own pair: "
+                f"{aligned}. {len(findings)} phases have {min_matched} or more lines "
+                f"stable across them.")
+    else:
+        note = (f"Only the 20.86° quartz line was usable in at least one mount, so "
+                f"the alignment is a starting value rather than a calibration: "
+                f"{aligned}. Treat what follows as provisional and check it after the "
+                f"zero error is set.")
+    # Each mount is aligned on its own quartz, which is right - they are three
+    # preparations and a displacement is a property of the preparation - but a
+    # difference of more than a tenth of a degree between them is larger than a
+    # displacement and is usually the calibration having taken the wrong pair of
+    # peaks in one of them.  Said rather than corrected: the screen cannot tell
+    # which mount is the odd one out, and the operator can.
+    if len(shifts) > 1:
+        spread = max(shifts.values()) - min(shifts.values())
+        if spread > 3.0 * CLAYFIT_SHIFT_AGREEMENT:
+            middle = float(np.median(list(shifts.values())))
+            odd = max(shifts, key=lambda name: abs(shifts[name] - middle))
+            note += (f" The mounts disagree by {spread:.2f}\u00b0 on where quartz is, "
+                     f"which is more than a specimen displacement: {odd} is the outlier. "
+                     f"Check that mount's 20.86 and 26.64\u00b0 peaks before believing "
+                     f"this list.")
+    if cell_allowance > 0.0:
+        stretched = [item.name for item in findings
+                     if abs(item.cell_scale - 1.0) > 0.8 * cell_allowance]
+        if stretched:
+            note += (f" {len(stretched)} of them needed almost the whole "
+                     f"{100.0 * cell_allowance:.0f}% cell allowance to line up "
+                     f"({', '.join(stretched[:4])}"
+                     f"{', ...' if len(stretched) > 4 else ''}), which is weaker evidence: "
+                     f"the allowance is there for a solid solution a per cent off its "
+                     f"database entry, not to rescue a phase that does not fit.")
+    return TripletScreen(findings, shifts, calibrated, width, note)

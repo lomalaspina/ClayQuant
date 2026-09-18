@@ -171,6 +171,15 @@ class SessionState:
         )
         return self.instrument_note
 
+    screen: object | None = None
+    """What the load-time triplet screen found, a
+    :class:`clayquant.detection.TripletScreen`, or ``None`` before it has run.
+
+    Kept on the session rather than on a mount because it is a statement about
+    the three of them together: a phase is reported when its lines stand at the
+    same angle in every mount, which no one mount can establish.
+    """
+
     def loaded_mounts(self) -> list[str]:
         return [name for name in MOUNTS if self.mounts[name].is_loaded]
 
