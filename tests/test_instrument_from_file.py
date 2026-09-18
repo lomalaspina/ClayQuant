@@ -136,3 +136,59 @@ def test_a_library_that_records_no_instrument_says_it_cannot_be_checked():
 
     library = PatternLibrary(two_theta=np.arange(4.0, 40.0, 0.02), entries=[], metadata={})
     assert "does not record" in describe_instrument_mismatch(library, Instrument())
+
+
+def test_a_freshly_built_library_records_what_it_was_built_with():
+    """The round trip, because the diagnosis depends on it.
+
+    The warning that a library does not match a measurement is only as good as
+    what the file remembers, and the three things that decide whether the
+    reference peaks are the right shape - the layer spacings spanned, the width
+    model and the geometry - all have to survive save and load.
+    """
+    import tempfile
+    from pathlib import Path as _Path
+
+    from clayquant.library import PatternLibrary, build_library, two_theta_grid
+
+    grid = two_theta_grid(4.0, 20.0, 0.05)
+    built = build_library(
+        grid=grid,
+        instrument=instrument_from_measurement(a_pattern(radius=240.0, slit=0.25))[0],
+        orientations=(1.0, 0.5), illite_smectite=(), chlorite_smectite=(),
+        chlorite_iron=(), csds_means=(15.0,), smectite_orientation=0.3,
+    )
+    path = _Path(tempfile.mkdtemp()) / "library.npz"
+    built.save(path)
+    loaded = PatternLibrary.load(path)
+    assert loaded.metadata["geometry"]["goniometer_radius"] == pytest.approx(240.0)
+    assert loaded.metadata["geometry"]["divergence"] == pytest.approx(0.25)
+    assert loaded.metadata["smectite_orientation"] == pytest.approx(0.3)
+    assert loaded.metadata["host_thicknesses"]["chlorite"] == pytest.approx(
+        list(HOST_THICKNESSES["chlorite"])
+    )
+    assert loaded.metadata["peak_shape"]["w"] == pytest.approx(
+        built.metadata["peak_shape"]["w"]
+    )
+
+
+def test_a_library_built_with_the_defaults_is_recognised_as_such():
+    # The mistake this catches: pressing Build before loading a measurement, so
+    # the library takes the 280 mm default on a 240 mm instrument.  Nothing in
+    # the file says "built blind", so it is recognised by the defaults being
+    # exactly what they are.
+    from clayquant.library import PatternLibrary, describe_instrument_mismatch
+
+    library = PatternLibrary(
+        two_theta=np.arange(4.0, 40.0, 0.02), entries=[],
+        metadata={
+            "peak_shape": {"u": 0.02, "v": -0.005, "w": 0.01, "eta": 0.6,
+                           "size_c": None, "size_ab": 400.0},
+            "geometry": {"specimen_length": 20.0, "goniometer_radius": 280.0,
+                         "divergence": 0.5},
+        },
+    )
+    instrument, _ = instrument_from_measurement(a_pattern(radius=240.0, slit=0.25))
+    complaint = describe_instrument_mismatch(library, instrument)
+    assert "goniometer radius 280" in complaint
+    assert "divergence slit 0.5" in complaint

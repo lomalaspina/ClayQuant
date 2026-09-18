@@ -2204,8 +2204,17 @@ def register_callbacks(app: Dash) -> None:
     )
     def manage_library(_load, _build, path):
         triggered = callback_context.triggered[0]["prop_id"]
+        built_blind = False
         try:
             if "lib-build" in triggered:
+                # The library has to be calculated with the instrument the
+                # measurement was made on, and the only way to know that is to
+                # have a measurement.  Building before loading one is the easy
+                # mistake here and it is not a small one: it used the 280 mm
+                # default on a 240 mm instrument and a generic peak width, and
+                # the whole library then has reference peaks of the wrong width,
+                # which the fit can only absorb as missing intensity.
+                built_blind = STATE.instrument is None
                 library = build_library(instrument=gui_instrument())
                 library.save(path)
             else:
@@ -2215,6 +2224,24 @@ def register_callbacks(app: Dash) -> None:
         STATE.library = library
         STATE.library_path = Path(path)
         children = [html.Pre(library.describe(), style={"fontSize": "0.75rem", "margin": 0})]
+        if built_blind:
+            children.append(html.Div(
+                "Built before any measurement was loaded, so it uses the default "
+                "geometry (280 mm goniometer radius, 0.5\u00b0 divergence slit) and a "
+                "generic peak width rather than yours. Load a mount in step 1 and "
+                "build again if you want the reference peaks to have the width of "
+                "your diffractometer.",
+                style={
+                    "marginTop": "8px", "padding": "8px", "background": "#fff4e5",
+                    "border": "1px solid #f0ad4e", "borderRadius": "6px",
+                    "fontSize": "0.8rem",
+                },
+            ))
+        elif "lib-build" in triggered:
+            children.append(html.Div(
+                STATE.instrument_note,
+                style={"marginTop": "8px", "fontSize": "0.78rem", "color": "#555"},
+            ))
         if STATE.instrument is not None:
             warning = describe_instrument_mismatch(library, STATE.instrument)
             if warning:
