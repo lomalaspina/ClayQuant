@@ -70,6 +70,8 @@ __all__ = [
     "baseline_estimate",
     "noise_level",
     "peak_groups",
+    "als_baseline",
+    "percentile_baseline",
     "snip_baseline",
     "sonneveld_visser_baseline",
     "select_background_points",
@@ -982,12 +984,106 @@ def noise_level(
     )
 
 
-ESTIMATORS = ("snip", "sonneveld-visser")
+def als_baseline(
+    intensity: np.ndarray,
+    smoothness: float = 1e6,
+    asymmetry: float = 0.01,
+    iterations: int = 20,
+) -> np.ndarray:
+    """Asymmetrically reweighted least squares baseline, after Eilers & Boelens.
+
+    Minimises ``sum w_i (y_i - z_i)^2 + smoothness * sum (second difference of
+    z)^2`` with ``w_i`` small where the data lies above the current baseline and
+    one where it lies below, which is what makes it ignore peaks: a peak pulls
+    on the baseline with weight ``asymmetry`` and a gap pulls with weight one.
+
+    It answers a different question from peak stripping and that is the point of
+    having it.  Stripping asks what is left when everything narrower than a
+    window is removed, which on a clay pattern is a smooth curve - so smooth
+    that a fourth-degree polynomial already describes it and higher degrees have
+    almost nothing to fit, which is not a statement about the specimen but about
+    the estimate.  This asks instead for the smoothest curve that stays under
+    the data, and ``smoothness`` sets how smooth: lower follows the measurement
+    more closely, higher approaches a straight line.
+
+    Eilers, P.H.C. and Boelens, H.F.M. (2005) Baseline correction with
+    asymmetric least squares smoothing, Leiden University Medical Centre report.
+    """
+    from scipy.sparse import diags, eye
+    from scipy.sparse.linalg import spsolve
+
+    y = np.asarray(intensity, dtype=float)
+    size = y.size
+    if size < 5:
+        return y.copy()
+    if not 0.0 < asymmetry < 1.0:
+        raise ValueError("asymmetry must lie in (0, 1)")
+    if smoothness <= 0.0:
+        raise ValueError("smoothness must be positive")
+    second = diags([1.0, -2.0, 1.0], [0, 1, 2], shape=(size - 2, size), format="csc")
+    penalty = smoothness * (second.T @ second)
+    weights = np.ones(size)
+    baseline = y.copy()
+    for _ in range(max(1, iterations)):
+        system = diags(weights, 0, format="csc") + penalty
+        baseline = spsolve(system, weights * y)
+        updated = np.where(y > baseline, asymmetry, 1.0 - asymmetry)
+        if np.allclose(updated, weights):
+            break
+        weights = updated
+    return np.asarray(baseline, dtype=float)
+
+
+def percentile_baseline(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    window: float = 4.0,
+    percentile: float = 12.0,
+    smooth: float = 2.0,
+) -> np.ndarray:
+    """A rolling low percentile of the pattern, then smoothed.
+
+    The simplest of the estimators here and the one that follows a structured
+    background most closely: in a window of ``window`` degrees the background is
+    taken as the ``percentile``-th percentile of the counts, which a peak
+    occupying less than that fraction of the window cannot raise, and the result
+    is smoothed over ``smooth`` degrees to remove the steps the rolling window
+    leaves behind.
+
+    A percentile too high eats into the peaks and one too low follows the noise
+    down; a twelfth is about where a clay pattern's peaks stop mattering, and it
+    is a parameter rather than a constant because how much of a pattern is peak
+    varies with the specimen.
+    """
+    two_theta = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if y.size < 5:
+        return y.copy()
+    if not 0.0 < percentile < 100.0:
+        raise ValueError("percentile must lie in (0, 100)")
+    step = float(np.median(np.diff(two_theta))) if two_theta.size > 1 else 0.02
+    half = max(1, int(round(0.5 * window / step)))
+    padded = np.pad(y, half, mode="edge")
+    rolling = np.array([
+        np.percentile(padded[index:index + 2 * half + 1], percentile)
+        for index in range(y.size)
+    ])
+    if smooth > 0.0:
+        span = max(1, int(round(smooth / step)))
+        kernel = np.ones(span) / span
+        rolling = np.convolve(np.pad(rolling, span, mode="edge"), kernel, mode="same")
+        rolling = rolling[span:span + y.size]
+    return rolling
+
+
+ESTIMATORS = ("snip", "sonneveld-visser", "als", "percentile")
 """The non-parametric background estimators, by name."""
 
 ESTIMATOR_LABELS = {
     "snip": "peak-stripped",
     "sonneveld-visser": "Sonneveld-Visser",
+    "als": "asymmetric least squares",
+    "percentile": "rolling percentile",
 }
 
 
@@ -1010,6 +1106,10 @@ def baseline_estimate(
         )
     if estimator == "snip":
         return snip_baseline(two_theta, intensity, window=window)
+    if estimator == "als":
+        return als_baseline(intensity)
+    if estimator == "percentile":
+        return percentile_baseline(two_theta, intensity, window=window)
     return sonneveld_visser_baseline(two_theta, intensity, window=window)
 
 

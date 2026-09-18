@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from clayquant import background
 from clayquant.background import (
     BackgroundModel,
     snip_baseline,
@@ -117,3 +118,96 @@ def test_the_fitted_model_follows_the_tail():
     assert values[0] > 0.75 * truth[0]
     low = TWO_THETA <= 6.0
     assert np.mean(np.abs(values[low] - truth[low])) < 0.1 * truth[low].mean()
+
+
+# --- which estimate the main component is fitted to -------------------------
+
+
+def a_clay_pattern():
+    """A structured background with sharp peaks on it, as a clay mount gives."""
+    x = np.arange(3.0, 40.0, 0.0167)
+    background = 300.0 + 4000.0 / (x + 1.0) + 180.0 * np.exp(-0.5 * ((x - 24.0) / 7.0) ** 2)
+    y = background.copy()
+    for centre, height in ((6.2, 1200.0), (8.9, 7000.0), (12.5, 3000.0), (17.8, 1800.0),
+                           (20.9, 900.0), (25.1, 1400.0), (26.6, 8000.0), (27.9, 1900.0)):
+        y = y + height * np.exp(-0.5 * ((x - centre) / 0.05) ** 2)
+    return x, y, background
+
+
+def test_the_polynomial_and_chebyshev_bases_give_the_same_fit():
+    """Pinned because it is a surprise and because it is stated in the interface.
+
+    Both are mapped onto the same variable over the same range and both span
+    every polynomial up to their degree, so an unconstrained least squares of
+    either against the same target is the same curve.  They differ in
+    conditioning and in nothing else.  Other software offers two options that do
+    differ, which is why saying so where the choice is made is worth the words.
+    """
+    x, y, _ = a_clay_pattern()
+    for degree in (2, 4, 7, 11):
+        monomial = background.BackgroundModel(
+            polynomial_degree=degree, inverse=True, inverse_offset=1.0,
+        ).fit(x, y, snip_window=4.0)
+        chebyshev = background.BackgroundModel(
+            polynomial_degree=None, chebyshev_degree=degree,
+            inverse=True, inverse_offset=1.0,
+        ).fit(x, y, snip_window=4.0)
+        assert monomial(x) == pytest.approx(chebyshev(x), rel=1e-6, abs=1e-6)
+
+
+def test_every_estimator_is_reachable_and_stays_under_the_peaks():
+    x, y, truth = a_clay_pattern()
+    for name in background.ESTIMATORS:
+        estimate = background.baseline_estimate(x, y, window=4.0, estimator=name)
+        assert estimate.shape == x.shape
+        assert np.all(np.isfinite(estimate))
+        # Nowhere near the peak tops, and not below zero.
+        assert estimate.max() < 0.5 * y.max()
+        assert estimate.min() > -1.0
+
+
+def test_asymmetric_least_squares_follows_a_structured_background():
+    x, y, truth = a_clay_pattern()
+    estimate = background.als_baseline(y)
+    middle = (x > 15.0) & (x < 35.0)
+    assert np.mean(np.abs(estimate[middle] - truth[middle])) < 80.0
+
+
+def test_the_rolling_percentile_follows_a_structured_background():
+    x, y, truth = a_clay_pattern()
+    estimate = background.percentile_baseline(x, y, window=4.0)
+    middle = (x > 15.0) & (x < 35.0)
+    assert np.mean(np.abs(estimate[middle] - truth[middle])) < 80.0
+
+
+def test_a_peak_strip_of_a_clay_pattern_is_the_smooth_one():
+    """Why the choice of estimate matters more than the polynomial degree.
+
+    The main component is fitted to the estimate, so how much structure the
+    estimate has decides how much a higher degree can do.  A peak strip over a
+    window wide enough for a clay basal reflection smooths the background's own
+    structure away with them, and then a low degree describes what is left.
+    """
+    x, y, truth = a_clay_pattern()
+    stripped = background.baseline_estimate(x, y, window=4.0, estimator="snip")
+    percentile = background.baseline_estimate(x, y, window=4.0, estimator="percentile")
+    middle = (x > 15.0) & (x < 35.0)
+    assert np.mean(np.abs(stripped[middle] - truth[middle])) > np.mean(
+        np.abs(percentile[middle] - truth[middle])
+    )
+
+
+def test_a_bad_percentile_is_refused():
+    x, y, _ = a_clay_pattern()
+    with pytest.raises(ValueError, match="percentile"):
+        background.percentile_baseline(x, y, percentile=0.0)
+    with pytest.raises(ValueError, match="percentile"):
+        background.percentile_baseline(x, y, percentile=100.0)
+
+
+def test_a_bad_asymmetry_or_smoothness_is_refused():
+    _, y, _ = a_clay_pattern()
+    with pytest.raises(ValueError, match="asymmetry"):
+        background.als_baseline(y, asymmetry=0.0)
+    with pytest.raises(ValueError, match="smoothness"):
+        background.als_baseline(y, smoothness=0.0)

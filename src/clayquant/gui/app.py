@@ -40,9 +40,11 @@ from dash import Dash, Input, Output, State, callback_context, dcc, html, no_upd
 from dash.exceptions import PreventUpdate
 
 from ..background import (
+    ESTIMATOR_LABELS,
     SONNEVELD_VISSER_ITERATIONS,
     BackgroundModel,
     StrippedBackground,
+    baseline_estimate,
     sonneveld_visser_reach,
     suggest_sonneveld_visser,
 )
@@ -151,7 +153,7 @@ def background_model_from_controls(
 
 
 def fit_background_from_controls(pattern, kind, degree, decay, use_inverse, offset,
-                                 snip, granularity, bending):
+                                 snip, granularity, bending, estimator="snip"):
     """The background the Background tab's controls describe.
 
     Sonneveld-Visser is a component in its own right rather than something a
@@ -173,7 +175,8 @@ def fit_background_from_controls(pattern, kind, degree, decay, use_inverse, offs
         )
     model = background_model_from_controls(kind, int(degree), float(decay),
                                            bool(use_inverse), float(offset))
-    return model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip))
+    return model.fit(pattern.two_theta, pattern.intensity, snip_window=float(snip),
+                     estimator=str(estimator))
 
 
 def working(*children) -> dcc.Loading:
@@ -334,6 +337,28 @@ def instrument_strip():
     return html.Div([html.Div(row) for row in rows])
 
 
+def between_the_peaks(pattern, fit) -> float:
+    """What the subtracted pattern still holds where there is no reflection.
+
+    The one number that says whether a background is in the right place, and it
+    is not Rwp.  Rwp prefers a lower baseline whatever the specimen - subtracting
+    too little raises the observed intensity in its denominator as much as its
+    numerator - so it cannot choose between two background estimates, and on one
+    real scan it ranked the worst of four first.  Between the peaks the answer
+    is known instead: the subtracted pattern should be at zero.
+
+    "Between the peaks" is taken as the lowest two fifths of the subtracted
+    points, which needs no list of where the reflections are and is what that
+    region is: on the same scan the four estimates leave 110, 27, 17 and 18
+    counts there, and the default left the most.
+    """
+    left = fit.subtract(pattern.two_theta, pattern.intensity)
+    if left.size == 0:
+        return float("nan")
+    quiet = left <= np.quantile(left, 0.4)
+    return float(np.median(left[quiet])) if quiet.any() else float("nan")
+
+
 def background_report(pattern, fit, background) -> str:
     """Describe the fitted background in the terms the operator has to judge it by.
 
@@ -350,6 +375,7 @@ def background_report(pattern, fit, background) -> str:
     overall = float(np.sqrt(np.mean(residual ** 2)))
     low = two_theta <= two_theta[0] + 1.0
     low_rms = float(np.sqrt(np.mean(residual[low] ** 2))) if low.any() else float("nan")
+    left_over = between_the_peaks(pattern, fit)
 
     start = float(two_theta[0])
     measured_start = float(pattern.intensity[0])
@@ -366,7 +392,7 @@ def background_report(pattern, fit, background) -> str:
     else:
         heading = f"{' + '.join(fit.components)}, {fit.n_terms} terms. "
         agreement = (
-            f"Follows the peak-stripped estimate to {overall:.0f} counts RMS "
+            f"Follows the estimate to {overall:.0f} counts RMS "
             f"({low_rms:.0f} counts over the lowest 1\u00b0). "
         )
     text = (
@@ -375,7 +401,10 @@ def background_report(pattern, fit, background) -> str:
         + (
         f"At {start:.2f}\u00b0 the background reads {model_start:.0f} of "
         f"{measured_start:.0f} measured counts, leaving {left:.0f} ({share:.0f}%) "
-        f"as signal."
+        f"as signal. Between the peaks the subtracted pattern still holds "
+        f"{left_over:.0f} counts, where it should hold none - that is the number "
+        f"to judge a background estimate by, and Rwp is not, because Rwp prefers "
+        f"a lower baseline whatever the specimen."
         )
     )
     if share > 25.0:
@@ -805,12 +834,39 @@ def background_tab() -> html.Div:
                         value="air",
                     ),
                     html.Hr(),
+                    label("Background estimate to fit"),
+                    dcc.Dropdown(
+                        id="bg-estimator",
+                        options=[
+                            {"label": "Peak-stripped (SNIP)", "value": "snip"},
+                            {"label": "Rolling percentile", "value": "percentile"},
+                            {"label": "Asymmetric least squares", "value": "als"},
+                            {"label": "Sonneveld\u2013Visser", "value": "sonneveld-visser"},
+                        ],
+                        value="snip",
+                        clearable=False,
+                    ),
+                    html.Div(
+                        "The main component is fitted to this, not to the measurement, so "
+                        "it is what decides how much structure there is for a higher "
+                        "degree to follow. A 4\u00b0 peak-strip of a clay pattern is very "
+                        "smooth - on one scan it sits 200 counts below the measured "
+                        "background at 22 and 30\u00b0, and a fourth-degree polynomial "
+                        "already describes it, so higher degrees move the curve by tens of "
+                        "counts and nothing visible. The rolling percentile and the "
+                        "asymmetric least squares follow a structured background much more "
+                        "closely, and then the degree matters: on the same scan going from "
+                        "6 to 8 moves the fitted curve by 108 counts.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     label("Main component"),
                     dcc.Dropdown(
                         id="bg-kind",
                         options=[
-                            {"label": "Polynomial", "value": "polynomial"},
-                            {"label": "Chebyshev", "value": "chebyshev"},
+                            {"label": "Polynomial (same fit as Chebyshev)",
+                             "value": "polynomial"},
+                            {"label": "Chebyshev (same fit as Polynomial)",
+                             "value": "chebyshev"},
                             {"label": "Exponential", "value": "exponential"},
                             {"label": "Sonneveld–Visser", "value": "sonneveld-visser"},
                             {"label": "None (1/x only)", "value": "none"},
@@ -1663,6 +1719,7 @@ def register_callbacks(app: Dash) -> None:
         # reads as the model not being applied at all.
         Input("load-status", "children"),
         Input("zero-status", "children"),
+        Input("bg-estimator", "value"),
         Input("bg-kind", "value"),
         Input("bg-degree", "value"),
         Input("bg-decay", "value"),
@@ -1674,8 +1731,9 @@ def register_callbacks(app: Dash) -> None:
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
     )
-    def update_background(mount, _loaded, _zeroed, kind, degree, decay, inverse, offset,
-                          snip, granularity, bending, _apply, _apply_all):
+    def update_background(mount, _loaded, _zeroed, estimator, kind, degree, decay,
+                          inverse, offset, snip, granularity, bending,
+                          _apply, _apply_all):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -1689,7 +1747,7 @@ def register_callbacks(app: Dash) -> None:
         def background_for(this_pattern):
             return fit_background_from_controls(
                 this_pattern, kind, degree, decay, use_inverse, offset,
-                snip, granularity, bending,
+                snip, granularity, bending, estimator,
             )
 
         try:
@@ -1742,9 +1800,32 @@ def register_callbacks(app: Dash) -> None:
             figure.add_scatter(
                 x=pattern.two_theta,
                 y=fit.target,
-                name=f"peak-stripped estimate (width {float(snip):g}\u00b0)",
+                name=f"{ESTIMATOR_LABELS[estimator]} estimate "
+                     f"(width {float(snip):g}\u00b0)",
                 line={"color": "#1f77b4", "width": 2, "dash": "dash"},
             )
+            # The estimates not chosen, faintly, because the choice between
+            # them is the choice that matters and it cannot be made without
+            # seeing them: they differ by a couple of hundred counts in the
+            # middle of the range on a clay pattern, which is more than any
+            # polynomial degree changes anything.
+            for name, colour in (("percentile", "#2ca02c"), ("als", "#9467bd"),
+                                 ("snip", "#8c564b"), ("sonneveld-visser", "#e377c2")):
+                if name == estimator:
+                    continue
+                try:
+                    other = baseline_estimate(
+                        pattern.two_theta, pattern.intensity,
+                        window=float(snip), estimator=name,
+                    )
+                except Exception:  # noqa: BLE001 - a comparison must not break the view
+                    continue
+                figure.add_scatter(
+                    x=pattern.two_theta, y=other,
+                    name=ESTIMATOR_LABELS[name],
+                    line={"color": colour, "width": 1, "dash": "dot"},
+                    opacity=0.55,
+                )
         figure.add_scatter(x=pattern.two_theta, y=fit.subtract(pattern.two_theta, pattern.intensity),
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
