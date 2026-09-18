@@ -113,6 +113,21 @@ class Instrument:
     monochromator_two_theta: float | None = None
     lines_per_emission: int = 1
     divergence: Divergence | None = None
+    width_source: str = ""
+    """Where :attr:`peak_shape`'s size came from, when it was measured.
+
+    ``"quartz"`` when it was fitted to the quartz K-alpha doublet, whose width
+    in a clay separate is the instrument's; ``"isolated peaks"`` when no quartz
+    could be fitted and it was scaled to the pattern's own peaks instead, which
+    on an oriented mount are the clay basal reflections and are broader than the
+    instrument by a factor that varies with the specimen.  Empty when nothing was
+    measured and the default was kept.
+
+    Carried on the instrument rather than only in a status line because the
+    session has to be able to prefer one over the other: a width measured on
+    quartz must not be replaced by one scaled to a clay peak
+    (:meth:`clayquant.gui.state.SessionState.take_instrument_from`).
+    """
 
     def sample_emission(self) -> tuple[np.ndarray, np.ndarray]:
         return self.emission.sample(self.lines_per_emission)

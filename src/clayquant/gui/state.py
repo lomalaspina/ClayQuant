@@ -159,16 +159,45 @@ class SessionState:
         """Derive the calculating instrument from a measurement.
 
         Called when a mount is loaded and again once its background has been
-        fitted, because the width model is measured on the peaks and reads them
-        better with the background gone.  The three mounts of one specimen are
-        measured on one diffractometer at one setting, so the instrument is the
-        session's and not the mount's.
+        fitted.  The three mounts of one specimen are measured on one
+        diffractometer at one setting, so the instrument is the session's and
+        not the mount's.
+
+        A width measured on quartz is never replaced by one scaled to the
+        pattern's own peaks, whichever call comes later.  That ordering is the
+        whole of a defect worth naming: the library is built with whatever width
+        the session holds at that moment, and the mismatch warning compares it
+        against whatever the session holds later, so a width that moves between
+        the two makes the program warn about its own build.  With the fallback
+        able to overwrite quartz, that happened whenever a mount without
+        fittable quartz was loaded, or a background applied, after the build -
+        and the fallback is the unstable one, by a factor of two on real data
+        (:func:`clayquant.profile.quartz_line_width`).
         """
         from .app import instrument_from_measurement
 
-        self.instrument, self.instrument_note = instrument_from_measurement(
-            pattern, background=background
+        instrument, note = instrument_from_measurement(
+            pattern, background=background, shift=self.measured_shift(),
         )
+        if (
+            self.instrument is not None
+            and getattr(self.instrument, "width_source", "") == "quartz"
+            and getattr(instrument, "width_source", "") != "quartz"
+        ):
+            from dataclasses import replace
+
+            instrument = replace(
+                instrument,
+                peak_shape=self.instrument.peak_shape,
+                width_source=self.instrument.width_source,
+            )
+            note = (
+                note.split(". ", 1)[0]
+                + ". The width model is kept from the quartz doublet measured earlier: "
+                "this scan offers no quartz 101 to fit, and scaling to its own peaks "
+                "instead would put a clay reflection's width on the instrument."
+            )
+        self.instrument, self.instrument_note = instrument, note
         return self.instrument_note
 
     screen: object | None = None
@@ -179,6 +208,26 @@ class SessionState:
     the three of them together: a phase is reported when its lines stand at the
     same angle in every mount, which no one mount can establish.
     """
+
+    def measured_shift(self) -> float:
+        """The displacement the load-time screen measured, in degrees.
+
+        Used to tell :func:`clayquant.profile.quartz_line_width` where to look
+        for the quartz 101 rather than making it search a window wide enough to
+        find the wrong peak.  Zero before the screen has run, which widens that
+        window and is said in the note.
+
+        The median over the mounts, not one mount's: the width model is the
+        session's, the three mounts share one diffractometer, and the median is
+        unmoved by the one mount whose quartz pair the screen may have missed.
+        """
+        screen = getattr(self, "screen", None)
+        shifts = list(getattr(screen, "shifts", {}).values()) if screen else []
+        if not shifts:
+            return 0.0
+        import statistics
+
+        return float(statistics.median(shifts))
 
     def loaded_mounts(self) -> list[str]:
         return [name for name in MOUNTS if self.mounts[name].is_loaded]

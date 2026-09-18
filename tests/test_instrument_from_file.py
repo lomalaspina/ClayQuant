@@ -15,15 +15,36 @@ from clayquant.gui.app import DEFAULT_PEAK_SHAPE, gui_instrument, instrument_fro
 from clayquant.gui.state import STATE
 from clayquant.library import HOST_THICKNESSES
 from clayquant.pattern import Pattern
-from clayquant.profile import PeakShape, pseudo_voigt
+from clayquant.profile import (
+    KALPHA2_INTENSITY_RATIO,
+    PeakShape,
+    kalpha2_two_theta,
+    pseudo_voigt,
+)
 
 
-def a_pattern(radius=240.0, slit=0.25, widths=0.12):
+def a_pattern(radius=240.0, slit=0.25, widths=0.12, doublet=True):
+    """A synthetic scan with the Cu K-alpha doublet at every reflection.
+
+    The doublet is not decoration.  The width model is anchored on the quartz
+    101 by fitting that doublet, holding the wavelength separation and the 2:1
+    intensity ratio fixed, and returning the width of *one* component - because
+    a half-height width read off an unresolved pair is the width of the
+    envelope, which at 26.6 deg is about 0.04 deg too broad.  A fixture of
+    single peaks cannot test that at all: it has no envelope to be fooled by,
+    and a doublet fitted to it recovers a component narrower than the peak.  So
+    the fixture models what a measurement is, and ``doublet=False`` is kept for
+    the one test that wants the other case.
+    """
     x = np.arange(3.0, 40.0, 0.0167)
     y = np.zeros_like(x)
     for centre in (8.9, 12.5, 20.9, 26.6, 31.5, 36.5):
         profile = pseudo_voigt(x - centre, widths, 0.5)
-        y += 1000.0 * profile / profile.max()
+        peak = 1000.0 * profile / profile.max()
+        if doublet:
+            partner = pseudo_voigt(x - kalpha2_two_theta(centre), widths, 0.5)
+            peak = peak + KALPHA2_INTENSITY_RATIO * 1000.0 * partner / partner.max()
+        y += peak
     return Pattern(
         two_theta=x,
         intensity=y + 20.0,
@@ -58,11 +79,44 @@ def test_a_file_without_the_geometry_falls_back_rather_than_failing():
     assert instrument.divergence.divergence == pytest.approx(0.5)
 
 
-def test_the_width_is_measured_off_the_pattern():
-    instrument, note = instrument_from_measurement(a_pattern(widths=0.18))
-    width = float(instrument.peak_shape.fwhm(np.array([26.6]), 1.540596)[0])
-    assert width == pytest.approx(0.18, abs=0.02)
-    assert "scaled by" in note
+def test_the_width_is_measured_on_the_quartz_doublet():
+    """And recovers the *component* width, not the width of the pair."""
+    for imposed in (0.08, 0.12, 0.18):
+        instrument, note = instrument_from_measurement(a_pattern(widths=imposed))
+        width = float(instrument.peak_shape.fwhm(np.array([26.6]), 1.540596)[0])
+        assert width == pytest.approx(imposed, abs=0.02), imposed
+        assert instrument.width_source == "quartz"
+        assert "quartz K-alpha doublet" in note
+
+
+def test_the_envelope_of_the_pair_is_broader_than_the_component():
+    """Which is why the doublet is held fixed rather than measured as one peak.
+
+    Read as a single peak, the unresolved pair at 26.6 deg is markedly broader
+    than either of its components; a library calculated from that width would
+    suppress its own K-alpha2 shoulder a second time.
+    """
+    from clayquant.profile import measure_peak_widths
+
+    pattern = a_pattern(widths=0.12)
+    positions, widths = measure_peak_widths(
+        pattern.two_theta, pattern.intensity - 20.0, separation=0.9, maximum_width=1.0
+    )
+    near = np.argmin(np.abs(positions - 26.6))
+    assert widths[near] > 0.12 * 1.2
+
+
+def test_without_quartz_it_falls_back_and_says_which_it_used():
+    pattern = a_pattern(widths=0.18)
+    # Remove everything near the quartz 101 so no doublet can be fitted there.
+    outside = np.abs(pattern.two_theta - 26.64) > 0.6
+    pattern = Pattern(two_theta=pattern.two_theta[outside],
+                      intensity=pattern.intensity[outside],
+                      name=pattern.name, metadata=pattern.metadata)
+    instrument, note = instrument_from_measurement(pattern)
+    assert instrument.width_source == "isolated peaks"
+    assert "No quartz 101" in note
+    assert "broader than the instrument" in note
 
 
 def test_the_slit_changes_how_much_beam_the_specimen_intercepts_at_low_angle():
@@ -236,7 +290,8 @@ def test_the_strip_shows_the_measurement_geometry_and_widths():
     said = _text(instrument_strip())
     assert "240 mm radius" in said
     assert "0.25" in said
-    assert "0.11" in said
+    # The width the quartz doublet gives for a pattern built at 0.11 deg.
+    assert "0.110" in said or "0.111" in said or "0.109" in said
 
 
 def test_the_strip_reports_a_library_that_disagrees():

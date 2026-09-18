@@ -636,6 +636,7 @@ def _quantification_table(quantification, result) -> html.Div:
                                     html.Th("Phase"),
                                     html.Th("Group"),
                                     html.Th("Weight %"),
+                                    html.Th("Expandable %"),
                                     html.Th("r (texture)"),
                                     html.Th("Scattering %"),
                                     html.Th("Amplitude %"),
@@ -653,6 +654,10 @@ def _quantification_table(quantification, result) -> html.Div:
                                             if row["weight_percent"] != "" else "-",
                                             style={"fontWeight": "600"},
                                         ),
+                                        html.Td(
+                                            f"{100.0 * (1.0 - row['host_fraction']):.0f}"
+                                            if row["group"] == "clay" else "-",
+                                        ),
                                         html.Td(f"{row['march_dollase']:.2f}"),
                                         html.Td(f"{row['scattering_percent']:.2f}"),
                                         html.Td(f"{row['amplitude_percent']:.2f}"),
@@ -668,10 +673,19 @@ def _quantification_table(quantification, result) -> html.Div:
             style={"flex": "1", "minWidth": "0"},
         )
 
+    # What proportion of the clay minerals is expandable *layers*, which is not
+    # the same number as the weight of the phases that carry them and is the
+    # one an operator means by "swelling clay".  An "I/S" at 5 % expandable is
+    # a stack of 95 % illite layers, and reporting its weight without saying so
+    # reads as though most of the specimen swelled.
+    expandable = sum(share.clay_weight * share.expandable_fraction
+                     for share in quantification.shares if share.is_clay)
     clay_note = (
         f"Accompanying minerals removed and the clays renormalised to 100%. "
         f"The clay minerals are {100.0 * quantification.clay_total_scattering:.1f}% "
-        f"of the whole pattern."
+        f"of the whole pattern, and {expandable:.1f}% of them is expandable "
+        f"layers \u2014 the Expandable % column is each phase's own proportion, so "
+        f"an I/S at 5% is a stack of 95% illite layers however much of it there is."
     )
     if quantification.weights_available:
         weight_note = html.Div(

@@ -1017,20 +1017,28 @@ def instrument_from_measurement(
     pattern,
     background=None,
     specimen_length: float = 20.0,
+    shift: float = 0.0,
 ) -> tuple[Instrument, str]:
     """An instrument taken from a measurement: its geometry and its peak widths.
 
     The geometry comes from the file, which records the goniometer radius and
     the divergence slit; only the specimen length has to be supplied, because
-    nothing in a data file knows how long the smear was.  The width model is
-    scaled to the pattern's own isolated peaks by
-    :func:`~clayquant.profile.fit_peak_shape`, over the background-subtracted
-    intensity when a background has been fitted.
+    nothing in a data file knows how long the smear was.
+
+    The width model is anchored on the quartz 101 K-alpha doublet
+    (:func:`~clayquant.profile.quartz_line_width`), whose width in a clay
+    separate is the instrument's; only where no quartz can be fitted does it
+    fall back on the pattern's own isolated peaks, and it says so when it does,
+    because on an oriented mount those peaks are the clay basal reflections and
+    are broader than the instrument by a factor that varies with the specimen.
+    ``shift`` is the measurement's zero error, so the line is looked for where
+    it actually is.
 
     Returns the instrument and a sentence saying what was taken from where, for
     the status line: a value silently guessed is a value nobody checks.
     """
-    from .profile import fit_peak_shape
+    from .calibration import QUARTZ_101_D, reference_two_theta
+    from .profile import fit_peak_shape, quartz_line_width, shape_from_line_width
 
     metadata = getattr(pattern, "metadata", {}) or {}
     radius = float(metadata.get("goniometer_radius", 280.0))
@@ -1039,19 +1047,50 @@ def instrument_from_measurement(
     intensity = pattern.intensity
     if background is not None:
         intensity = background.subtract(pattern.two_theta, pattern.intensity)
-    widths = fit_peak_shape(pattern.two_theta, intensity, wavelength,
-                            default=DEFAULT_PEAK_SHAPE)
+
+    # Quartz first, and by a long way.  Its lines in a clay separate are
+    # instrumental - the grains are large enough that their size broadening is
+    # immeasurable - whereas the isolated peaks the fallback measures are the
+    # clay basal reflections, which are broad by nature.  That fallback gave
+    # 0.077, 0.124 and 0.234 deg for one diffractometer on three real mounts,
+    # and moved by a factor of two on one of them depending on whether a
+    # background had been subtracted first; a library built with one of those
+    # numbers and checked against another is what made the program warn about
+    # its own build.  See :func:`clayquant.profile.quartz_line_width`.
+    line = quartz_line_width(
+        pattern.two_theta, intensity,
+        reference=reference_two_theta(QUARTZ_101_D, wavelength),
+        shift=float(shift),
+    )
+    if line is not None:
+        shape = shape_from_line_width(
+            line, reference_two_theta(QUARTZ_101_D, wavelength),
+            default=DEFAULT_PEAK_SHAPE, wavelength=wavelength,
+        )
+        width_note = line.note
+        width_source = "quartz"
+    else:
+        widths = fit_peak_shape(pattern.two_theta, intensity, wavelength,
+                                default=DEFAULT_PEAK_SHAPE)
+        shape = widths.shape
+        width_note = (
+            f"No quartz 101 could be fitted, so the width is scaled to the pattern's "
+            f"own isolated peaks instead, which on an oriented mount are the clay "
+            f"basal reflections and are broader than the instrument: {widths.note}"
+        )
+        width_source = "isolated peaks"
     instrument = Instrument(
         emission=CU_KA_5LINE,
-        peak_shape=widths.shape,
+        peak_shape=shape,
         lp_mode="powder",
         divergence=Divergence(specimen_length=specimen_length,
                               goniometer_radius=radius, divergence=slit),
+        width_source=width_source,
     )
     return instrument, (
         f"Geometry from the file: {radius:.0f} mm goniometer radius, "
         f"{slit:g} deg divergence slit, specimen taken as {specimen_length:g} mm. "
-        f"{widths.note}"
+        f"{width_note}"
     )
 
 

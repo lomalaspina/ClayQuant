@@ -139,6 +139,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-19">A.19 Background estimators</a>
 <a href="#a-20">A.20 Library over-completeness</a>
 <a href="#a-21">A.21 Smectite orientation</a>
+<a href="#a-22">A.22 Instrumental width</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4283,6 +4284,68 @@ illite beside it will now be understated, in the same proportion. The reason to 
 assumption is not that it is always right but that it is the one under which the clay percentages of
 a single mount can be compared with each other at all: a table mixing one phase on a random-powder
 basis with five on an oriented one is not a composition.</p>
+
+<h3 id="a-22">A.22 Where the instrumental width is measured</h3>
+
+<p><strong>Reasoning.</strong> A calculated pattern's peak height is set by its width: a profile ten
+per cent too broad is ten per cent too short, and a fit of scale factors alone cannot recover that.
+So the width the library is built with has to be the instrument's. The question is where to measure
+it, and the answer ClayQuant started with was wrong in a way that showed itself as the program
+warning about its own library.</p>
+
+<p>That version scaled the width model to the narrowest of the pattern's own isolated peaks. On an
+oriented clay mount the isolated peaks <em>are</em> the clay basal reflections, and those are broad
+by nature &mdash; crystallite thickness and interstratification both widen them, and neither belongs
+to the diffractometer. The consequence, measured on three real glycol mounts of one instrument:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th class="num">Width from the raw pattern</th>
+<th class="num">Width after the background</th><th class="num">Ratio</th></tr>
+<tr><td>Mount A, glycol</td><td class="num">0.278&deg;</td><td class="num">0.124&deg;</td><td class="num">2.2&times;</td></tr>
+<tr><td>Mount B, glycol</td><td class="num">0.099&deg; (default kept)</td><td class="num">0.077&deg;</td><td class="num">1.3&times;</td></tr>
+<tr><td>Mount C, glycol</td><td class="num">0.099&deg; (default kept)</td><td class="num">0.234&deg;</td><td class="num">2.4&times;</td></tr>
+</table></div>
+
+<p>One instrument, three mounts, widths from 0.077 to 0.278&deg; &mdash; and each mount's own answer
+changing by a factor of two depending on whether a background had been subtracted first. Since the
+library is built with whatever the session holds at that moment and the mismatch warning compares it
+against whatever the session holds later, a width that moves between the two makes the program report
+a disagreement it created itself. That is what a user saw: a library built from inside the program,
+with the right goniometer radius, warned about its own peak width.</p>
+
+<p><strong>Method and result.</strong> The width is now measured where it is instrumental &mdash; on
+the quartz 101. A detrital quartz grain in a clay separate is large enough that its size broadening
+is immeasurable, so what its lines show is the machine; this is why quartz is the standard for the
+purpose. The fit is Clayfit's: a pseudo-Voigt doublet with the K-alpha wavelength separation and the
+2:1 intensity ratio held fixed on a local linear background, returning the width of <em>one</em>
+component. Holding the doublet fixed is not a refinement: a half-height width read off the
+unresolved pair at 26.6&deg; is the width of the envelope, and on the same synthetic scans it comes
+out five times too broad.</p>
+
+<p>Tested against synthetic scans built with the doublet at a known component width, the fit recovers
+it to better than a part in a thousand from 0.06 to 0.35&deg; &mdash; a sixfold range:</p>
+
+<div class="tablewrap"><table>
+<tr><th class="num">Imposed</th><th class="num">0.060</th><th class="num">0.080</th><th class="num">0.110</th>
+<th class="num">0.120</th><th class="num">0.180</th><th class="num">0.250</th><th class="num">0.350</th></tr>
+<tr><td class="num">Recovered</td><td class="num">0.0600</td><td class="num">0.0800</td><td class="num">0.1100</td>
+<td class="num">0.1200</td><td class="num">0.1800</td><td class="num">0.2500</td><td class="num">0.3499</td></tr>
+</table></div>
+
+<p>On the nine real mounts the width now comes back <em>identical</em> whether or not a background
+has been subtracted, to four decimal places, which is the property the defect needed: the library and
+the check cannot disagree about it any more.</p>
+
+<p><strong>Three things the fit refuses to do, each of which it did once.</strong> It does not centre
+on the nominal angle: with the centre bounded &plusmn;0.035&deg; around 26.64&deg;, a scan whose
+quartz sat 0.04&deg; away pinned the centre on its own bound and the width came back 15 per cent
+narrow, so the line is located first. It does not search widely for it either: a clay separate is
+crowded around 26.6&deg; &mdash; illite 003 is at 26.9 &mdash; and a window of half a degree found a
+peak 0.30&deg; away on one real mount and fitted that instead, so the window is tight and takes the
+displacement the load-time screen measures (&sect;<a href="#s5-2">5.2</a>). And it does not return a
+width sitting on either bound: a bound that the data would exceed is worse than no bound, because the
+fit then reports it as though it had been measured. Where no quartz can be fitted the old route is
+used, and says so, and a width measured on quartz is never overwritten by one scaled to a clay peak.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 
