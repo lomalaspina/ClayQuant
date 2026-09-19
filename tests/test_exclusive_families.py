@@ -21,6 +21,7 @@ from clayquant.nnls import (
     FamilySelection,
     clay_families,
     nnls_fit,
+    orientation_families,
     select_one_per_family,
 )
 from clayquant.pattern import Pattern
@@ -317,3 +318,165 @@ def test_a_library_with_no_families_falls_back_to_an_ordinary_fit():
     picked = select_one_per_family(measured, library, families=[""])
     assert picked.chosen == {}
     assert picked.result.names == ["Quartz"]
+
+
+# --------------------------------------------------------------------------
+# One orientation per composition
+# --------------------------------------------------------------------------
+
+def a_composition(phase: str, thickness: float, centre: float,
+                  orientations=(0.1, 0.3, 0.6, 1.0)) -> list[LibraryEntry]:
+    """One composition at several orientations.
+
+    A March-Dollase parameter scales a basal series without changing its shape,
+    so the members here differ in height and in how the orders fall away - which
+    is what the fit sees - and share everything else.
+    """
+    out = []
+    for r in orientations:
+        intensity = sum(
+            peak(order * centre, (0.35 / r) ** (order - 1), 0.25)
+            for order in (1, 2, 3)
+        )
+        out.append(entry(f"{phase} PO={r:g} d={thickness:g}", phase, intensity,
+                         march_dollase=r, thickness=thickness))
+    return out
+
+
+def test_a_composition_is_one_family_whatever_its_orientation():
+    library = PatternLibrary(two_theta=GRID, entries=(
+        a_composition("illite", 9.95, 8.88) + a_composition("illite", 10.10, 8.75)
+        + [sharp("Quartz", 20.86)]
+    ))
+    labels = orientation_families(library)
+    assert labels[:4] == ["illite d=9.95"] * 4
+    assert labels[4:8] == ["illite d=10.1"] * 4
+    assert labels[8] == ""
+    # Two compositions of one phase are two families, not one: a specimen may
+    # hold two illite populations of different spacing, and that is not the
+    # double count the orientation is.
+    assert len(set(labels) - {""}) == 2
+
+
+def test_the_interstratified_composition_is_part_of_the_family_key():
+    library = PatternLibrary(two_theta=GRID, entries=[
+        entry("I/S 0.90 PO=0.1", "I/S", peak(8.8, 1.0, 1.0), march_dollase=0.1,
+              fraction=0.90, csds_mean=49.9, thickness=9.9),
+        entry("I/S 0.90 PO=0.5", "I/S", peak(8.8, 0.6, 1.0), march_dollase=0.5,
+              fraction=0.90, csds_mean=49.9, thickness=9.9),
+        entry("I/S 0.50 PO=0.1", "I/S", peak(7.9, 1.0, 1.4), march_dollase=0.1,
+              fraction=0.50, csds_mean=49.9, thickness=9.9),
+    ])
+    labels = orientation_families(library)
+    assert labels[0] == labels[1]          # same composition, two orientations
+    assert labels[2] != labels[0]          # different host fraction, own family
+    assert "0.90 host" in labels[0] and "N=49.9" in labels[0] and "d=9.9" in labels[0]
+
+
+def test_two_orientations_of_one_composition_cannot_both_be_fitted():
+    """The defect this exists to remove.
+
+    A free fit will happily take some of a composition at r = 0.1 and some at
+    r = 1 to fake an intermediate orientation.  That double counts the randomly
+    oriented crystallites, which the r = 0.1 distribution already contains, and
+    it makes the reported r the mean of two values that is the orientation of
+    nothing.
+    """
+    entries = a_composition("illite", 9.95, 8.88) + [sharp("Quartz", 20.86)]
+    library = PatternLibrary(two_theta=GRID, entries=entries)
+    # A specimen built from two orientations at once - exactly what must not
+    # come back out.
+    coefficients = [1.0, 0.0, 0.0, 0.8, 0.5]
+    measured = measured_from(library, coefficients, seed=7)
+
+    free = nnls_fit(measured, library)
+    used = sum(1 for phase, coefficient in zip(free.phases, free.coefficients)
+               if phase == "illite" and coefficient > 0.0)
+    assert used > 1, "the free fit should mix orientations, or this proves nothing"
+
+    picked = select_one_per_family(measured, library,
+                                   families=orientation_families(library))
+    used = sum(1 for phase, coefficient
+               in zip(picked.result.phases, picked.result.coefficients)
+               if phase == "illite" and coefficient > 0.0)
+    assert used == 1
+    # And the reported orientation is then one of the library's own values
+    # rather than an average of several.
+    from clayquant.quantification import quantify
+
+    illite = next(share for share in quantify(picked.result).shares
+                  if share.phase == "illite")
+    assert illite.orientation in (0.1, 0.3, 0.6, 1.0)
+
+
+def test_the_screen_does_not_change_the_answer():
+    """It only removes families an unrestricted fit gave nothing to."""
+    # Three compositions the specimen holds and two it does not, so the screen
+    # has something to remove.
+    library = PatternLibrary(two_theta=GRID, entries=(
+        a_composition("illite", 9.95, 8.88)
+        + a_composition("chlorite", 14.2, 6.2)
+        + a_composition("kaolinite_2M", 7.15, 12.4)
+        + a_composition("I/S", 9.9, 5.1)
+        + a_composition("C/S", 14.4, 30.2)
+        + [sharp("Quartz", 20.86)]
+    ))
+    families = orientation_families(library)
+    coefficients = ([0.0, 1.0, 0.0, 0.0] + [0.0] * 4 + [0.0, 0.0, 0.7, 0.0]
+                    + [0.0] * 8 + [0.6])
+    measured = measured_from(library, coefficients, seed=3)
+    screened = select_one_per_family(measured, library, families=families)
+    whole = select_one_per_family(measured, library, families=families, screen=False)
+    assert screened.chosen == whole.chosen
+    assert screened.evaluations <= whole.evaluations
+
+
+def test_a_family_with_nothing_in_the_fitted_range_is_screened_out():
+    """Which is what makes the search affordable on the real library.
+
+    There the screen leaves 15 families of 176 and the search takes two seconds
+    instead of four minutes.  A synthetic problem small enough to check by hand
+    does not reproduce that on its own: an over-complete non-negative fit of a
+    noisy pattern gives almost every column some small coefficient, so the
+    screen only bites where a composition really has nothing to offer.
+    """
+    library = PatternLibrary(two_theta=GRID, entries=(
+        a_composition("illite", 9.95, 8.88)
+        + a_composition("C/S", 14.4, 30.5)      # every line above the fitted range
+        + [sharp("Quartz", 20.86)]
+    ))
+    families = orientation_families(library)
+    coefficients = [0.0, 1.0, 0.0, 0.0] + [0.0] * 4 + [0.6]
+    measured = measured_from(library, coefficients, seed=4)
+    picked = select_one_per_family(measured, library, families=families,
+                                   range_two_theta=(4.0, 25.0))
+    assert picked.screened_out == 1
+    assert "C/S d=14.4" not in picked.chosen
+    assert picked.reinstated == ()
+
+
+def test_a_family_the_screen_drops_can_be_reinstated():
+    """The screen's assumption is checked rather than trusted.
+
+    A composition that took nothing when every column was available may be
+    wanted once the others are restricted to one orientation each, so each
+    screened-out family is offered back and kept if it improves the fit.
+    """
+    library = PatternLibrary(two_theta=GRID, entries=(
+        a_composition("illite", 9.95, 8.88) + a_composition("I/S", 9.9, 8.6)
+        + [sharp("Quartz", 20.86)]
+    ))
+    families = orientation_families(library)
+    coefficients = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.6]
+    measured = measured_from(library, coefficients, seed=9)
+    picked = select_one_per_family(measured, library, families=families)
+    # Whatever the screen did, the answer holds one orientation per composition
+    # and the metadata says what happened.
+    recorded = picked.result.metadata["family_selection"]
+    assert recorded["screened_out"] >= 0
+    assert isinstance(recorded["reinstated"], list)
+    for phase in ("illite", "I/S"):
+        used = sum(1 for name, coefficient
+                   in zip(picked.result.phases, picked.result.coefficients)
+                   if name == phase and coefficient > 0.0)
+        assert used <= 1, phase

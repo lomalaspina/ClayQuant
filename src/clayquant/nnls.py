@@ -39,6 +39,7 @@ __all__ = [
     "FitResult",
     "clay_families",
     "nnls_fit",
+    "orientation_families",
     "select_one_per_family",
 ]
 
@@ -543,6 +544,12 @@ class FamilySelection:
     exhaustive: bool
     """Whether every combination was tried rather than searched."""
 
+    screened_out: int = 0
+    """Families an unrestricted fit gave nothing to, and which were set aside."""
+
+    reinstated: tuple[str, ...] = ()
+    """Those the check afterwards found the restricted fit did want after all."""
+
     def summary(self) -> str:
         lines = [
             f"One pattern per family, chosen from {len(self.chosen)} families in "
@@ -580,6 +587,61 @@ def clay_families(library, fixed: set[str] | None = None) -> list[str]:
     ]
 
 
+def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
+    """One family per composition, its members differing only in orientation.
+
+    This is the labelling the physics requires, and it is not a matter of taste.
+    The March-Dollase parameter ``r`` is a *distribution* parameter: ``P(alpha;
+    r) = (r^2 cos^2 alpha + sin^2 alpha / r)^(-3/2)`` already spans every
+    crystallite orientation from aligned to random, and how much of each it
+    contains is what ``r`` says.  So a fit that takes half its illite at
+    ``r = 0.5`` and half at ``r = 1`` has counted the randomly oriented
+    crystallites twice - once inside the ``r = 0.5`` distribution and once as
+    the ``r = 1`` entry - and the mixture is not the March-Dollase distribution
+    of any ``r``.  Three consequences, all of which were visible in a real fit:
+
+    * the reported ``r`` becomes a coefficient-weighted mean of the values used,
+      which is the orientation of nothing;
+    * the weight percent goes with it, because a basal series scales as
+      ``r**-3`` and the entries therefore weigh 1000 times differently per gram
+      across the range being mixed;
+    * one composition arrives as three rows of the contributing-patterns table -
+      ``I/S 0.50/0.50 PO=0.3``, ``PO=0.4`` and ``PO=1`` - which reads as three
+      findings and is one phase fitted three times.
+
+    The family is therefore everything about an entry *except* its orientation:
+    its phase, its host fraction, its crystallite thickness and its layer
+    spacing.  ClayQuant's library is built as a grid of exactly that shape - 175
+    compositions at ten orientations each - so this picks one orientation per
+    composition and leaves the compositions free, which is a weaker and more
+    defensible restriction than one entry per phase.
+
+    The same argument can be made about the crystallite-size distribution, whose
+    mean is also a distribution parameter; it is left free here because a real
+    specimen does contain populations of different thickness, and mixing two
+    lognormal distributions is not the same double count.  Two entries of one
+    composition at different layer *spacing* likewise stay available, a
+    distribution of spacings being a real thing.
+    """
+    from .quantification import _is_clay
+
+    fixed = fixed or set()
+    labels: list[str] = []
+    for entry in library.entries:
+        if entry.phase in fixed or not _is_clay(entry.phase):
+            labels.append("")
+            continue
+        parts = [entry.phase]
+        if entry.fraction is not None:
+            parts.append(f"{float(entry.fraction):.2f} host")
+        if entry.csds_mean is not None:
+            parts.append(f"N={float(entry.csds_mean):g}")
+        if entry.thickness is not None:
+            parts.append(f"d={float(entry.thickness):g}")
+        labels.append(" ".join(parts))
+    return labels
+
+
 def _family_starts(groups: list[np.ndarray]) -> list[tuple[int, ...]]:
     """Clayfit's four deterministic starting combinations.
 
@@ -607,6 +669,7 @@ def select_one_per_family(
     max_exhaustive: int = MAX_EXHAUSTIVE_COMBINATIONS,
     sweeps: int = FAMILY_SWEEPS,
     constraints: "list | tuple" = (),
+    screen: bool = True,
 ) -> FamilySelection:
     """Fit with exactly one pattern from each family, as Clayfit does.
 
@@ -626,6 +689,24 @@ def select_one_per_family(
     The objective is the same weighted sum of squares :func:`nnls_fit`
     minimises, so the two are comparable and the choice is made on the quantity
     the fit is judged by.
+
+    ``screen`` runs one unrestricted fit first and keeps only the families that
+    took a coefficient in it.  With one family per composition there are 176 of
+    them on ClayQuant's library, the search costs a non-negative least squares
+    over 180 columns for each of 25000 candidates, and it takes four minutes -
+    too slow to sit in front of.  The screening fit costs 0.3 s and leaves
+    around twenty families, which is 5 s.  Clayfit's own search takes a
+    screening fit's answer the same way, as one candidate per family to start
+    from.
+
+    What the screen assumes is that a composition every one of whose
+    orientations was given zero when all of them were available is not a
+    composition the restricted fit needs.  That is not a theorem - the
+    restricted fit has fewer columns, so there is more for a phase to explain -
+    so it is checked rather than asserted: once the search has settled, every
+    screened-out family is offered back one at a time, and any that improves
+    the objective is reinstated and the search run again.  The result reports
+    how many were screened and how many came back.
 
     What this does *not* do is refine a coherent d-spacing scale per family, as
     Clayfit's ``select_exclusive_family_fit_with_lattice_scaling`` does.
@@ -678,6 +759,20 @@ def select_one_per_family(
     # a family chosen without them would be chosen on the glycol mount alone,
     # which is the freedom they exist to remove.
     extra = [item for item in (constraints or ()) if item.weight != 0.0]
+    # The screening fit.  One unrestricted solve over everything, to find which
+    # families the measurement has any use for.
+    screened_out: list[str] = []
+    if screen and len(order) > 1:
+        coefficients, _ = nnls(weighted, target)
+        alive = {
+            labels[index] for index in np.flatnonzero(coefficients > 0.0)
+            if labels[index]
+        }
+        if alive and len(alive) < len(order):
+            screened_out = [family for family in order if family not in alive]
+            order = [family for family in order if family in alive]
+            groups = [np.flatnonzero(as_array == family) for family in order]
+
     tried: dict[tuple[int, ...], float] = {}
 
     def evaluate(choice: tuple[int, ...]) -> float:
@@ -742,6 +837,72 @@ def select_one_per_family(
                 evaluate(tuple(trial))
         best = min(tried, key=lambda key: (tried[key], key))
 
+    # Offer every screened-out family back, one at a time, at its own best
+    # orientation.  A family that improves the objective is reinstated, and the
+    # search is run again with it in - which can change what the others chose.
+    reinstated: list[str] = []
+    for _round in range(3):
+        if not screened_out:
+            break
+        gained: str | None = None
+        best_extra: tuple[list[str], list[np.ndarray], np.ndarray] | None = None
+        current = tried[best]
+        for family in list(screened_out):
+            members = np.flatnonzero(as_array == family)
+            trial_order = order + [family]
+            trial_groups = groups + [members]
+            scores = []
+            for index in members:
+                choice = tuple(list(best) + [int(index)])
+                columns = np.sort(np.concatenate((fixed, np.asarray(choice, dtype=int))))
+                block = weighted[:, columns]
+                observed = target
+                if extra:
+                    rows, values = [block], [target]
+                    for item in extra:
+                        item_rows, item_values = item.subset(columns).rows()
+                        rows.append(item_rows)
+                        values.append(item_values)
+                    block, observed = np.vstack(rows), np.concatenate(values)
+                solved, _ = nnls(block, observed)
+                residual = observed - block @ solved
+                scores.append(float(residual @ residual))
+            if min(scores) < current * (1.0 - 1e-6):
+                gained, current = family, min(scores)
+                best_extra = trial_order, trial_groups, members
+        if gained is None or best_extra is None:
+            break
+        order, groups, _members = best_extra
+        screened_out.remove(gained)
+        reinstated.append(gained)
+        tried = {}
+        total = 1
+        for indices in groups:
+            total *= int(indices.size)
+        exhaustive = total <= max_exhaustive
+        if exhaustive:
+            for choice in product(*groups):
+                evaluate(choice)
+            best = min(tried, key=lambda key: (tried[key], key))
+            continue
+        for start in _family_starts(groups):
+            choice = list(start)
+            for _sweep in range(max(1, sweeps)):
+                moved = False
+                for position, indices in enumerate(groups):
+                    scores = []
+                    for index in indices:
+                        trial = list(choice)
+                        trial[position] = int(index)
+                        scores.append((evaluate(tuple(trial)), int(index)))
+                    _, winner = min(scores)
+                    if winner != choice[position]:
+                        choice[position] = winner
+                        moved = True
+                if not moved:
+                    break
+        best = min(tried, key=lambda key: (tried[key], key))
+
     best_objective = tried[best]
     denominator = max(abs(best_objective), float(np.finfo(float).tiny))
     margins: dict[str, float] = {}
@@ -765,6 +926,8 @@ def select_one_per_family(
         "exhaustive": exhaustive,
         "combinations": total,
         "margins": dict(margins),
+        "screened_out": len(screened_out),
+        "reinstated": list(reinstated),
     }
     chosen = {
         family: library.entries[int(index)].name
@@ -777,6 +940,8 @@ def select_one_per_family(
         margins=margins,
         evaluations=len(tried),
         exhaustive=exhaustive,
+        screened_out=len(screened_out),
+        reinstated=tuple(reinstated),
     )
 
 

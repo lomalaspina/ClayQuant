@@ -130,6 +130,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-20">A.20 Library over-completeness</a>
 <a href="#a-21">A.21 Smectite orientation</a>
 <a href="#a-22">A.22 Instrumental width</a>
+<a href="#a-23">A.23 One orientation per composition</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4336,6 +4337,74 @@ displacement the load-time screen measures (&sect;<a href="#s5-2">5.2</a>). And 
 width sitting on either bound: a bound that the data would exceed is worse than no bound, because the
 fit then reports it as though it had been measured. Where no quartz can be fitted the old route is
 used, and says so, and a width measured on quartz is never overwritten by one scaled to a clay peak.</p>
+
+<h3 id="a-23">A.23 One orientation per composition</h3>
+
+<p><strong>Reasoning.</strong> The March&ndash;Dollase parameter is not an amount, it is the width of
+a distribution:</p>
+
+<div class="eq"><var>P</var>(&alpha;;&nbsp;<var>r</var>) =
+(<var>r</var><sup>2</sup>cos<sup>2</sup>&alpha; + sin<sup>2</sup>&alpha;/<var>r</var>)<sup>&minus;3/2</sup>
+<span class="n">(A.4)</span></div>
+
+<p>gives the density of crystallites whose basal normal lies at &alpha; to the specimen normal. At
+<var>r</var> = 1 it is flat &mdash; a random powder &mdash; and as <var>r</var> falls it concentrates
+towards &alpha; = 0, but it never stops containing the whole range: an <var>r</var> = 0.5
+distribution already holds its share of randomly oriented crystallites. So a fit that takes half a
+composition at <var>r</var> = 0.5 and half at <var>r</var> = 1 has counted those crystallites twice,
+once inside the first distribution and once as the second entry, and the mixture is not the
+March&ndash;Dollase distribution of any <var>r</var> at all.</p>
+
+<p>Three things follow, and all three were visible in a real fit:</p>
+
+<ul>
+<li>the reported <var>r</var> is the coefficient-weighted mean of the values used &mdash; 0.41 from a
+mixture of 0.3, 0.4 and 1.0 &mdash; which is the orientation of nothing;</li>
+<li>the weight percent goes with it, because a basal series scales as <var>r</var><sup>&minus;3</sup>
+and the entries being mixed therefore weigh up to a thousand times differently per gram
+(&sect;<a href="#a-21">A.21</a>);</li>
+<li>one phase arrives as three rows of the contributing-patterns table &mdash;
+<span class="kw">I/S 0.50/0.50 PO=0.3</span>, <span class="kw">PO=0.4</span> and
+<span class="kw">PO=1</span> &mdash; which reads as three findings.</li>
+</ul>
+
+<p><strong>Method.</strong> ClayQuant's library is a grid of 175 compositions at ten orientations
+each, so the composition is exactly what an entry is once its orientation is set aside: its phase,
+its host fraction, its crystallite thickness and its layer spacing. Each composition becomes a
+mutually exclusive family and the fit keeps one orientation from each, by the search of
+&sect;<a href="#a-20">A.20</a>. Two compositions of one phase stay available &mdash; a specimen may
+hold two illite populations of different spacing, and that is not the same double count &mdash; which
+makes this a weaker restriction than Clayfit's one entry per phase, and the one the physics
+requires.</p>
+
+<p><strong>Result.</strong> On a real glycol mount the unrestricted fit mixed orientations of three
+compositions at once:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Composition</th><th>Orientations the free fit used</th></tr>
+<tr><td><span class="kw">I/S 0.98/0.02 N=49.9 d=9.95</span></td><td><var>r</var> = 0.1 and 0.8</td></tr>
+<tr><td><span class="kw">illite d=10.02</span></td><td><var>r</var> = 0.1 and 0.7</td></tr>
+<tr><td><span class="kw">kaolinite_2M</span></td><td><var>r</var> = 0.8 and 0.9</td></tr>
+</table></div>
+
+<p>With one orientation per composition, none. And the cost is nothing:
+<var>R</var><sub>wp</sub> goes from 55.80 to 55.82 % on that mount and from 68.50 to 68.53 % on
+another, so the freedom that was physically wrong was also buying no fit. What it was buying was a
+reported orientation, and a weight percent, that meant nothing.</p>
+
+<p><strong>Making it affordable.</strong> One family per composition is 176 families of ten members,
+and the search &mdash; a non-negative least squares over 180 columns for each of 25&nbsp;000
+candidates &mdash; took four minutes. A screening fit fixes it: one unrestricted solve, which costs
+0.3 s, and only the families that took a coefficient in it go into the search. That leaves about
+fifteen and takes two seconds. Clayfit's own search anticipates this, taking a screening fit's answer
+as a starting candidate per family.</p>
+
+<p>The screen's assumption &mdash; that a composition given nothing when every column was available
+is not one the restricted fit needs &mdash; is not a theorem, because the restricted fit has fewer
+columns and so more for each phase to explain. It is therefore checked rather than asserted: once the
+search settles, every screened-out family is offered back one at a time and any that improves the
+objective is reinstated and the search run again. On the two real mounts one family came back each
+time, so the check is doing work rather than decorating the method.</p>
 
 <h3 id="a-13">A.13 Summary</h3>
 

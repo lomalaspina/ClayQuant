@@ -93,7 +93,12 @@ from ..library import (
 )
 from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, random_transition
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
-from ..nnls import nnls_fit
+from ..nnls import (
+    clay_families,
+    nnls_fit,
+    orientation_families,
+    select_one_per_family,
+)
 from ..optics import Divergence
 from ..pairing import find_siblings, sample_key
 from ..pattern import Instrument, mixed_layer_pattern, powder_pattern, two_theta_grid
@@ -1300,6 +1305,29 @@ def fit_tab() -> html.Div:
                     ),
                     label("Fit range (°2θ)"),
                     dcc.RangeSlider(id="fit-range", min=2.0, max=45.0, step=0.5, value=[4.0, 34.0]),
+                    label("Orientation"),
+                    dcc.Dropdown(
+                        id="fit-exclusive",
+                        options=[
+                            {"label": "One per composition (recommended)",
+                             "value": "composition"},
+                            {"label": "One per phase (as Clayfit)", "value": "phase"},
+                            {"label": "Every entry free", "value": "free"},
+                        ],
+                        value="composition",
+                        clearable=False,
+                    ),
+                    html.Div(
+                        "The March–Dollase parameter r is a distribution: P(α;r) "
+                        "already spans aligned to random, and how much of each it holds "
+                        "is what r says. So a fit that takes half a composition at "
+                        "r = 0.5 and half at r = 1 counts the randomly oriented "
+                        "crystallites twice, and the r it reports is the mean of two "
+                        "values — the orientation of nothing. One per composition "
+                        "forbids that while leaving the compositions free; one per "
+                        "phase is Clayfit's stricter rule.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     label("Restrict orientation parameters"),
                     dcc.Dropdown(
                         id="fit-orientations",
@@ -2598,9 +2626,11 @@ def register_callbacks(app: Dash) -> None:
         State("fit-orientations", "value"),
         State("fit-subtract", "value"),
         State("fit-calibration", "value"),
+        State("fit-exclusive", "value"),
         prevent_initial_call=True,
     )
-    def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice):
+    def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
+                exclusive):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2625,12 +2655,25 @@ def register_callbacks(app: Dash) -> None:
 
         use_background = bool(subtract) and "on" in subtract
         try:
-            result = nnls_fit(
-                state.corrected(),
-                library,
-                background=state.background_fit if use_background else None,
-                range_two_theta=tuple(fit_range),
-            )
+            selection = None
+            if exclusive == "free":
+                result = nnls_fit(
+                    state.corrected(),
+                    library,
+                    background=state.background_fit if use_background else None,
+                    range_two_theta=tuple(fit_range),
+                )
+            else:
+                families = (clay_families(library) if exclusive == "phase"
+                            else orientation_families(library))
+                selection = select_one_per_family(
+                    state.corrected(),
+                    library,
+                    families=families,
+                    background=state.background_fit if use_background else None,
+                    range_two_theta=tuple(fit_range),
+                )
+                result = selection.result
             calibration = (
                 Calibration.from_clayfit(library) if calibration_choice == "clayfit" else None
             )
@@ -2661,6 +2704,30 @@ def register_callbacks(app: Dash) -> None:
             + ("" if use_background else ". Fitted without background subtraction")
             + "."
         )
+        if selection is not None:
+            undetermined = [
+                family for family, margin in selection.margins.items()
+                if margin < 0.02
+            ]
+            status = html.Div([
+                html.Div(status),
+                html.Div(
+                    f"One pattern per "
+                    f"{'composition' if exclusive == 'composition' else 'phase'}: "
+                    f"{len(selection.chosen)} chosen in {selection.evaluations} fits"
+                    + (f", {selection.screened_out} families set aside by a screening "
+                       f"fit" if selection.screened_out else "")
+                    + (f" and {len(selection.reinstated)} of those reinstated"
+                       if selection.reinstated else "")
+                    + ". "
+                    + (f"{len(undetermined)} of the choices are not determined by the "
+                       f"data - the next best fitted within 2% - so read those "
+                       f"compositions and orientations as a range."
+                       if undetermined else
+                       "Every choice beat its runner-up by more than 2%."),
+                    style={"marginTop": "8px", "fontSize": "0.8rem", "color": "#555"},
+                ),
+            ])
         if result.metadata.get("crowded"):
             status = html.Div([
                 html.Div(status),
