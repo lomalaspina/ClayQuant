@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +56,8 @@ __all__ = [
     "Calibration",
     "quantify",
     "CLAY_LIBRARY_PHASES",
+    "INTERSTRATIFIED_HOSTS",
+    "reported_phase",
     "CLAYFIT_ANCHOR_ORIENTATION",
     "FIXED_ORIENTATION_PHASES",
     "rebase_fixed_orientation",
@@ -66,6 +69,43 @@ CLAY_LIBRARY_PHASES = frozenset(
     {"illite", "chlorite", "kaolinite_1M", "kaolinite_2M", "smectite_EG", "I/S", "C/S"}
 )
 """Library phase keys that are clay minerals by construction."""
+
+
+INTERSTRATIFIED_HOSTS = {"I/S": "illite", "C/S": "chlorite"}
+"""The discrete mineral each interstratified series becomes at fraction 1."""
+
+
+def reported_phase(phase: str, fraction: float | None) -> str:
+    """The mineral an entry *is*, which is not always the series it was built in.
+
+    ClayQuant's library spans each interstratified series to its own endmember,
+    so ``I/S 1.00/0.00`` and ``C/S 1.00/0.00`` exist - and they are 100 % host
+    layers and 0 % smectite, which is to say they are an illite and a chlorite.
+    On this library that is 90 entries named ``I/S`` and 60 named ``C/S`` that
+    contain no expandable layer at all.
+
+    Grouping the fitted entries by the label they were built under therefore
+    reports a specimen with no swelling clay in it as majority mixed-layer:
+    on one real mount the table read ``C/S 25%`` and ``I/S 14%``, both with an
+    expandable content of 0 %, where the honest reading is chlorite 25 % and
+    illite 14 %.  A reader who knows that an I/S at 3 % expandable layers is an
+    illite still cannot be expected to know that an I/S at *zero* is one, and
+    nothing in the table said so.
+
+    So a series entry at fraction 1 is reported as its host mineral, and
+    everything else keeps its series name.  This changes only how fitted
+    entries are grouped for reporting; the library, the fit and the
+    coefficients are untouched.
+    """
+    host = INTERSTRATIFIED_HOSTS.get(phase)
+    if host is None or fraction is None:
+        return phase
+    value = float(fraction)
+    if not math.isfinite(value):
+        # Not recorded, which is not the same as recorded as 1.  An older
+        # library's I/S 0.60/0.40 arrives this way and must keep its name.
+        return phase
+    return host if value >= 1.0 - 1e-9 else phase
 
 
 def _is_clay(phase: str) -> bool:
@@ -723,6 +763,9 @@ def quantify(
     ):
         if coefficient <= 0.0:
             continue
+        # An endmember of a series is the discrete mineral, whatever it was
+        # built under; see reported_phase.
+        phase = reported_phase(phase, fraction)
         clay = phase in clay_phases if clay_phases is not None else _is_clay(phase)
         share = totals.get(phase)
         if share is None:
@@ -737,8 +780,12 @@ def quantify(
         weighted_orientation[phase] = (
             weighted_orientation.get(phase, 0.0) + float(coefficient) * float(orientation)
         )
+        # An entry with no fraction of its own is a discrete mineral, which is
+        # all host layers; the *report* says 1 while the array says nothing.
+        known = (1.0 if fraction is None or not math.isfinite(float(fraction))
+                 else float(fraction))
         weighted_fraction[phase] = (
-            weighted_fraction.get(phase, 0.0) + float(coefficient) * float(fraction)
+            weighted_fraction.get(phase, 0.0) + float(coefficient) * known
         )
         share.entries.append(name)
 

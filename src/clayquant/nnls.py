@@ -65,10 +65,17 @@ class FitResult:
     fraction: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
     """Host-layer fraction of each entry, for the interstratified ones.
 
-    1 for a discrete phase and for a pure end member, 0.8 for an 80/20 stack.
-    Worth carrying through to the report: an entry at 0.99 is a stack of
-    essentially pure host layers, and a result that calls it "I/S" without
-    saying so reads as if smectite had been found.
+    1 for a pure end member, 0.8 for an 80/20 stack, and *not a number* for an
+    entry that has none - a discrete phase, or any entry from a library written
+    before the field existed.  Reporting an unknown fraction as 1 would be the
+    same value a genuine end member carries, and the two must not be confused:
+    :func:`clayquant.quantification.reported_phase` renames an ``I/S`` at
+    fraction 1 to illite, which is right for an end member and wrong for an
+    ``I/S 0.60/0.40`` whose fraction was simply not recorded.
+
+    Worth carrying through to the report either way: an entry at 0.99 is a
+    stack of essentially pure host layers, and a result that calls it "I/S"
+    without saying so reads as if smectite had been found.
     """
     """The texture parameter each entry was calculated with."""
 
@@ -438,7 +445,7 @@ def nnls_fit(
         relative_mass=np.zeros_like(relative_mass) if unweighable else relative_mass,
         march_dollase=np.array([entry.march_dollase for entry in library.entries]),
         fraction=np.array([
-            1.0 if entry.fraction is None else float(entry.fraction)
+            np.nan if entry.fraction is None else float(entry.fraction)
             for entry in library.entries
         ]),
         r_wp=r_wp,
