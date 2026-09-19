@@ -111,6 +111,7 @@ from ..plots import (
 )
 from ..profile import PeakShape
 from ..quantification import Calibration, quantify
+from ..treatment import air_dried_observation
 from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
@@ -1326,6 +1327,23 @@ def fit_tab() -> html.Div:
                         "values — the orientation of nothing. One per composition "
                         "forbids that while leaving the compositions free; one per "
                         "phase is Clayfit's stricter rule.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    label("Expandable clays"),
+                    dcc.Checklist(
+                        id="fit-air-dried",
+                        options=[{"label": " Fit the air-dried mount alongside",
+                                  "value": "on"}],
+                        value=["on"],
+                    ),
+                    html.Div(
+                        "The only measurement that tells an illite-rich I/S from an "
+                        "illite. Each entry contributes its glycol pattern to the mount "
+                        "being fitted and its collapsed pattern to the air-dried one, "
+                        "with the same coefficient, so a phase claiming a share here "
+                        "predicts a definite air-dried mount and pays for it if the "
+                        "specimen does not show it. Needs a library built with the "
+                        "air-dried patterns, and an air-dried mount loaded.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Restrict orientation parameters"),
@@ -2627,10 +2645,11 @@ def register_callbacks(app: Dash) -> None:
         State("fit-subtract", "value"),
         State("fit-calibration", "value"),
         State("fit-exclusive", "value"),
+        State("fit-air-dried", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
-                exclusive):
+                exclusive, use_air_dried):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2654,6 +2673,42 @@ def register_callbacks(app: Dash) -> None:
             return (*blank, error_message(exc))
 
         use_background = bool(subtract) and "on" in subtract
+
+        # The air-dried mount, as a second observation of the same coefficients.
+        # Only for the glycol mount: on the air-dried mount itself it would be
+        # the same pattern twice, and the heated mount is a different question.
+        constraints: list = []
+        air_note = ""
+        air_state = STATE.mounts.get("air")
+        if (bool(use_air_dried) and "on" in (use_air_dried or []) and mount == "glycol"
+                and air_state is not None and air_state.is_loaded):
+            try:
+                # Both mounts must reach the constraint the way the fitted one
+                # reaches nnls_fit - zero-corrected, and background-subtracted
+                # when the fit subtracts one.  Handing over the raw pattern
+                # while the design carries no background makes the block a
+                # measure of the background instead of the clay, and it does not
+                # fail, it quietly fits worse: 43% became 86% on a real mount.
+                observation = air_dried_observation(
+                    air_state.subtracted() if use_background else air_state.corrected(),
+                    state.subtracted() if use_background else state.corrected(),
+                    library,
+                    range_two_theta=tuple(fit_range),
+                    counts=air_state.raw.intensity if air_state.raw is not None else None,
+                )
+            except ValueError as exc:
+                air_note = str(exc)
+            else:
+                air_note = observation.status
+                if observation.constraint is not None:
+                    constraints.append(observation.constraint)
+        elif bool(use_air_dried) and "on" in (use_air_dried or []):
+            air_note = (
+                "The air-dried mount was not used: it restrains the glycol mount, and "
+                + ("no air-dried mount is loaded."
+                   if mount == "glycol" else f"{MOUNT_LABELS[mount]} is being fitted.")
+            )
+
         try:
             selection = None
             if exclusive == "free":
@@ -2662,6 +2717,7 @@ def register_callbacks(app: Dash) -> None:
                     library,
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
+                    constraints=constraints,
                 )
             else:
                 families = (clay_families(library) if exclusive == "phase"
@@ -2672,6 +2728,7 @@ def register_callbacks(app: Dash) -> None:
                     families=families,
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
+                    constraints=constraints,
                 )
                 result = selection.result
             calibration = (
@@ -2727,6 +2784,19 @@ def register_callbacks(app: Dash) -> None:
                        "Every choice beat its runner-up by more than 2%."),
                     style={"marginTop": "8px", "fontSize": "0.8rem", "color": "#555"},
                 ),
+            ])
+        if air_note:
+            # Never silent: whether the air-dried mount restrained this fit
+            # changes what the expandable clays in the table mean.
+            used = bool(constraints)
+            status = html.Div([
+                html.Div(status),
+                html.Div(air_note, style={
+                    "marginTop": "8px", "padding": "8px",
+                    "background": "#eef6ee" if used else "#fff4e5",
+                    "border": f"1px solid {'#8bbf8b' if used else '#f0ad4e'}",
+                    "borderRadius": "6px", "fontSize": "0.8rem",
+                }),
             ])
         if result.metadata.get("crowded"):
             status = html.Div([

@@ -131,6 +131,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-21">A.21 Smectite orientation</a>
 <a href="#a-22">A.22 Instrumental width</a>
 <a href="#a-23">A.23 One orientation per composition</a>
+<a href="#a-24">A.24 The air-dried mount as evidence</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4399,6 +4400,107 @@ candidates &mdash; took four minutes. A screening fit fixes it: one unrestricted
 fifteen and takes two seconds. Clayfit's own search anticipates this, taking a screening fit's answer
 as a starting candidate per family.</p>
 
+<h3 id="a-24">A.24 What actually tells an illite-rich I/S from an illite</h3>
+
+<p><strong>The problem.</strong> A specimen was reported as 72&nbsp;% illite/smectite from a pair of
+mounts whose air-dried and glycol patterns were, to the eye, the same. If nothing swelled, nothing
+expandable should have been fitted, and the fit had no way to know.</p>
+
+<p><strong>The first answer, and why it was the wrong one.</strong> Clayfit restrains the expandable
+clays by looking for intensity that glycolation <em>added</em> in a window at 4.75&ndash;5.55&deg;
+2&theta;, where a fully expandable smectite puts its 17&nbsp;&Aring; 001, and ClayQuant copied it
+(&sect;<a href="#a-19">A.19</a>). It works on a smectite-rich phase and is powerless against an
+illite-rich one, for a reason that is obvious once stated: an I/S at 3&nbsp;% expandable layers has
+no peak there to add. The window sees nothing whichever way the truth goes, so the fit may use as
+much of that phase as it likes.</p>
+
+<p><strong>Where the evidence really is.</strong> Interstratification is not additive. Putting even a
+few layers of a different spacing into a stack breaks the coherence of <em>every</em> basal order
+&mdash; Méring's principle &mdash; so what an illite-rich I/S does on glycolation is not to grow a
+new peak but to redistribute the whole 00<var>l</var> series. Measured on ClayQuant's own library,
+going from the air-dried to the glycol state changes an I/S at 2&nbsp;% expandable layers by:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Expandable layers</th><th>10 &Aring; 001 (8.8&deg;)</th><th>3.32 &Aring; 003 (26.8&deg;)</th><th>Clayfit's 5.2&deg; window</th></tr>
+<tr><td>2&nbsp;%</td><td>0.44</td><td>0.33</td><td>0.004</td></tr>
+<tr><td>5&nbsp;%</td><td>0.74</td><td>0.66</td><td>0.007</td></tr>
+<tr><td>10&nbsp;%</td><td>0.85</td><td>0.78</td><td>0.015</td></tr>
+</table></div>
+
+<p>as a fraction of peak height, and as an area for the window. The evidence is enormous, and it is
+nowhere near where anyone was looking: at 2&nbsp;% expandable layers the 001 halves while the
+diagnostic window moves by four parts in a thousand.</p>
+
+<p><strong>Method.</strong> Every interstratified entry is calculated twice at build time &mdash;
+once with the smectite interlayer at Reynolds' 16.86&nbsp;&Aring;, once collapsed to the air-dried
+repeat (12.4&nbsp;&Aring; by default, a one-water-layer smectite; <code>--air-dried-thickness&nbsp;15</code>
+for a Ca-saturated two-layer one) &mdash; and the pair is stored together, the second divided by the
+<em>same</em> normalisation as the first. The air-dried mount then enters the fit as a second block
+of observations described by the same coefficients: each entry contributes its glycol pattern to the
+mount being fitted and its collapsed pattern to the air-dried one. A phase claiming a share of the
+glycol mount thereby predicts a definite, different air-dried mount, and pays for it there if the
+specimen does not show it. A phase that does not expand contributes the same pattern to both blocks
+and is untouched, so this restrains the expandable clays and nothing else.</p>
+
+<p>The two mounts are separate preparations, so the air-dried one is put on the fitted mount's
+intensity scale on quartz 100, which no treatment moves. Its <em>design</em> is divided by that scale
+rather than its target multiplied by it: multiplying the target by <var>k</var> multiplies its
+standard deviation by <var>k</var> too, and weighting it as though it had not is how the air block
+silently comes to outweigh the pattern it is restraining. The zero shift is taken as zero, because
+ClayQuant zero-corrects each mount as it is loaded; measuring it again is offered but is not the safe
+default it looks, since on a quartz-free specimen the quartz search will match a clay reflection and
+hand back several hundredths of a degree &mdash; &minus;0.40&deg; from a single peak, in a test here
+&mdash; and a misaligned block does not restrain the fit, it wrecks it (2.24&nbsp;% became
+37.91&nbsp;%).</p>
+
+<p><strong>What it does.</strong> On mounts built from the library itself, where the truth is known,
+the restraint is exact both ways: a specimen with nothing expandable in it is fitted at 0.0&nbsp;%
+expandable with the restraint and without, and a real 30&nbsp;% expandable I/S is recovered at
+18.7&nbsp;% expandable layers against a truth of 18.8&nbsp;% either way. So it costs nothing when the
+glycol mount already has the answer. Where the two patterns are identical and the library holds both
+an illite and an I/S that match the glycol mount equally well, the restraint moves the whole
+coefficient onto the illite.</p>
+
+<p><strong>What it does not do.</strong> On real mounts the effect is real but modest. The honest
+numbers, on two specimens:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th><var>R</var><sub>wp</sub> glycol</th><th><var>R</var><sub>wp</sub> air-dried</th><th>Expandable layers</th></tr>
+<tr><td>DBB_20 glycol only</td><td>52.12&nbsp;%</td><td>53.36&nbsp;%</td><td>0.91&nbsp;%</td></tr>
+<tr><td>DBB_20 with the air-dried mount</td><td>52.85&nbsp;%</td><td>49.97&nbsp;%</td><td>1.03&nbsp;%</td></tr>
+<tr><td>DBB_17 glycol only</td><td>66.76&nbsp;%</td><td>85.01&nbsp;%</td><td>3.42&nbsp;%</td></tr>
+<tr><td>DBB_17 with the air-dried mount</td><td>67.34&nbsp;%</td><td>83.45&nbsp;%</td><td>2.99&nbsp;%</td></tr>
+</table></div>
+
+<p>It buys a better description of the specimen as a whole &mdash; a little worse on the mount being
+fitted, more better on the one being predicted &mdash; and it moves the expandable content in the
+right direction where there is anything to move. It does not settle the question. Two reasons, and
+both are worth knowing. The expandable content these fits report is already only one to three per
+cent, so a phase reported as <span class="kw">I/S</span> at a large weight is an illite-rich stack
+rather than a swelling clay, and the <em>Expandable&nbsp;%</em> column beside it says so. And the
+air-dried mount is itself poorly fitted &mdash; 50 to 85&nbsp;% &mdash; so its residual is dominated
+by things other than the expandable question, which is a separate problem and an open one.</p>
+
+<p><strong>Pushing harder.</strong> The weight on the air-dried block is 1 by default, because it is
+a measurement of the same specimen of the same quality and down-weighting it would be a statement
+about its trustworthiness rather than about clay. Raising it does buy discrimination, at a price the
+table makes plain: on DBB_17 a weight of 4 cuts the expandable content from 3.42 to 1.15&nbsp;% and
+improves the air-dried mount from 85.0 to 71.0&nbsp;%, but takes the glycol mount from 66.8 to
+112.4&nbsp;%. That the two mounts cannot be satisfied together is itself the finding, and it is not
+one to tune away.</p>
+
+<p><strong>The collapsed layer is a model, not a measurement.</strong> Reynolds (1965) refined the
+glycol complex; no comparable table exists here for the water complex that replaces it. ClayQuant
+keeps his 2:1 layer exactly &mdash; drying empties the interlayer, it does not compress the
+tetrahedral and octahedral sheets &mdash; and replaces his two glycol sheets and water plane with a
+single plane of water and the exchangeable cation at the middle of the collapsed interlayer, giving
+Al<sub>3.08</sub>Fe<sub>0.32</sub>Mg<sub>0.66</sub>Si<sub>8</sub>O<sub>20</sub>(OH)<sub>4</sub>&middot;4H<sub>2</sub>O&middot;0.4Ca.
+The interlayer water content is the least certain number in it, and the conclusion does not hang on
+it: what the air-dried mount is asked is whether a phase <em>changes</em> between the treatments, and
+that is governed by the spacing, which is known, and only modulated by the contents, which are not.
+The model is not fit to quantify an air-dried mount on its own, and nothing here asks it to.</p>
+
+
 <p>The screen's assumption &mdash; that a composition given nothing when every column was available
 is not one the restricted fit needs &mdash; is not a theorem, because the restricted fit has fewer
 columns and so more for each phase to explain. It is therefore checked rather than asserted: once the
@@ -4478,7 +4580,7 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>379 tests</strong> and runs in about seventy seconds
+<p>The automated suite comprises <strong>641 tests</strong> and runs in about a hundred seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>

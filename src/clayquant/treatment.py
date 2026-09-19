@@ -31,7 +31,7 @@ behaviour.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -39,6 +39,10 @@ from .diagnostics import scale_to_reference
 from .pattern import Pattern
 
 __all__ = [
+    "AIR_OBSERVATION_WEIGHT",
+    "AirDriedObservation",
+    "MINIMUM_AIR_OVERLAP",
+    "air_dried_observation",
     "EXPANSION_CONSTRAINT_WEIGHT",
     "INTERSTRATIFIED_SHIFT_WINDOW",
     "MINIMUM_EXPANSION_GAIN",
@@ -458,4 +462,215 @@ def basal_agreement(
         f"with the air-dried intensities scaled by {scale:.2f} on quartz. An expandable "
         f"composition is admitted only so far as both mounts allow it, which is what "
         f"'no shift between air and glycol' means as a restraint on the fit."
+    )
+
+
+# --------------------------------------------------------------------------
+# The air-dried mount as a second observation of the same coefficients
+# --------------------------------------------------------------------------
+
+AIR_OBSERVATION_WEIGHT = 1.0
+"""How much the air-dried mount counts against the mount being fitted.
+
+One, because it is a measurement of the same specimen of the same quality, and
+down-weighting it would be a statement that it is less trustworthy rather than
+a statement about clay.  Lower it to let the glycol mount win where the two
+disagree; zero is the same as not passing the constraint at all.
+"""
+
+MINIMUM_AIR_OVERLAP = 0.5
+"""Fraction of the fitted range the air-dried mount must cover to be usable."""
+
+
+@dataclass
+class AirDriedObservation:
+    """The air-dried mount, and the constraint that carries it into the fit."""
+
+    constraint: "ExtraObservation | None"
+    scale: float
+    """Factor that put the air-dried mount on the fitted mount's scale."""
+
+    shift: float
+    """Zero shift of the air-dried mount against the fitted one, in degrees."""
+
+    expandable: int
+    """Library entries that predict a change between the two treatments."""
+
+    status: str
+
+
+def air_dried_observation(
+    air: Pattern,
+    fitted: Pattern,
+    library,
+    range_two_theta: tuple[float, float] | None = None,
+    scale: float | None = None,
+    shift: float | None = 0.0,
+    weight: float = AIR_OBSERVATION_WEIGHT,
+    counts: np.ndarray | None = None,
+) -> AirDriedObservation:
+    """Fit the glycol mount and the air-dried mount with one set of coefficients.
+
+    This is the measurement that decides whether an expandable clay is there,
+    and it is not the one Clayfit makes.  Clayfit - and ClayQuant before this -
+    looks for intensity glycolation *added* near 5.2 deg, where a fully
+    expandable smectite puts its 17 A 001.  That works for a smectite-rich
+    phase and is powerless against an illite-rich one: an I/S at 3% expandable
+    layers has no peak there to add, so the window sees nothing whichever way
+    the truth goes, and the fit is free to use as much of it as it likes.  On a
+    real specimen that freedom produced 72% I/S from a pair of mounts that a
+    reader could see were the same pattern.
+
+    What an illite-rich I/S does do on glycolation is change the *whole* 00l
+    series, because interstratification is not additive: putting even a few
+    layers of a different spacing into the stack breaks the coherence of every
+    order (Mering's principle).  Measured on ClayQuant's own library, going from
+    the air-dried to the glycol state changes an I/S at 2% expandable layers by
+    44% of peak height at the 10 A 001 and by 33% at the 3.32 A 003, while it
+    changes Clayfit's 5.2 deg window by 0.4%.  The evidence is enormous, and it
+    is nowhere near where anyone was looking.
+
+    So this uses it directly.  Each library entry contributes its glycol pattern
+    to the mount being fitted and its stored air-dried counterpart - the same
+    composition with the smectite interlayer collapsed - to this block, with the
+    *same* coefficient.  An entry that claims a share of the glycol mount
+    thereby predicts a definite, different air-dried mount, and if the specimen
+    does not show it the fit pays for it here.  A phase that does not expand
+    contributes the same pattern to both blocks and is unaffected, so this
+    restrains the expandable clays and nothing else - which is what
+    "the evidence of peak shift should restrict the smectite family" asks for.
+
+    The two mounts are separate preparations, so they are put on a common
+    intensity scale on quartz 100, which no treatment touches, and on a common
+    angular scale by the quartz zero shift.  Both are measured unless given.
+
+    Parameters
+    ----------
+    air:
+        The air-dried mount, zero-corrected and background-subtracted the same
+        way as the mount being fitted.
+    fitted:
+        The mount being fitted - the glycol one - which the air-dried mount is
+        scaled against on quartz 100.
+    shift:
+        Zero shift of the air-dried mount against the fitted one, in degrees.
+        Zero by default, because ClayQuant zero-corrects each mount as it is
+        loaded and correcting it twice would misalign the two blocks; ``None``
+        measures it from the quartz lines instead, for a mount that has not been
+        corrected.
+
+        Measuring is not the safe default it looks.  On a specimen with no
+        quartz in it, :func:`~clayquant.detection.quartz_zero_shift` will match
+        a clay reflection to a quartz line and return a shift of several
+        hundredths of a degree - on a test case here, -0.40 deg from a single
+        peak - and a misaligned air-dried block does not restrain the expandable
+        clays, it wrecks the fit: 2.24% became 37.91%.
+    counts:
+        Raw counts of the air-dried mount, for the 1/counts weighting that the
+        pattern block uses.  Without them every point of the air-dried mount
+        counts alike, which over-weights its strong peaks.
+
+    Raises
+    ------
+    ValueError
+        If the library carries no air-dried counterparts.  Falling back to the
+        glycol patterns would assert that nothing expands, which is the question
+        being asked, so this refuses instead and says to rebuild.
+    """
+    from .detection import quartz_zero_shift, treatment_peaks
+
+    if not library.has_air_dried():
+        raise ValueError(
+            "this library carries no air-dried patterns, so the air-dried mount cannot "
+            "restrain the expandable clays; rebuild it with the current version "
+            "(build_library(air_dried_thickness=...)) or leave the air-dried mount out"
+        )
+
+    grid = np.asarray(library.two_theta, dtype=float)
+    if range_two_theta is not None:
+        low, high = range_two_theta
+        grid = grid[(grid >= low) & (grid <= high)]
+    if grid.size < 2:
+        raise ValueError("fewer than two library points lie in the fitted range")
+
+    expandable = sum(entry.air_intensity is not None for entry in library.entries)
+    if expandable == 0:
+        return AirDriedObservation(
+            None, 1.0, 0.0, 0,
+            "No library entry changes on glycolation, so the air-dried mount has "
+            "nothing to restrain.",
+        )
+
+    covered = float(np.mean((grid >= air.two_theta.min()) & (grid <= air.two_theta.max())))
+    if covered < MINIMUM_AIR_OVERLAP:
+        return AirDriedObservation(
+            None, 1.0, 0.0, expandable,
+            f"The air-dried mount covers only {100.0 * covered:.0f}% of the fitted range "
+            f"(it takes {100.0 * MINIMUM_AIR_OVERLAP:.0f}%), so it is not used. Scan it "
+            f"over the same range as the mount being fitted.",
+        )
+
+    measured_shift = None
+    if shift is None:
+        try:
+            measured_shift, _ = quartz_zero_shift(treatment_peaks(air))
+        except Exception:  # noqa: BLE001 - reported below, not raised
+            measured_shift = None
+        shift = 0.0 if measured_shift is None else float(measured_shift)
+    shift = float(shift)
+    corrected = replace(air, two_theta=air.two_theta - shift)
+
+    note = ""
+    if scale is None:
+        try:
+            scale = scale_to_reference(fitted, corrected)
+        except Exception as exc:  # noqa: BLE001 - reported below, not raised
+            return AirDriedObservation(
+                None, 1.0, shift, expandable,
+                f"The two mounts could not be put on a common intensity scale on quartz "
+                f"100 ({exc}), so one coefficient cannot describe both and the air-dried "
+                f"mount is not used. Give the scale explicitly to use it anyway.",
+            )
+    if measured_shift is None and shift == 0.0:
+        note = (" No quartz line gave the air-dried mount a zero shift, so it was taken "
+                "to share the fitted mount's.")
+    scale = float(scale)
+
+    # The air-dried mount is left in its own measured units and the design is
+    # divided by the scale instead of the target multiplied by it.  Both express
+    # the same relation, but this one keeps the block's counting statistics
+    # native: multiplying the target by `scale` multiplies its standard
+    # deviation by `scale` too, and weighting it as though it had not is how the
+    # air block silently comes to outweigh the pattern it is restraining.
+    if scale <= 0.0:
+        raise ValueError("the intensity scale must be positive")
+    target = np.interp(grid, corrected.two_theta, corrected.intensity, left=0.0, right=0.0)
+    design = library.air_matrix(grid).T / scale
+    if counts is None:
+        # Without counts, match the pattern block's own convention as closely as
+        # possible: weight by the observation itself, which is Poisson.
+        point_weights = np.sqrt(1.0 / np.clip(target, 1.0, None))
+    else:
+        on_grid = np.interp(grid, corrected.two_theta, np.asarray(counts, dtype=float),
+                            left=1.0, right=1.0)
+        point_weights = np.sqrt(1.0 / np.clip(on_grid, 1.0, None))
+
+    constraint = ExtraObservation(
+        target=target,
+        design=design,
+        weight=float(weight),
+        point_weights=point_weights,
+        name="air-dried mount",
+    )
+    return AirDriedObservation(
+        constraint=constraint,
+        scale=scale,
+        shift=shift,
+        expandable=expandable,
+        status=(
+            f"The air-dried mount is fitted alongside, with one set of coefficients, over "
+            f"{grid.size} points at a zero shift of {shift:+.3f} deg and an intensity scale "
+            f"of {scale:.3f}.{note} {expandable} library entries predict a different "
+            f"air-dried pattern, and the mount decides whether they are there."
+        ),
     )

@@ -40,10 +40,13 @@ __all__ = [
     "use_refined_structures",
     "clear_refined_structures",
     "refined_structures",
+    "air_dried_smectite_layer",
     "eg_smectite_layer",
     "available_phases",
     "REYNOLDS_1965_EG_SMECTITE_ROWS",
+    "AIR_DRIED_SMECTITE_D001",
     "REYNOLDS_1965_D001",
+    "WATER_PER_CELL",
 ]
 
 
@@ -434,6 +437,100 @@ REYNOLDS_1965_EG_SMECTITE_ROWS: list[tuple[float, str, float, float]] = [
     (7.94, "H", 1.60, 1.68),
     (7.94, "Ca", 0.20, 1.68),
 ]
+
+
+AIR_DRIED_SMECTITE_D001 = 12.4
+"""Layer repeat of an air-dried smectite in A, before glycolation.
+
+A smectite in the laboratory atmosphere carries interlayer water, and how much
+depends on the exchangeable cation and on the humidity: a Na-smectite holds one
+water layer at about 12.4 A, a Ca- or Mg-smectite two at about 15 A.  12.4 A is
+the usual figure for a routine air-dried mount and is what this defaults to; it
+is a parameter of :func:`clayquant.library.build_library` so that a specimen
+known to be Ca-saturated can be given 15 A instead.
+
+The exact value matters much less than it looks, and that is the point of it.
+What the air-dried mount is asked here is whether a candidate expandable phase
+*changes* between the two treatments, and every spacing in the 12.4-15 A range
+differs from the 16.86 A glycol complex by far more than a measurement's noise:
+see :func:`clayquant.treatment.air_dried_observation` for the measured
+sensitivity.  The discrimination is not delicate.
+"""
+
+WATER_PER_CELL = 4.0
+"""Interlayer H2O per ``O20(OH)4`` layer in a one-water-layer smectite.
+
+Four per cell is the usual figure for the 12.4 A one-layer hydrate.  It is the
+least certain number in :func:`air_dried_smectite_layer` - the interlayer of an
+air-dried smectite is disordered and how much water it holds depends on the
+humidity of the room - so the sensitivity to it is measured rather than
+assumed; see ``tests/test_air_dried_smectite.py``.
+"""
+
+
+def air_dried_smectite_layer(
+    thickness: float = AIR_DRIED_SMECTITE_D001,
+    water: float = WATER_PER_CELL,
+) -> LayerModel:
+    """The Reynolds smectite with the glycol replaced by one water layer.
+
+    Glycolation changes the interlayer and leaves the 2:1 layer alone, so this
+    keeps Reynolds' 2:1 rows exactly as they are - octahedral sheet on the
+    mirror, the apical oxygens and hydroxyls at 1.06 A, tetrahedral silicon at
+    2.70 A, basal oxygens at 3.27 A - and replaces his three interlayer planes
+    (two glycol sheets and a water/calcium plane) with a single plane of water
+    and the exchangeable cation at the middle of the collapsed interlayer.
+
+    Two details are easy to get wrong and are worth stating.  The 2:1 rows are
+    *not* rescaled with the repeat distance: drying empties the interlayer, it
+    does not compress the tetrahedral and octahedral sheets, and scaling them
+    would put the structure factor wrong.  And the interlayer plane sits at
+    exactly ``thickness / 2``, which is on the cell boundary, so its occupancies
+    are halved here: :meth:`LayerModel.from_table` mirrors every row with
+    ``z != 0`` about ``z = 0``, and the copies at ``+d/2`` and ``-d/2`` are one
+    repeat apart - the same plane, counted once.
+
+    This is a model of a collapsed layer, not a measurement of one: Reynolds
+    (1965) refined the glycol complex, and no comparable table exists here for
+    the water complex that replaces it.  It is fit for the one purpose it is put
+    to, which is to predict how far the 00l series of an interstratified stack
+    moves between the two treatments - an effect governed by the layer
+    *spacing*, which is known, and only modulated by the interlayer contents,
+    which are not.  It is not fit to quantify an air-dried mount on its own, and
+    nothing in ClayQuant asks it to.
+    """
+    thickness = float(thickness)
+    if thickness <= 2.0 * 3.27:
+        raise ValueError(
+            f"an air-dried repeat of {thickness:g} A leaves no interlayer: the 2:1 layer "
+            f"alone reaches {2.0 * 3.27:.2f} A"
+        )
+    interlayer = thickness / 2.0
+    rows: list[tuple[float, str, float, float]] = [
+        row for row in REYNOLDS_1965_EG_SMECTITE_ROWS if row[0] <= 3.27
+    ]
+    # Halved, because the mirror plane at z = 0 gives this row a twin at -d/2
+    # that is the same plane in the cell below.
+    # Occupancies follow Reynolds' convention, in which the table is half the
+    # cell and every row is mirrored: his 0.20 Ca is 0.40 per cell.  There is
+    # one interlayer per repeat, split between the two cell edges, so a row here
+    # carries half of what that interlayer holds - hence ``water / 2`` oxygens
+    # for ``water`` molecules per cell, and the same 0.20 Ca as his own row.
+    rows += [
+        (interlayer, "O", 0.5 * float(water), 1.68),
+        (interlayer, "H", 1.0 * float(water), 1.68),
+        (interlayer, "Ca", 0.20, 1.68),
+    ]
+    return LayerModel.from_table(
+        thickness=thickness,
+        rows=rows,
+        name="smectite_air",
+        source=(
+            "2:1 layer of Reynolds, R.C. Jr. (1965) Am. Mineral. 50, 990-1001, Table 1, "
+            "with the glycol interlayer replaced by one water layer"
+        ),
+        mirror=True,
+    )
 
 
 def eg_smectite_layer(thickness: float = REYNOLDS_1965_D001) -> LayerModel:

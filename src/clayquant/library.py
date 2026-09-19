@@ -31,7 +31,9 @@ from .emission import CU_KA_5LINE
 from .mixed_layer import MixedLayerStack, lognormal_csds
 from .optics import Divergence
 from .models import (
+    AIR_DRIED_SMECTITE_D001,
     CIF_SOURCES,
+    air_dried_smectite_layer,
     available_phases,
     chlorite_crystal,
     eg_smectite_layer,
@@ -210,6 +212,23 @@ class LibraryEntry:
     whichever the structure factor was computed from.
     """
 
+    air_intensity: np.ndarray | None = None
+    """The same pattern with the smectite interlayer collapsed, or ``None``.
+
+    Only an entry that carries expandable layers has one: everything else - a
+    discrete illite, kaolinite, chlorite or an accompanying mineral - diffracts
+    the same before and after glycolation, and its own :attr:`intensity` serves
+    for both mounts.
+
+    It is stored divided by the *same* :attr:`normalization` as
+    :attr:`intensity`, not by its own maximum.  That is what makes one fitted
+    coefficient describe the phase in both treatments, which is the whole
+    purpose: an entry claiming a share of the glycol mount is thereby claiming a
+    definite, different share of the air-dried one, and the air-dried mount can
+    say whether that is there.  Normalising it separately would throw exactly
+    that information away.
+    """
+
     unit_volume: float | None = None
     """Volume in A^3 of that same unit.
 
@@ -262,6 +281,7 @@ class PatternLibrary:
         unit_volume: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
         strip_continuum: bool = True,
+        air_pattern: "Pattern | None" = None,
     ) -> None:
         """Append a pattern, scaled to unit maximum above ``normalization_floor``.
 
@@ -280,32 +300,36 @@ class PatternLibrary:
         basis patterns would let a phase soak up the measured background and
         would inflate that phase's apparent share.
         """
-        intensity = pattern.intensity
-        if strip_continuum:
-            intensity = np.clip(
-                intensity
-                - snip_baseline(pattern.two_theta, intensity, window=CONTINUUM_WINDOW),
-                0.0,
-                None,
-            )
-        if pattern.two_theta.shape != self.two_theta.shape or not np.allclose(
-            pattern.two_theta, self.two_theta
-        ):
-            # Patterns are calculated on a grid reaching beyond the stored one so
-            # that the continuum can be stripped without the end effect; the
-            # margin is dropped here.  The grids share a step, so this is a
-            # trim rather than a resampling.
-            intensity = np.interp(self.two_theta, pattern.two_theta, intensity,
-                                  left=0.0, right=0.0)
+        def prepare(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
+            if strip_continuum:
+                values = np.clip(
+                    values - snip_baseline(grid, values, window=CONTINUUM_WINDOW), 0.0, None
+                )
+            if grid.shape != self.two_theta.shape or not np.allclose(grid, self.two_theta):
+                # Patterns are calculated on a grid reaching beyond the stored
+                # one so that the continuum can be stripped without the end
+                # effect; the margin is dropped here.  The grids share a step,
+                # so this is a trim rather than a resampling.
+                values = np.interp(self.two_theta, grid, values, left=0.0, right=0.0)
+            return values
+
+        intensity = prepare(pattern.intensity, pattern.two_theta)
         usable = self.two_theta >= normalization_floor
         scale = float(np.max(intensity[usable])) if usable.any() else 0.0
         if scale <= 0.0:
             scale = float(np.max(intensity)) or 1.0
+        air = None
+        if air_pattern is not None:
+            # Its own continuum, because the diffuse scatter genuinely differs
+            # between the treatments, but the glycol pattern's normalisation,
+            # because the two must stay on one scale.
+            air = prepare(air_pattern.intensity, air_pattern.two_theta) / scale
         self.entries.append(
             LibraryEntry(
                 name=pattern.name,
                 phase=phase,
                 intensity=intensity / scale,
+                air_intensity=air,
                 march_dollase=march_dollase,
                 fraction=fraction,
                 csds_mean=csds_mean,
@@ -330,6 +354,37 @@ class PatternLibrary:
                 np.interp(target, self.two_theta, entry.intensity, left=0.0, right=0.0)
                 for entry in self.entries
             ]
+        )
+
+    def has_air_dried(self) -> bool:
+        """Whether the library carries the air-dried counterparts."""
+        return any(entry.air_intensity is not None for entry in self.entries)
+
+    def air_matrix(self, two_theta: np.ndarray | None = None) -> np.ndarray:
+        """Design matrix for the air-dried mount, of shape ``(n_entries, n_points)``.
+
+        Row ``i`` is what entry ``i`` contributes to an air-dried mount at the
+        same scale at which :meth:`matrix` gives what it contributes to a glycol
+        one.  For an entry with expandable layers that is its stored
+        :attr:`~LibraryEntry.air_intensity`; for everything else it is the same
+        pattern, because glycolation does not touch it.
+
+        An expandable entry in a library built without the air-dried
+        counterparts falls back to its glycol pattern, which asserts that
+        glycolation changes nothing - the one thing the air-dried mount is there
+        to test.  :meth:`has_air_dried` is how to find out, and
+        :func:`clayquant.treatment.air_dried_observation` refuses rather than
+        fall back silently.
+        """
+        rows = [
+            entry.intensity if entry.air_intensity is None else entry.air_intensity
+            for entry in self.entries
+        ]
+        if two_theta is None:
+            return np.vstack(rows)
+        target = np.asarray(two_theta, dtype=float)
+        return np.vstack(
+            [np.interp(target, self.two_theta, row, left=0.0, right=0.0) for row in rows]
         )
 
     def spanned(self) -> dict[str, list[float]]:
@@ -389,6 +444,13 @@ class PatternLibrary:
             path,
             two_theta=self.two_theta,
             intensity=self.matrix(),
+            # NaN marks an entry with no air-dried counterpart, which is not the
+            # same as one whose counterpart happens to be zero everywhere.
+            air_intensity=np.vstack([
+                np.full_like(entry.intensity, np.nan) if entry.air_intensity is None
+                else entry.air_intensity
+                for entry in self.entries
+            ]),
             names=np.array(self.names, dtype=object),
             phases=np.array([entry.phase for entry in self.entries], dtype=object),
             march_dollase=np.array([entry.march_dollase for entry in self.entries]),
@@ -440,11 +502,19 @@ class PatternLibrary:
                 data["unit_volume"] if "unit_volume" in data.files
                 else np.full(len(fractions), np.nan)
             )
+            # Libraries written before the air-dried mount could restrain the
+            # expandable clays carry no counterparts at all.
+            air = (
+                data["air_intensity"] if "air_intensity" in data.files
+                else np.full_like(data["intensity"], np.nan)
+            )
             entries = [
                 LibraryEntry(
                     name=str(name),
                     phase=str(phase),
                     intensity=np.asarray(row, dtype=float),
+                    air_intensity=(None if not np.isfinite(air_row).all()
+                                   else np.asarray(air_row, dtype=float)),
                     march_dollase=float(orientation),
                     fraction=None if np.isnan(fraction) else float(fraction),
                     csds_mean=None if np.isnan(size) else float(size),
@@ -454,11 +524,12 @@ class PatternLibrary:
                     unit_volume=None if np.isnan(volume) else float(volume),
                     metadata=metadata,
                 )
-                for (name, phase, row, orientation, fraction, size, spacing, scale, mass,
-                     volume, metadata) in zip(
+                for (name, phase, row, air_row, orientation, fraction, size, spacing,
+                     scale, mass, volume, metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
+                    air,
                     data["march_dollase"],
                     fractions,
                     sizes,
@@ -511,6 +582,7 @@ def build_library(
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
     smectite_orientation: float = 0.1,
+    air_dried_thickness: float | None = AIR_DRIED_SMECTITE_D001,
     progress: bool = False,
 ) -> PatternLibrary:
     """Calculate the full reference library.
@@ -535,6 +607,14 @@ def build_library(
     smectite_thickness:
         Layer repeat of the glycolated smectite in A; defaults to the 16.86 A
         measured by Reynolds (1965).
+    air_dried_thickness:
+        Layer repeat in A of the smectite interlayer *before* glycolation.  Each
+        interstratified entry is then calculated a second time with the smectite
+        collapsed to it, and that pattern stored beside the glycol one, so that
+        a fit of the glycol mount can be asked whether the air-dried mount
+        agrees - which is the only measurement that distinguishes an illite-rich
+        illite/smectite from an illite.  ``None`` skips it, which halves the
+        build and leaves the expandable clays unrestrained.
     smectite_orientation:
         March-Dollase parameter the pure smectite pattern is calculated at.  The
         default is 0.1, the orientation a fit typically gives the other platy
@@ -630,6 +710,8 @@ def build_library(
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
             "smectite_source": "Reynolds (1965) Am. Mineral. 50, 990-1001",
             "smectite_orientation": float(smectite_orientation),
+            "air_dried_thickness": (None if air_dried_thickness is None
+                                    else float(air_dried_thickness)),
             "cif_sources": {
                 key: f"ICSD {source.icsd}: {source.description}"
                 for key, source in CIF_SOURCES.items()
@@ -690,6 +772,13 @@ def build_library(
     smectite = eg_smectite_layer(
         smectite_thickness if smectite_thickness is not None else eg_smectite_layer().thickness
     )
+    # The same smectite before glycolation.  Every interstratified entry is
+    # calculated with both, and the pair is what lets the air-dried mount say
+    # whether a candidate expandable phase is really there.
+    air_smectite = (
+        None if air_dried_thickness is None
+        else air_dried_smectite_layer(float(air_dried_thickness))
+    )
     announce(f"smectite_EG: 1 pattern at r = {smectite_orientation:g}")
     library.add(
         basal_pattern(
@@ -698,6 +787,13 @@ def build_library(
             instrument,
             r_march_dollase=smectite_orientation,
             name="smectite_EG",
+        ),
+        air_pattern=None if air_smectite is None else basal_pattern(
+            MixedLayerStack(air_smectite, air_smectite, 1.0, csds=csds, name="smectite_air"),
+            extended,
+            instrument,
+            r_march_dollase=smectite_orientation,
+            name="smectite_EG air",
         ),
         phase="smectite_EG",
         march_dollase=smectite_orientation,
@@ -740,7 +836,19 @@ def build_library(
                         csds=csds,
                         name=f"{label} {composition}",
                     )
+                    air_stack = None if air_smectite is None else MixedLayerStack(
+                        host_layer,
+                        air_smectite,
+                        fraction_a=fraction,
+                        csds=csds,
+                        name=f"{label} {composition} air",
+                    )
                     for r in orientations:
+                        entry_name = (
+                            f"{label} {composition} PO={r:g}"
+                            + (f" N={csds.mean:g}" if len(distributions) > 1 else "")
+                            + spacing_tag
+                        )
                         pattern = mixed_layer_pattern(
                             stack,
                             host,
@@ -748,16 +856,30 @@ def build_library(
                             extended,
                             instrument,
                             r_march_dollase=r,
-                            name=(
-                                f"{label} {composition} PO={r:g}"
-                                + (f" N={csds.mean:g}" if len(distributions) > 1 else "")
-                                + spacing_tag
-                            ),
+                            name=entry_name,
                             basal_scale=scale,
                             host_reflections=host_reflections,
                         )
+                        # A fully collapsed stack - fraction 1.0 - is the host
+                        # alone and does not change on glycolation, so it needs
+                        # no counterpart and the fit should not be told it has
+                        # one.  Everything else does.
+                        air_pattern = None
+                        if air_stack is not None and fraction < 1.0:
+                            air_pattern = mixed_layer_pattern(
+                                air_stack,
+                                host,
+                                layers_per_cell,
+                                extended,
+                                instrument,
+                                r_march_dollase=r,
+                                name=entry_name + " air",
+                                basal_scale=scale,
+                                host_reflections=host_reflections,
+                            )
                         library.add(
                             pattern,
+                            air_pattern=air_pattern,
                             phase=label,
                             march_dollase=r,
                             fraction=fraction,
@@ -805,6 +927,23 @@ def main(argv: list[str] | None = None) -> int:
         help="a scan from the instrument the samples will be measured on; its "
              "goniometer radius and divergence slit are read from the file and its "
              "peaks are measured for the width. No data from it enters the library.",
+    )
+    parser.add_argument(
+        "--air-dried-thickness",
+        type=float,
+        default=AIR_DRIED_SMECTITE_D001,
+        help="layer repeat in A of the smectite before glycolation. Every "
+             "interstratified pattern is calculated a second time with the "
+             "interlayer collapsed to it and stored beside the glycol one, which is "
+             "what lets the air-dried mount say whether an expandable clay is really "
+             f"there (default: {AIR_DRIED_SMECTITE_D001:g}, a one-water-layer "
+             "smectite; 15 for a Ca-saturated two-layer one)",
+    )
+    parser.add_argument(
+        "--no-air-dried",
+        action="store_true",
+        help="skip the air-dried patterns. Halves the build and leaves the "
+             "expandable clays unrestrained by the air-dried mount.",
     )
     parser.add_argument(
         "--smectite-orientation",
@@ -998,6 +1137,8 @@ def main(argv: list[str] | None = None) -> int:
         csds_beta=arguments.csds_beta,
         smectite_thickness=arguments.smectite_thickness,
         smectite_orientation=arguments.smectite_orientation,
+        air_dried_thickness=(None if arguments.no_air_dried
+                             else arguments.air_dried_thickness),
         progress=not arguments.quiet,
     )
     path = library.save(arguments.out)
