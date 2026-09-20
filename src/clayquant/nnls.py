@@ -286,6 +286,7 @@ def nnls_fit(
     background: BackgroundFit | None = None,
     range_two_theta: tuple[float, float] | None = None,
     constraints: "list | tuple" = (),
+    treatment: str = "glycol",
 ) -> FitResult:
     """Fit ``measured`` as a non-negative combination of library patterns.
 
@@ -293,6 +294,14 @@ def nnls_fit(
     ----------
     library:
         A :class:`clayquant.library.PatternLibrary`.
+    treatment:
+        Which mount ``measured`` is, so that the library is used in the state
+        the specimen was in: ``"glycol"`` (the default, and what the patterns
+        are calculated for) or ``"air"``, which uses each expandable entry's
+        collapsed counterpart.  Fitting an air-dried mount as ``"glycol"`` fits
+        a 16.86 A glycol interlayer to a specimen whose interlayer is near
+        12.4 A; see :meth:`clayquant.library.PatternLibrary.for_treatment` for
+        what that costs.
     mask:
         Boolean mask selecting the points to fit; combined with
         ``range_two_theta`` when both are given.
@@ -317,6 +326,7 @@ def nnls_fit(
     """
     if len(library.entries) == 0:
         raise ValueError("the library is empty")
+    library = library.for_treatment(treatment)
 
     two_theta = measured.two_theta
     raw = measured.intensity.astype(float)
@@ -677,6 +687,7 @@ def select_one_per_family(
     sweeps: int = FAMILY_SWEEPS,
     constraints: "list | tuple" = (),
     screen: bool = True,
+    treatment: str = "glycol",
 ) -> FamilySelection:
     """Fit with exactly one pattern from each family, as Clayfit does.
 
@@ -724,6 +735,9 @@ def select_one_per_family(
     """
     if len(library.entries) == 0:
         raise ValueError("the library is empty")
+    # Before anything reads a pattern: the search and the final fit must see
+    # the library in the state the specimen was in.
+    library = library.for_treatment(treatment)
 
     labels = list(clay_families(library) if families is None else families)
     if len(labels) != len(library.entries):
@@ -924,6 +938,7 @@ def select_one_per_family(
         )
 
     kept = np.sort(np.concatenate((fixed, np.asarray(best, dtype=int))))
+    # `library` is already the treatment view, so the refit takes it as it is.
     result = nnls_fit(measured, _library_subset(library, kept), mask=mask,
                       background=background, range_two_theta=range_two_theta,
                       constraints=[item.subset(kept) for item in extra])

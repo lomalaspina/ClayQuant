@@ -2718,6 +2718,7 @@ def register_callbacks(app: Dash) -> None:
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
                     constraints=constraints,
+                    treatment=mount,
                 )
             else:
                 families = (clay_families(library) if exclusive == "phase"
@@ -2729,6 +2730,7 @@ def register_callbacks(app: Dash) -> None:
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
                     constraints=constraints,
+                    treatment=mount,
                 )
                 result = selection.result
             calibration = (
@@ -2760,6 +2762,10 @@ def register_callbacks(app: Dash) -> None:
             + (f" (including {added} main mineral{'s' if added != 1 else ''})" if added else "")
             + ("" if use_background else ". Fitted without background subtraction")
             + "."
+            + (" The library was used in its air-dried state: every expandable entry "
+               "contributes its collapsed pattern, because the glycol patterns model a "
+               "16.86 \u00c5 interlayer and an air-dried one is near 12.4 \u00c5."
+               if mount == "air" else "")
         )
         if selection is not None:
             undetermined = [

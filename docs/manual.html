@@ -132,6 +132,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-22">A.22 Instrumental width</a>
 <a href="#a-23">A.23 One orientation per composition</a>
 <a href="#a-24">A.24 The air-dried mount as evidence</a>
+<a href="#a-25">A.25 Fitting a mount in the state it was in</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4580,11 +4581,63 @@ argument-passing modes</td>
 made the installer unable to see an installed Python, and fixed</td></tr>
 </table></div>
 
-<p>The automated suite comprises <strong>641 tests</strong> and runs in about a hundred seconds
+<p>The automated suite comprises <strong>655 tests</strong> and runs in about a hundred seconds
 (<span class="kw">pytest -q</span>). Those that need the ICSD structures are skipped automatically
 when they are not installed; the rest, including the whole of
 <span class="kw">tests/test_background.py</span>, run without them.</p>
 
+
+<h3 id="a-25">A.25 Fitting a mount in the state it was in</h3>
+
+<p><strong>The problem.</strong> Every clay pattern ClayQuant calculates is a pattern of the
+<em>glycolated</em> mount. The smectite is Reynolds' (1965) ethylene glycol&ndash;montmorillonite
+complex at 16.86&nbsp;&Aring;, and so is the smectite inside every illite/smectite and
+chlorite/smectite built from it. Until this was fixed the fit used those patterns whichever mount
+was selected, so choosing the air-dried mount fitted a 16.86&nbsp;&Aring; interlayer to a specimen
+whose interlayer is near 12.4&nbsp;&Aring;.</p>
+
+<p>That is not a loss of accuracy, it is a loss of the mineral. On synthetic air-dried mounts built
+from the library, so that the answer is known:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Air-dried mount of</th><th>fitted with the glycol patterns</th><th>fitted with the collapsed patterns</th></tr>
+<tr><td>a smectite and an illite</td><td><var>R</var><sub>wp</sub> 85.5&nbsp;%, <strong>no smectite reported at all</strong></td><td><var>R</var><sub>wp</sub> 2.4&nbsp;%, illite 76&nbsp;% / smectite 24&nbsp;%</td></tr>
+<tr><td>a 30&nbsp;% expandable I/S and a kaolinite</td><td><var>R</var><sub>wp</sub> 60.2&nbsp;%, reported as illite 64&nbsp;%</td><td><var>R</var><sub>wp</sub> 1.8&nbsp;%, I/S 80&nbsp;% / kaolinite 20&nbsp;%</td></tr>
+</table></div>
+
+<p>The mechanism is plain once seen: the air-dried mount of a smectite has no intensity at
+5.2&nbsp;&deg;2&theta;, because the 17&nbsp;&Aring; reflection is not there to find, so a fit offered
+only a glycolated smectite cannot use it at any scale and reports a specimen without one.</p>
+
+<p><strong>Method.</strong> <span class="kw">PatternLibrary.for_treatment</span> returns the library
+as the specimen diffracts it under one treatment, and the fit takes the mount being fitted as its
+argument. <span class="kw">"glycol"</span> is the library as stored. <span class="kw">"air"</span>
+swaps in each entry's stored air-dried counterpart &mdash; the same composition with the smectite
+interlayer collapsed, calculated at build time and stored on the <em>same</em> normalisation, so a
+coefficient means the same thing either way and the two fits are comparable. Only the expandable
+entries have one; illite, chlorite, kaolinite and the accompanying minerals diffract the same before
+and after glycolation and keep their own pattern.</p>
+
+<p><strong>The heated mount is refused, not fitted.</strong> Heating to 500&nbsp;&deg;C takes the
+smectite interlayer to 10&nbsp;&Aring;, dehydroxylates the kaolinite altogether and alters the
+chlorite, and ClayQuant calculates none of that. Fitting it with the glycol patterns would repeat
+this error on a larger scale, so <span class="kw">for_treatment("heated")</span> raises instead, and
+says what the heated mount <em>is</em> good for: the kaolinite diagnostic of &sect;<a href="#a-6">A.6</a>,
+where the collapse of the 7.15&nbsp;&Aring; reflection is the measurement and no calculated pattern
+is needed. A heated mount worth quantifying would need its own layer models, which is work not yet
+done.</p>
+
+<p><strong>A library without the counterparts refuses too.</strong> Falling back to the glycol
+patterns is the error this exists to prevent, so a library built before they existed will not fit an
+air-dried mount at all; it says to rebuild. That is deliberate: the failure this replaces was silent,
+and a silent wrong answer is worse than a refusal that names the reason.</p>
+
+<p><strong>What it does not change.</strong> The glycolated mount &mdash; the one a clay assemblage
+is normally quantified on &mdash; is fitted exactly as before, and every number elsewhere in this
+manual still stands. On a specimen with little expandable clay in it the difference on the air-dried
+mount is small as well: on M_26_1041, where the two mounts are the same pattern to within a scale
+factor, <var>R</var><sub>wp</sub> on the air-dried mount goes from 57.6&nbsp;% to 57.1&nbsp;%. The
+error is large exactly where the expandable clay is, which is where it matters.</p>
 
 <h2 id="d">Appendix D &mdash; Provenance of the accompanying-mineral structures</h2>
 
