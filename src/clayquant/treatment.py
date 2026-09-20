@@ -575,12 +575,25 @@ class ShiftEvidence:
     """Systematic displacement between the mounts, from reflections that cannot move."""
 
     largest: float
-    """Largest displacement in the basal region once the offset is removed."""
+    """Largest displacement that exceeded the peak's own placement, in degrees.
+
+    Zero when nothing moved, which is the point - but it is not the largest
+    displacement *measured*, and reporting it as though it were reads as if no
+    measurement had been made.  :attr:`measured` is that number.
+    """
 
     uncertainty: float
     """How large a displacement the measurement could have hidden, in degrees."""
 
     significant: bool
+
+    measured: float = 0.0
+    """Largest displacement measured, whether or not it means anything.
+
+    This is what the bound is drawn from: the specimen is allowed whatever
+    expandable content could hide behind the movement the scans actually show,
+    which is this rather than zero.
+    """
 
     appeared: list[float] = field(default_factory=list)
     """Reflections the glycolated mount has and the air-dried one does not.
@@ -781,7 +794,7 @@ def shift_evidence(
     angles = np.asarray(glycol.two_theta, dtype=float)
     low, high = range_two_theta
     if int(np.count_nonzero((angles >= low) & (angles <= high))) < 8:
-        return ShiftEvidence([], 0.0, 0.0, float("inf"), False, [],
+        return ShiftEvidence([], 0.0, 0.0, float("inf"), False, 0.0, [],
                              "The two mounts do not overlap over the basal region, so "
                              "no movement could be measured.")
     step = float(np.median(np.diff(angles))) if angles.size > 1 else 0.01
@@ -847,6 +860,7 @@ def shift_evidence(
     # The largest movement that is actually a movement; a displacement smaller
     # than its own peak can be placed is not one.
     largest = max((abs(item.displacement) for item in moved), default=0.0)
+    measured = max((abs(item.displacement) for item in shifts), default=0.0)
     new_peaks = [centre for centre, _ in appeared]
     significant = bool(moved) or bool(new_peaks)
 
@@ -873,15 +887,15 @@ def shift_evidence(
     else:
         status = (
             f"Nothing moved. Across {len(shifts)} basal reflections the largest displacement "
-            f"is {max((abs(i.displacement) for i in shifts), default=0.0):.3f} deg, within what "
-            f"those peaks can be placed to, and against {uncertainty:.3f} deg of disagreement between the "
+            f"is {measured:.3f} deg, within what those peaks can be placed to, and against "
+            f"{uncertainty:.3f} deg of disagreement between the "
             f"mounts on the quartz lines, which no treatment moves, and no reflection "
             f"appeared on glycolation. A clay whose basal series does not move on "
             f"glycolation is not expandable, whatever hydration state its interlayer "
             f"would have been in."
         )
     return ShiftEvidence(shifts, offset, float(largest), float(uncertainty),
-                         bool(significant), new_peaks, status)
+                         bool(significant), float(measured), new_peaks, status)
 
 
 # --------------------------------------------------------------------------
@@ -1178,7 +1192,7 @@ def expandable_bound(
         raise ValueError("the glycol spacing must exceed the air-dried one")
     # How far the 001 of a fully expandable stack would move; a stack that is a
     # fraction x expandable moves x as far.
-    allowance = float(evidence.largest) + float(margin) * float(evidence.uncertainty)
+    allowance = float(evidence.measured) + float(margin) * float(evidence.uncertainty)
     # Movement in degrees at the 001 of a 10 A series, converted to a fraction:
     # d(2theta)/d(d) at 10 A is about 0.88 deg per angstrom for Cu K-alpha.
     degrees_per_angstrom = 0.88
@@ -1197,7 +1211,8 @@ def expandable_bound(
         unrestricted=False,
         status=(
             f"Nothing moved between the mounts: the largest displacement of a basal "
-            f"reflection is {evidence.largest:.3f} deg against {evidence.uncertainty:.3f} deg "
+            f"reflection is {evidence.measured:.3f} deg, within what those peaks can be "
+            f"placed to, against {evidence.uncertainty:.3f} deg "
             f"of disagreement on the quartz lines. Glycolation moves a fully expandable "
             f"001 by about {degrees_per_angstrom * reach:.2f} deg even from the "
             f"least-moving hydration state ({hydrated:g} A), so a stack that did not move "
