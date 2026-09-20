@@ -1,10 +1,12 @@
-"""The library must be used in the state the specimen was in.
+"""Only the glycolated mount is fitted, and why.
 
-ClayQuant's patterns are calculated for the glycolated mount - the smectite is
-Reynolds' (1965) ethylene glycol complex at 16.86 A, and so is the smectite
-inside every I/S and C/S built from it.  Fitting an air-dried mount with those
-is fitting the wrong interlayer, and these tests pin down that it no longer
-happens silently.
+An air-dried smectite interlayer holds zero, one, two or three layers of water
+- about 9.6, 12.4, 15 or 18 A - depending on the exchangeable cation and on the
+humidity, and a real specimen carries several of those states at once,
+interstratified within single crystallites.  There is no single air-dried
+structure to calculate.  Glycol solvation exists precisely to remove that
+variability, which is what makes the glycolated mount the one a pattern can be
+calculated for.
 """
 import numpy as np
 import pytest
@@ -12,6 +14,7 @@ import pytest
 from clayquant.library import LibraryEntry, PatternLibrary
 from clayquant.nnls import nnls_fit, select_one_per_family
 from clayquant.pattern import Pattern
+from clayquant.treatment import AIR_DRIED_STATES
 
 GRID = np.arange(4.0, 34.0, 0.02)
 
@@ -21,7 +24,6 @@ def peak(center: float, height: float = 1.0, width: float = 0.10) -> np.ndarray:
 
 
 def a_library() -> PatternLibrary:
-    """An illite that never moves and a smectite that collapses on drying."""
     return PatternLibrary(
         two_theta=GRID,
         entries=[
@@ -36,13 +38,10 @@ def a_library() -> PatternLibrary:
     )
 
 
-def mount(library, amounts, treatment):
-    values = np.zeros_like(GRID)
-    for entry, amount in zip(library.entries, amounts):
-        pattern = (entry.intensity if treatment == "glycol" or entry.air_intensity is None
-                   else entry.air_intensity)
-        values += amount * pattern
-    return Pattern(two_theta=GRID, intensity=values, name=treatment)
+def a_mount():
+    library = a_library()
+    values = sum(entry.intensity for entry in library.entries)
+    return Pattern(two_theta=GRID, intensity=values, name="eg")
 
 
 def test_the_glycol_view_is_the_library_itself():
@@ -51,34 +50,28 @@ def test_the_glycol_view_is_the_library_itself():
     assert library.for_treatment() is library
 
 
-def test_the_air_view_swaps_only_what_changes():
-    library = a_library()
-    air = library.for_treatment("air")
-    assert np.allclose(air.entries[0].intensity, library.entries[0].intensity)
-    assert np.allclose(air.entries[1].intensity, library.entries[1].air_intensity)
-    # and it leaves everything a coefficient depends on alone
-    for before, after in zip(library.entries, air.entries):
-        assert after.normalization == before.normalization
-        assert after.unit_mass == before.unit_mass
-        assert after.fraction == before.fraction
+def test_the_air_dried_mount_is_refused_and_says_why():
+    """Not "unsupported" - it is not a thing that can be done."""
+    with pytest.raises(ValueError, match="cannot be fitted"):
+        a_library().for_treatment("air")
+    with pytest.raises(ValueError, match="layers of water"):
+        nnls_fit(a_mount(), a_library(), treatment="air")
+    with pytest.raises(ValueError, match="glycol solvation is for"):
+        select_one_per_family(a_mount(), a_library(), families=["", "smectite"],
+                              treatment="air")
 
 
-def test_the_heated_mount_is_refused_rather_than_fitted_wrong():
-    """Heating takes the interlayer to 10 A and destroys the kaolinite; none of
-    that is calculated, so fitting it with the glycol patterns would repeat the
-    error on a larger scale."""
+def test_the_refusal_names_the_alternative():
+    """A refusal that does not say what to do instead is not much use."""
+    with pytest.raises(ValueError, match="shift_evidence"):
+        a_library().for_treatment("air")
+
+
+def test_the_heated_mount_is_refused_too():
     with pytest.raises(ValueError, match="no model for a mount heated"):
         a_library().for_treatment("heated")
-    with pytest.raises(ValueError, match="no model for a mount heated"):
-        nnls_fit(mount(a_library(), [1.0, 1.0], "glycol"), a_library(), treatment="heated")
-
-
-def test_a_glycol_only_library_refuses_the_air_mount():
-    """Falling back to the glycol patterns is the error itself, so it refuses."""
-    library = a_library()
-    library.entries[1].air_intensity = None
-    with pytest.raises(ValueError, match="only the glycolated patterns"):
-        library.for_treatment("air")
+    with pytest.raises(ValueError, match="kaolinite diagnostic"):
+        nnls_fit(a_mount(), a_library(), treatment="heated")
 
 
 def test_an_unknown_treatment_is_refused():
@@ -86,43 +79,18 @@ def test_an_unknown_treatment_is_refused():
         a_library().for_treatment("boiled")
 
 
-def test_the_air_mount_fitted_as_glycol_loses_the_smectite():
-    """The measurement that prompted this, in miniature.
+def test_the_hydration_states_are_the_reason_and_are_recorded():
+    """The spacings the argument rests on, so they can be checked."""
+    assert AIR_DRIED_STATES["1 water layer"] == pytest.approx(12.4)
+    assert AIR_DRIED_STATES["2 water layers"] == pytest.approx(15.0)
+    # every one of them differs from the glycol complex by more than the
+    # measurement's resolution, which is why the movement is detectable at all
+    assert all(abs(spacing - 16.86) > 0.5 for spacing in AIR_DRIED_STATES.values())
 
-    The air-dried mount of a specimen that is half smectite has no intensity
-    at 5.24 deg - the smectite is collapsed - so a fit with the glycol patterns
-    cannot use the smectite entry at all, and reports a specimen without one.
-    """
+
+def test_the_glycol_mount_is_fitted_exactly_as_before():
     library = a_library()
-    air = mount(library, [1.0, 1.0], "air")
-
-    wrong = nnls_fit(air, library, treatment="glycol")
-    got = dict(zip(wrong.names, wrong.coefficients))
-    assert got["smectite_EG"] == pytest.approx(0.0, abs=1e-9)
-
-    right = nnls_fit(air, library, treatment="air")
-    got = dict(zip(right.names, right.coefficients))
+    result = nnls_fit(a_mount(), library)
+    got = dict(zip(result.names, result.coefficients))
     assert got["smectite_EG"] == pytest.approx(1.0, rel=1e-6)
     assert got["illite"] == pytest.approx(1.0, rel=1e-6)
-    assert right.r_wp < wrong.r_wp
-
-
-def test_the_glycol_mount_is_unaffected():
-    """The default path must be exactly what it was."""
-    library = a_library()
-    glycol = mount(library, [1.0, 1.0], "glycol")
-    got = dict(zip(*(lambda r: (r.names, r.coefficients))(nnls_fit(glycol, library))))
-    assert got["smectite_EG"] == pytest.approx(1.0, rel=1e-6)
-    assert got["illite"] == pytest.approx(1.0, rel=1e-6)
-
-
-def test_the_family_search_uses_the_treatment_too():
-    """It has its own design matrix, and it decided which entries survive."""
-    library = a_library()
-    air = mount(library, [1.0, 1.0], "air")
-    chosen = select_one_per_family(air, library, families=["", "smectite"],
-                                   treatment="air")
-    got = dict(zip(chosen.result.names, chosen.result.coefficients))
-    assert got["smectite_EG"] == pytest.approx(1.0, rel=1e-6)
-    with pytest.raises(ValueError, match="no model for a mount heated"):
-        select_one_per_family(air, library, families=["", "smectite"], treatment="heated")

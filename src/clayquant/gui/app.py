@@ -94,6 +94,7 @@ from ..library import (
 from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, random_transition
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
 from ..nnls import (
+    _library_subset,
     clay_families,
     nnls_fit,
     orientation_families,
@@ -111,7 +112,7 @@ from ..plots import (
 )
 from ..profile import PeakShape
 from ..quantification import Calibration, quantify
-from ..treatment import air_dried_observation
+from ..treatment import expandable_bound, shift_evidence
 from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
@@ -1332,18 +1333,18 @@ def fit_tab() -> html.Div:
                     label("Expandable clays"),
                     dcc.Checklist(
                         id="fit-air-dried",
-                        options=[{"label": " Fit the air-dried mount alongside",
+                        options=[{"label": " Use the air-dried mount as evidence",
                                   "value": "on"}],
                         value=["on"],
                     ),
                     html.Div(
-                        "The only measurement that tells an illite-rich I/S from an "
-                        "illite. Each entry contributes its glycol pattern to the mount "
-                        "being fitted and its collapsed pattern to the air-dried one, "
-                        "with the same coefficient, so a phase claiming a share here "
-                        "predicts a definite air-dried mount and pays for it if the "
-                        "specimen does not show it. Needs a library built with the "
-                        "air-dried patterns, and an air-dried mount loaded.",
+                        "An air-dried mount cannot be fitted \u2014 its interlayer may hold "
+                        "zero to three layers of water depending on the cation and the "
+                        "humidity, which is what glycol solvation exists to remove \u2014 so "
+                        "it is read as evidence instead: whether the basal reflections "
+                        "moved. A specimen whose 001 did not move on glycolation has no "
+                        "expandable clay, and the size of the movement it could have "
+                        "hidden puts a ceiling on how much it may carry.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Restrict orientation parameters"),
@@ -2674,40 +2675,35 @@ def register_callbacks(app: Dash) -> None:
 
         use_background = bool(subtract) and "on" in subtract
 
-        # The air-dried mount, as a second observation of the same coefficients.
-        # Only for the glycol mount: on the air-dried mount itself it would be
-        # the same pattern twice, and the heated mount is a different question.
-        constraints: list = []
+        # The air-dried mount is evidence, not a second pattern to fit: its
+        # smectite interlayer may hold zero to three layers of water depending
+        # on the cation and the humidity, so there is no air-dried structure to
+        # calculate.  What it gives is whether the basal reflections *moved*,
+        # measured off the two scans, and that puts a ceiling on how much
+        # expandable layer the specimen can contain without having shown it.
         air_note = ""
         air_state = STATE.mounts.get("air")
-        if (bool(use_air_dried) and "on" in (use_air_dried or []) and mount == "glycol"
-                and air_state is not None and air_state.is_loaded):
+        wanted = bool(use_air_dried) and "on" in (use_air_dried or [])
+        if wanted and mount == "glycol" and air_state is not None and air_state.is_loaded:
             try:
-                # Both mounts must reach the constraint the way the fitted one
-                # reaches nnls_fit - zero-corrected, and background-subtracted
-                # when the fit subtracts one.  Handing over the raw pattern
-                # while the design carries no background makes the block a
-                # measure of the background instead of the clay, and it does not
-                # fail, it quietly fits worse: 43% became 86% on a real mount.
-                observation = air_dried_observation(
+                evidence = shift_evidence(
                     air_state.subtracted() if use_background else air_state.corrected(),
                     state.subtracted() if use_background else state.corrected(),
-                    library,
-                    range_two_theta=tuple(fit_range),
-                    counts=air_state.raw.intensity if air_state.raw is not None else None,
                 )
-            except ValueError as exc:
-                air_note = str(exc)
+                bound = expandable_bound(evidence, library)
+            except Exception as exc:  # noqa: BLE001 - reported, never fatal
+                air_note = f"The air-dried mount could not be read as evidence: {exc}"
             else:
-                air_note = observation.status
-                if observation.constraint is not None:
-                    constraints.append(observation.constraint)
-        elif bool(use_air_dried) and "on" in (use_air_dried or []):
+                air_note = bound.status
+                if not bound.unrestricted and bound.excluded:
+                    library = _library_subset(library, bound.allowed)
+        elif wanted:
             air_note = (
-                "The air-dried mount was not used: it restrains the glycol mount, and "
+                "The air-dried mount was not used: it restrains the glycolated mount, and "
                 + ("no air-dried mount is loaded."
                    if mount == "glycol" else f"{MOUNT_LABELS[mount]} is being fitted.")
             )
+        constraints: list = []
 
         try:
             selection = None
@@ -2762,10 +2758,7 @@ def register_callbacks(app: Dash) -> None:
             + (f" (including {added} main mineral{'s' if added != 1 else ''})" if added else "")
             + ("" if use_background else ". Fitted without background subtraction")
             + "."
-            + (" The library was used in its air-dried state: every expandable entry "
-               "contributes its collapsed pattern, because the glycol patterns model a "
-               "16.86 \u00c5 interlayer and an air-dried one is near 12.4 \u00c5."
-               if mount == "air" else "")
+
         )
         if selection is not None:
             undetermined = [

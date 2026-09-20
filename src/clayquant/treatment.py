@@ -39,6 +39,13 @@ from .diagnostics import scale_to_reference
 from .pattern import Pattern
 
 __all__ = [
+    "AIR_DRIED_STATES",
+    "ExpandableBound",
+    "LEAST_MOVING_HYDRATION",
+    "PeakShift",
+    "ShiftEvidence",
+    "expandable_bound",
+    "shift_evidence",
     "AIR_OBSERVATION_WEIGHT",
     "AirDriedObservation",
     "MINIMUM_AIR_OVERLAP",
@@ -466,6 +473,418 @@ def basal_agreement(
 
 
 # --------------------------------------------------------------------------
+# The movement between the mounts, measured, and the bound it puts on
+# expandable clay
+# --------------------------------------------------------------------------
+#
+# The air-dried mount is not fitted, and the reason is the reason glycol
+# solvation exists.  An air-dried smectite interlayer holds zero, one, two or
+# three layers of water - roughly 9.6, 12.4, 15 and 18 A - depending on the
+# exchangeable cation and on the humidity of the room, and a real specimen
+# carries several of those states at once, interstratified within single
+# crystallites.  There is no single air-dried structure to calculate.
+# Glycolation exists to remove exactly that variability: it drives the
+# interlayer to a reproducible two-layer complex near 16.9 A whatever the
+# cation, and that is what makes the glycolated mount the one a pattern can be
+# calculated for.
+#
+# What the air-dried mount gives instead is a measurement: whether the basal
+# reflections *moved*.  That is read off the two scans without calculating
+# anything, and it is the classical test - a clay whose 001 does not move on
+# glycolation is not expandable.  Below, the movement is measured, and then
+# turned into a bound on how much expandable layer the specimen can contain
+# without having shown it.
+
+AIR_DRIED_STATES = {
+    "0 water layers": 9.6,
+    "1 water layer": 12.4,
+    "2 water layers": 15.0,
+    "3 water layers": 18.0,
+}
+"""Basal spacing in A of a smectite at each hydration state.
+
+Not a set of models to fit - a list of the reasons an air-dried mount cannot be
+fitted.  Which of these a specimen shows depends on the exchangeable cation and
+the humidity, and it usually shows more than one at once.
+"""
+
+SHIFT_SEARCH_WINDOW = 0.30
+"""How far from a glycol peak to look for its air-dried partner, in degrees."""
+
+SHIFT_RANGE = (4.0, 16.0)
+"""Where expansion shows, and where the evidence is therefore read.
+
+A glycolated smectite puts its 001 at 5.2 degrees, an illite-rich I/S moves its
+10 A 001 and 5 A 002, and a chlorite/smectite moves its 14 A 001 - all of it
+below about 16 degrees.  Above that the clay basal orders are weak and sit among
+the accompanying minerals: on one real specimen the strongest apparent
+"movement" in a 4-30 degree window was 0.036 degrees at 3.24 A, in the middle of
+albite and sekaninaite, on a specimen whose clay basal reflections had not moved
+by more than 0.006.  Reading the evidence where the evidence is avoids that.
+"""
+
+MINIMUM_SHIFT_SHARE = 0.05
+"""A peak below this share of the strongest in the window is not read."""
+
+MINIMUM_SIGNAL_TO_NOISE = 8.0
+"""Prominence-to-noise a peak needs before its position counts as evidence.
+
+A peak this test cannot place is not evidence about anything, and the failure
+it guards against is specific: two maxima that are only noise, one in each
+mount, land a couple of tenths of a degree apart and are matched to each other,
+and a specimen with no expandable clay is reported as having some.
+"""
+
+MINIMUM_PEAK_SHARE = 0.05
+"""A peak below this share of the strongest is too weak to place reliably."""
+
+
+@dataclass
+class PeakShift:
+    """One reflection, and how far glycolation moved it."""
+
+    glycol_two_theta: float
+    air_two_theta: float
+    displacement: float
+    """Glycol minus air, in degrees, before the mount offset is removed."""
+
+    height: float
+    uncertainty: float
+    """How well this pair of peaks can be placed, in degrees.
+
+    A strong sharp line is located to a small fraction of its width; a weak
+    broad one is barely located at all.  Comparing every displacement against
+    one number instead treats the difference between two noise maxima as
+    evidence, which it is not.
+    """
+
+    d_glycol: float
+    d_air: float
+
+    @property
+    def moved(self) -> bool:
+        return abs(self.displacement) > 2.0 * self.uncertainty
+
+
+@dataclass
+class ShiftEvidence:
+    """What the two mounts say about movement, measured rather than calculated."""
+
+    shifts: list[PeakShift]
+    offset: float
+    """Systematic displacement between the mounts, from reflections that cannot move."""
+
+    largest: float
+    """Largest displacement in the basal region once the offset is removed."""
+
+    uncertainty: float
+    """How large a displacement the measurement could have hidden, in degrees."""
+
+    significant: bool
+
+    appeared: list[float] = field(default_factory=list)
+    """Reflections the glycolated mount has and the air-dried one does not.
+
+    A peak that appears on glycolation is the plainest evidence there is, and
+    it is not a displacement - it has no air-dried partner to be displaced
+    from.  Counting it as one is how a shoulder becomes a tenth of a degree of
+    movement that never happened.
+    """
+
+    status: str = ""
+
+    @property
+    def moved(self) -> bool:
+        """Whether anything moved by more than the measurement can account for."""
+        return self.significant
+
+
+def _peaks(pattern: Pattern, low: float, high: float, minimum_share: float,
+           separation: float = 0.35,
+           floor: float | None = None) -> list[tuple[float, float, float]]:
+    """Local maxima of one scan, as ``(two_theta, height)``, strongest first.
+
+    The peaks come from :func:`clayquant.detection.treatment_peaks`, which finds
+    them Clayfit's way - a prominence of four times the *local* noise or a
+    quarter of a per cent of the pattern.  A flat threshold does not work here
+    and the failure is instructive: at 5.2 degrees, where a glycolated smectite
+    would put its 17 A 001, one real specimen's background-subtracted counts
+    wander between 150 and 440 with no structure at all, and taking 5 % of the
+    pattern maximum as a floor picked the largest of them as a peak - reporting
+    a 17 A reflection that is not there, on the one specimen whose whole point
+    was that it has no expandable clay.
+
+    Positions are then refined by a parabola through the maximum and its
+    neighbours, which places a peak to a fraction of the step.  That matters
+    because the displacements being measured here are themselves smaller than
+    one step.
+    """
+    from .detection import treatment_peaks
+
+    angles = np.asarray(pattern.two_theta, dtype=float)
+    values = np.asarray(pattern.intensity, dtype=float)
+    inside = (angles >= low) & (angles <= high)
+    if int(np.count_nonzero(inside)) < 3:
+        return []
+    if floor is None:
+        floor = minimum_share * (float(np.max(values[inside])) or 1.0)
+
+    peaks = treatment_peaks(pattern)
+    widths = np.asarray(peaks.width, dtype=float)
+    prominences = np.asarray(peaks.prominence, dtype=float)
+    found: list[tuple[float, float, float]] = []
+    for order, centre in enumerate(np.asarray(peaks.two_theta, dtype=float)):
+        if not (low <= centre <= high):
+            continue
+        position = int(np.argmin(np.abs(angles - centre)))
+        if position == 0 or position == angles.size - 1:
+            continue
+        y0, y1, y2 = values[position - 1], values[position], values[position + 1]
+        if y1 < floor:
+            continue
+        refined = float(angles[position])
+        denominator = y0 - 2.0 * y1 + y2
+        if denominator != 0.0:
+            delta = 0.5 * (y0 - y2) / denominator
+            if abs(delta) <= 1.0:
+                refined += float(delta) * float(angles[position + 1] - angles[position])
+        # How well this peak can be placed.  A strong sharp line is located to
+        # a small fraction of its width; a weak broad one is not located at
+        # all, and treating the two alike is how the difference between two
+        # noise maxima becomes a tenth of a degree of "movement".
+        _, noise = _height_at(pattern, refined, 0.5 * separation)
+        width = float(widths[order]) if order < widths.size else separation
+        # Prominence, not height: a bump on a 300-count background has a fine
+        # ratio to the noise if its own height is used, and none at all once
+        # the background under it is taken off.  The difference decides whether
+        # two noise maxima become a tenth of a degree of "movement".
+        prominence = float(prominences[order]) if order < prominences.size else float(y1)
+        ratio = prominence / max(noise, 1.0)
+        if ratio < MINIMUM_SIGNAL_TO_NOISE:
+            continue
+        placed = max(width / (2.0 * max(ratio, 1.0)), 0.0)
+        found.append((refined, float(y1), placed))
+    found.sort(key=lambda item: -item[1])
+    kept: list[tuple[float, float, float]] = []
+    for item in found:
+        if all(abs(item[0] - taken[0]) > separation for taken in kept):
+            kept.append(item)
+    return kept
+
+
+def _match(glycol_peaks, air_peaks, window):
+    """Pair each glycol peak with at most one air peak, strongest first.
+
+    One-to-one matters: without it a shoulder that glycolation *created* - with
+    no counterpart in the air-dried mount at all - is matched to whichever
+    neighbouring peak is nearest, and reported as a displacement of a tenth of a
+    degree that never happened.  That is the difference between reading
+    movement off these scans and inventing it.
+    """
+    taken: set[int] = set()
+    pairs: list[tuple[float, float, float, float]] = []
+    unmatched: list[tuple[float, float, float]] = []
+    for centre, height, placed in glycol_peaks:
+        best, distance = None, window
+        for index, other in enumerate(air_peaks):
+            if index in taken:
+                continue
+            if abs(other[0] - centre) <= distance:
+                best, distance = index, abs(other[0] - centre)
+        if best is None:
+            unmatched.append((centre, height, placed))
+            continue
+        taken.add(best)
+        # The pair can be separated no better than the worse-placed of the two.
+        together = float(np.hypot(placed, air_peaks[best][2]))
+        pairs.append((centre, air_peaks[best][0], height, together))
+    return pairs, unmatched
+
+
+def _intensity_scale_rough(glycol: Pattern, air: Pattern, reference, window) -> float:
+    """How much brighter the glycol mount is, from the reflections that cannot move.
+
+    Needed before any peak is chosen, to put one detection threshold on both
+    scans; the pairs give a better estimate afterwards.
+    """
+    ratios = []
+    for line in reference:
+        here, _ = _height_at(glycol, line, window)
+        there, _ = _height_at(air, line, window)
+        if here > 0.0 and there > 0.0:
+            ratios.append(here / there)
+    return float(np.median(ratios)) if ratios else 1.0
+
+
+def _intensity_scale(glycol: Pattern, air: Pattern, pairs) -> float:
+    """How much brighter the glycol mount is, from reflections present in both.
+
+    Two mounts of one specimen are separate preparations and rarely carry the
+    same amount of material, so a peak is not "missing" from the air-dried
+    mount merely because it is smaller there.
+    """
+    ratios = []
+    for here, there, height, _ in pairs:
+        other, _ = _height_at(air, there, 0.05)
+        if other > 0.0 and height > 0.0:
+            ratios.append(height / other)
+    return float(np.median(ratios)) if ratios else 1.0
+
+
+def _height_at(pattern: Pattern, centre: float, window: float) -> tuple[float, float]:
+    """The largest value near ``centre``, and the local scatter around it."""
+    angles = np.asarray(pattern.two_theta, dtype=float)
+    values = np.asarray(pattern.intensity, dtype=float)
+    near = (angles >= centre - window) & (angles <= centre + window)
+    if not np.any(near):
+        return 0.0, 1.0
+    wide = (angles >= centre - 10.0 * window) & (angles <= centre + 10.0 * window)
+    local = values[wide] if int(np.count_nonzero(wide)) > 8 else values[near]
+    noise = float(np.median(np.abs(np.diff(local)))) / 0.9539 if local.size > 2 else 1.0
+    return float(np.max(values[near])), max(noise, 1.0)
+
+
+def _is_new(glycol: Pattern, air: Pattern, centre: float, height: float,
+            scale: float, window: float, sigmas: float = 4.0) -> bool:
+    """Whether the air-dried mount really lacks the intensity, not just the peak."""
+    there, noise = _height_at(air, centre, 0.5 * window)
+    expected = height / max(scale, 1e-9)
+    # It appeared only if the air-dried mount falls short of what this peak
+    # would be there by more than the scatter of the air-dried scan itself.
+    return (expected - there) > sigmas * noise
+
+
+def shift_evidence(
+    air: Pattern,
+    glycol: Pattern,
+    range_two_theta: tuple[float, float] = SHIFT_RANGE,
+    window: float = SHIFT_SEARCH_WINDOW,
+    minimum_share: float = MINIMUM_SHIFT_SHARE,
+    reference: tuple[float, ...] = (20.859, 26.640),
+    wavelength: float = 1.540596,
+) -> ShiftEvidence:
+    """Measure how far glycolation moved each basal reflection.
+
+    Nothing is calculated and no structure is assumed.  The strong peaks of the
+    glycolated mount in ``range_two_theta`` are located, each is matched to the
+    nearest maximum of the air-dried mount, and the difference is the
+    displacement.  The quartz lines, which no treatment moves, give the
+    systematic offset between the two mounts and the scatter of that offset
+    gives the uncertainty - so the question the result answers is not "did
+    anything move" but "did anything move by more than these two scans can
+    disagree by anyway".
+
+    This is the classical test, and it is the one the specimen actually
+    supports: a clay whose 001 does not move on glycolation is not expandable,
+    whatever hydration state its interlayer would have been in.
+    """
+    angles = np.asarray(glycol.two_theta, dtype=float)
+    low, high = range_two_theta
+    if int(np.count_nonzero((angles >= low) & (angles <= high))) < 8:
+        return ShiftEvidence([], 0.0, 0.0, float("inf"), False, [],
+                             "The two mounts do not overlap over the basal region, so "
+                             "no movement could be measured.")
+    step = float(np.median(np.diff(angles))) if angles.size > 1 else 0.01
+
+    # Reflections that cannot move give the offset between the mounts and, from
+    # their spread, how far apart the two scans place the same line anyway.
+    offsets: list[float] = []
+    for line in reference:
+        if not (angles[0] <= line <= angles[-1]):
+            continue
+        here = _peaks(glycol, line - window, line + window, 0.0, separation=window)
+        there = _peaks(air, line - window, line + window, 0.0, separation=window)
+        if here and there:
+            offsets.append(here[0][0] - there[0][0])
+    offset = float(np.median(offsets)) if offsets else 0.0
+    uncertainty = max(
+        float(np.max(np.abs(np.asarray(offsets) - offset))) if len(offsets) > 1 else step,
+        step,
+    )
+
+    # One threshold for both mounts, scaled onto each.  Applied separately, a
+    # reflection that sits just above it in one scan and just below it in the
+    # other is reported as having appeared on glycolation, which is a statement
+    # about the threshold and not about the specimen.
+    inside = (angles >= low) & (angles <= high)
+    reference_floor = minimum_share * (
+        float(np.max(np.asarray(glycol.intensity, dtype=float)[inside])) or 1.0)
+    glycol_peaks = [item for item in _peaks(glycol, low, high, minimum_share,
+                                            floor=reference_floor)
+                    if all(abs(item[0] - line) > window for line in reference)]
+    rough = _intensity_scale_rough(glycol, air, reference, window)
+    air_peaks = [item for item in _peaks(air, low, high, minimum_share,
+                                         floor=reference_floor / max(rough, 1e-9))
+                 if all(abs(item[0] - line) > window for line in reference)]
+    pairs, candidates = _match(glycol_peaks, air_peaks, window)
+
+    # A reflection that *appeared* on glycolation is the strongest claim this
+    # can make, so it takes more than the air-dried mount failing to show a
+    # local maximum there: the air-dried mount must be missing the intensity.
+    # Without this the test reports a 17 A smectite 001 on a specimen that has
+    # none, because at 5.2 degrees the counts wander by more than the feature
+    # being called a peak and one of them is always the largest.
+    scale = _intensity_scale(glycol, air, pairs)
+    appeared = [
+        (centre, height) for centre, height, _placed in candidates
+        if _is_new(glycol, air, centre, height, scale, window)
+    ]
+
+    shifts = [
+        PeakShift(
+            glycol_two_theta=here,
+            air_two_theta=there,
+            displacement=float(here - there - offset),
+            height=float(height),
+            uncertainty=max(float(together), uncertainty),
+            d_glycol=float(wavelength / (2.0 * np.sin(np.radians(here / 2.0)))),
+            d_air=float(wavelength / (2.0 * np.sin(np.radians(there / 2.0)))),
+        )
+        for here, there, height, together in pairs
+    ]
+    moved = [item for item in shifts
+             if abs(item.displacement) > 2.0 * item.uncertainty]
+    # The largest movement that is actually a movement; a displacement smaller
+    # than its own peak can be placed is not one.
+    largest = max((abs(item.displacement) for item in moved), default=0.0)
+    new_peaks = [centre for centre, _ in appeared]
+    significant = bool(moved) or bool(new_peaks)
+
+    if not shifts and not new_peaks:
+        status = ("No basal reflection was strong enough to place in both mounts, so "
+                  "the air-dried mount says nothing about expandable clay here.")
+    elif significant:
+        parts = []
+        if moved:
+            worst = max(moved, key=lambda item: abs(item.displacement))
+            parts.append(
+                f"glycolation moved {len(moved)} of {len(shifts)} basal reflections, the "
+                f"largest at {worst.glycol_two_theta:.2f} deg ({worst.d_air:.2f} A air-dried "
+                f"to {worst.d_glycol:.2f} A glycolated, {worst.displacement:+.3f} deg)"
+            )
+        if new_peaks:
+            parts.append(
+                f"{len(new_peaks)} reflection{'s' if len(new_peaks) != 1 else ''} appeared "
+                f"on glycolation that the air-dried mount does not have "
+                f"({', '.join(f'{x:.2f}' for x in new_peaks[:3])} deg)"
+            )
+        status = ("There is expandable clay: " + "; ".join(parts)
+                  + f". The two scans place an unmoving quartz line to {uncertainty:.3f} deg.")
+    else:
+        status = (
+            f"Nothing moved. Across {len(shifts)} basal reflections the largest displacement "
+            f"is {max((abs(i.displacement) for i in shifts), default=0.0):.3f} deg, within what "
+            f"those peaks can be placed to, and against {uncertainty:.3f} deg of disagreement between the "
+            f"mounts on the quartz lines, which no treatment moves, and no reflection "
+            f"appeared on glycolation. A clay whose basal series does not move on "
+            f"glycolation is not expandable, whatever hydration state its interlayer "
+            f"would have been in."
+        )
+    return ShiftEvidence(shifts, offset, float(largest), float(uncertainty),
+                         bool(significant), new_peaks, status)
+
+
+# --------------------------------------------------------------------------
 # The air-dried mount as a second observation of the same coefficients
 # --------------------------------------------------------------------------
 
@@ -672,5 +1091,118 @@ def air_dried_observation(
             f"{grid.size} points at a zero shift of {shift:+.3f} deg and an intensity scale "
             f"of {scale:.3f}.{note} {expandable} library entries predict a different "
             f"air-dried pattern, and the mount decides whether they are there."
+        ),
+    )
+
+
+# --------------------------------------------------------------------------
+# The bound that evidence puts on the fit
+# --------------------------------------------------------------------------
+
+LEAST_MOVING_HYDRATION = 15.0
+"""Air-dried spacing in A that moves least on glycolation, of the common states.
+
+Of the states in :data:`AIR_DRIED_STATES` the two-water-layer one at 15 A is
+nearest the 16.86 A glycol complex, so it is the state a smectite would show
+*least* movement from.  Using it makes the bound below conservative: a phase it
+excludes would have moved detectably whichever of these states its interlayer
+had been in, so excluding it does not depend on knowing which.
+
+A three-water-layer smectite near 18 A would move less still.  It needs a
+divalent cation and a humid room, it is rare in a routine air-dried mount, and
+nothing here would detect it - which is a limit of the evidence, not of the
+arithmetic, and is why the bound is reported rather than applied silently.
+"""
+
+
+@dataclass
+class ExpandableBound:
+    """How much expandable layer the measured movement allows."""
+
+    maximum: float
+    """Largest expandable layer content an entry may carry, as a fraction."""
+
+    allowed: list[int]
+    excluded: list[int]
+    unrestricted: bool
+    """Whether movement was seen, in which case nothing is excluded."""
+
+    status: str
+
+
+def expandable_bound(
+    evidence: ShiftEvidence,
+    library,
+    hydrated: float = LEAST_MOVING_HYDRATION,
+    glycol: float = 16.86,
+    margin: float = 2.0,
+) -> ExpandableBound:
+    """Turn the measured movement into a ceiling on expandable layer content.
+
+    The argument is entirely about *spacings*, and uses no air-dried structure.
+    An interstratified stack's basal reflections lie between those of its two
+    layer types - Mering's rule - so a stack of host spacing ``h`` carrying a
+    fraction ``x`` of expandable layers puts its 001 near ``h + x(s - h)``,
+    where ``s`` is the expandable layer's own spacing.  Glycolation changes
+    ``s`` from its air-dried value to 16.86 A, so it moves the 001 by about
+    ``x(16.86 - s_air)``.  The least that can be, over the hydration states an
+    air-dried smectite actually takes, is at ``s_air`` = 15 A.
+
+    So a specimen whose basal reflections did not move by more than ``m`` can
+    carry at most ``x = m / (16.86 - 15)`` of expandable layers *per angstrom of
+    unmoved spacing*, and entries above that are excluded from the fit.  When
+    movement was seen the bound is not applied: the evidence then says
+    expandable clay is present and the fit is left to say how much.
+
+    This is the constraint the measurement supports.  It is not a fit of the
+    air-dried mount, which cannot be done - see
+    :meth:`clayquant.library.PatternLibrary.for_treatment`.
+    """
+    indices = expandable_entries(library)
+    if evidence.significant:
+        return ExpandableBound(
+            1.0, list(range(len(library.entries))), [], True,
+            "Movement was seen between the mounts, so the expandable clays are not "
+            "restrained: the evidence says they are there and the fit says how much. "
+            + evidence.status,
+        )
+    if not indices:
+        return ExpandableBound(
+            1.0, list(range(len(library.entries))), [], True,
+            "No entry in the library carries expandable layers, so there is nothing "
+            "to restrain.",
+        )
+
+    reach = float(glycol) - float(hydrated)
+    if reach <= 0.0:
+        raise ValueError("the glycol spacing must exceed the air-dried one")
+    # How far the 001 of a fully expandable stack would move; a stack that is a
+    # fraction x expandable moves x as far.
+    allowance = float(evidence.largest) + float(margin) * float(evidence.uncertainty)
+    # Movement in degrees at the 001 of a 10 A series, converted to a fraction:
+    # d(2theta)/d(d) at 10 A is about 0.88 deg per angstrom for Cu K-alpha.
+    degrees_per_angstrom = 0.88
+    maximum = min(1.0, max(0.0, allowance / (degrees_per_angstrom * reach)))
+
+    allowed, excluded = [], []
+    for position, entry in enumerate(library.entries):
+        expandable = (0.0 if entry.fraction is None
+                      else max(0.0, 1.0 - float(entry.fraction)))
+        (allowed if expandable <= maximum + 1e-9 else excluded).append(position)
+
+    return ExpandableBound(
+        maximum=maximum,
+        allowed=allowed,
+        excluded=excluded,
+        unrestricted=False,
+        status=(
+            f"Nothing moved between the mounts: the largest displacement of a basal "
+            f"reflection is {evidence.largest:.3f} deg against {evidence.uncertainty:.3f} deg "
+            f"of disagreement on the quartz lines. Glycolation moves a fully expandable "
+            f"001 by about {degrees_per_angstrom * reach:.2f} deg even from the "
+            f"least-moving hydration state ({hydrated:g} A), so a stack that did not move "
+            f"by more than {allowance:.3f} deg can be at most {100.0 * maximum:.1f}% "
+            f"expandable. {len(excluded)} of the library's {len(indices)} expandable "
+            f"entries are above that and are left out of the fit."
         ),
     )

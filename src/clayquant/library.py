@@ -388,43 +388,44 @@ class PatternLibrary:
         )
 
     def for_treatment(self, treatment: str = "glycol") -> "PatternLibrary":
-        """The same library as the specimen diffracts it under one treatment.
+        """The library as the specimen diffracts it - which is the glycolated state.
 
-        ClayQuant's patterns are calculated for the *glycolated* mount: the
-        smectite is Reynolds' (1965) ethylene glycol complex, and so is the
-        smectite inside every I/S and C/S built from it.  Fitting an air-dried
-        mount with those is fitting a 16.86 A interlayer to a specimen whose
-        interlayer is near 12.4 A, and it does not merely lose accuracy - it
-        loses the mineral.  Measured on a synthetic air-dried mount of a
-        smectite and an illite, fitting with the glycol patterns gives
-        ``R_wp`` 85.5 % and reports no smectite at all; with the collapsed
-        patterns it gives 2.4 % and recovers it.  On an air-dried mount of a
-        30 % expandable I/S the same comparison is 60.2 % against 1.8 %.
+        Only ``"glycol"`` is a state this library can be used in, and the reason
+        is the reason ethylene glycol solvation exists.  An air-dried smectite
+        interlayer is not one thing: it holds zero, one, two or three layers of
+        water depending on the exchangeable cation and on the humidity of the
+        room, at roughly 9.6, 12.4, 15 and 18 A, and a real specimen carries a
+        mixture of them, interstratified within single crystallites.  There is
+        no single air-dried structure to calculate, and choosing one - this code
+        once chose a 12.4 A one-water-layer smectite - is choosing arbitrarily
+        among states the specimen may be in any combination of.  Glycolation
+        exists to remove that: it drives the interlayer to a reproducible
+        two-layer complex near 16.9 A whatever the cation, which is what makes
+        the glycolated mount the one a pattern can be calculated for at all.
 
-        ``"glycol"`` is the library as stored.  ``"air"`` swaps in each entry's
-        stored air-dried counterpart, which only the expandable entries have -
-        illite, chlorite, kaolinite and the accompanying minerals diffract the
-        same before and after glycolation and keep their own pattern.  The
-        counterparts are stored on the glycol pattern's normalisation, so a
-        coefficient means the same thing either way and the two fits are
-        comparable.
+        So the air-dried mount is not fitted.  It is still evidence, and the
+        strongest there is about expandable clay, but the evidence is the
+        *movement* between the two mounts, which is measured rather than
+        calculated: see :func:`clayquant.treatment.shift_evidence`.
 
-        Raises
-        ------
-        ValueError
-            For ``"heated"``, which has no model here: heating to 500 C takes
-            the smectite interlayer to 10 A, dehydroxylates the kaolinite
-            altogether and alters the chlorite, and none of that is calculated.
-            Fitting the heated mount with the glycol patterns would repeat, on
-            a larger scale, the error this method exists to prevent.  The
-            heated mount is used for what it is good for - the kaolinite
-            diagnostic of step 5 - and not quantified.
-        ValueError
-            For ``"air"`` on a library built without the counterparts, since
-            falling back to the glycol patterns is the error itself.
+        The heated mount is refused for a related reason and a simpler one:
+        heating to 500 C takes the interlayer to 10 A, dehydroxylates the
+        kaolinite altogether and alters the chlorite, and none of that is
+        calculated either.  It is used for the kaolinite diagnostic, which needs
+        no calculated pattern.
         """
         if treatment == "glycol":
             return self
+        if treatment == "air":
+            raise ValueError(
+                "an air-dried mount cannot be fitted: its smectite interlayer may hold "
+                "zero, one, two or three layers of water - about 9.6, 12.4, 15 or 18 A - "
+                "depending on the exchangeable cation and the humidity, and a specimen "
+                "usually carries several of them at once, so there is no single structure "
+                "to calculate. That is what glycol solvation is for. Fit the glycolated "
+                "mount, and use the air-dried one as evidence of movement instead "
+                "(clayquant.treatment.shift_evidence)."
+            )
         if treatment == "heated":
             raise ValueError(
                 "ClayQuant has no model for a mount heated to 500 C - the smectite "
@@ -432,25 +433,8 @@ class PatternLibrary:
                 "chlorite is altered, and none of it is calculated. Fit the glycolated "
                 "mount and use the heated one for the kaolinite diagnostic in step 5."
             )
-        if treatment != "air":
-            raise ValueError(
-                f"unknown treatment {treatment!r}; it is 'glycol' or 'air'"
-            )
-        if not self.has_air_dried():
-            raise ValueError(
-                "this library holds only the glycolated patterns, so the air-dried mount "
-                "cannot be fitted with it: its smectite is Reynolds' ethylene glycol "
-                "complex at 16.86 A and an air-dried interlayer is near 12.4 A. Rebuild "
-                "the library with the current version, which calculates both."
-            )
-        return PatternLibrary(
-            two_theta=self.two_theta,
-            entries=[
-                entry if entry.air_intensity is None
-                else replace(entry, intensity=entry.air_intensity)
-                for entry in self.entries
-            ],
-            metadata={**self.metadata, "treatment": "air"},
+        raise ValueError(
+            f"unknown treatment {treatment!r}; ClayQuant fits the glycolated mount"
         )
 
     def spanned(self) -> dict[str, list[float]]:
