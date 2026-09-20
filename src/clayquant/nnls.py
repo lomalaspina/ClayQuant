@@ -26,6 +26,8 @@ import math
 from dataclasses import dataclass, field
 from itertools import product
 
+import re
+
 import numpy as np
 from scipy.optimize import nnls
 
@@ -604,6 +606,9 @@ def clay_families(library, fixed: set[str] | None = None) -> list[str]:
     ]
 
 
+_PO = re.compile(r"\s*PO=[-+0-9.eE]+")
+
+
 def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
     """One family per composition, its members differing only in orientation.
 
@@ -648,7 +653,17 @@ def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
         if entry.phase in fixed or not _is_clay(entry.phase):
             labels.append("")
             continue
-        parts = [entry.phase]
+        # Two sources, because neither alone is complete, and both are used
+        # rather than one being suppressed when it looks redundant.  The
+        # entry's own name with its orientation struck out catches anything the
+        # library varies that has no field to store it in - the chlorite iron
+        # series is named and not stored, and a label built from fields alone
+        # put two different chlorites in one family and let the fit keep only
+        # one of them.  The fields catch anything a terser naming scheme leaves
+        # out.  A label is only ever compared with another label, so saying a
+        # thing twice costs nothing and guessing when it has already been said
+        # costs correctness.
+        parts = [_PO.sub("", entry.name).strip() or entry.phase]
         if entry.fraction is not None:
             parts.append(f"{float(entry.fraction):.2f} host")
         if entry.csds_mean is not None:

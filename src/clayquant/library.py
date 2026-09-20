@@ -121,7 +121,12 @@ Reaching 1.00 for the same reason as the illite series: a chlorite with no
 expandable component has to be describable without one.
 """
 
-CHLORITE_IRON: tuple[tuple[float, float], ...] = ()
+CHLORITE_IRON: tuple[tuple[float, float], ...] = (
+    (0.0, 0.0),
+    (0.2, 0.0),
+    (0.4, 0.0),
+    (0.6, 0.0),
+)
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
 
 Empty by default, which calculates the published structure alone.  A chlorite's
@@ -778,8 +783,14 @@ def build_library(
     for key, source in CIF_SOURCES.items():
         variants: list[tuple[Crystal, str]] = [(load_crystal(key), "")]
         if key == "chlorite" and chlorite_iron:
+            # The published structure keeps its plain name; only a substituted
+            # one is labelled.  Otherwise adding the iron series renames an
+            # entry that was already there, and every reference to it - a saved
+            # result, a test, a note in a lab book - stops matching.
             variants = [
-                (chlorite_crystal(a, b), f" Fe={a:g}/{b:g}") for a, b in chlorite_iron
+                (chlorite_crystal(a, b),
+                 "" if (a, b) == (0.0, 0.0) else f" Fe={a:g}/{b:g}")
+                for a, b in chlorite_iron
             ]
         for base, iron_tag in variants:
             spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
@@ -1322,10 +1333,21 @@ def describe_instrument_mismatch(library, instrument) -> str:
     )
     built_width = float(built.fwhm(wavelength, 1.540596)[0])
     now_width = float(instrument.peak_shape.fwhm(wavelength, 1.540596)[0])
-    if abs(built_width - now_width) > 0.02 * max(built_width, now_width):
+    # A quarter, not two per cent.  The width ClayQuant measures is the width
+    # of a quartz line in that particular mount, and that is the instrument's
+    # width *plus* whatever the specimen adds: across ten mounts from one
+    # diffractometer, at one radius and one slit, the fitted width ranged from
+    # 0.032 to 0.203 deg.  At two per cent every one of those disagrees with
+    # every other and the interface asks for a rebuild each time, which is
+    # wrong - the geometry is what must match, and one library serves every
+    # scan from the same instrument.  A gross difference is still worth saying:
+    # a library built at 0.100 deg against a 0.052 deg measurement cost 12
+    # points of Rwp on a real mount.
+    if abs(built_width - now_width) > 0.25 * max(built_width, now_width):
         complaints.append(
             f"peak width at 26 deg is {built_width:.3f} deg in the library and "
-            f"{now_width:.3f} deg for this measurement"
+            f"{now_width:.3f} deg for this measurement, which is more than the "
+            f"width varies between mounts on one instrument"
         )
     if stored_geometry and instrument.divergence is not None:
         for key, label in (("goniometer_radius", "goniometer radius"),
@@ -1341,7 +1363,8 @@ def describe_instrument_mismatch(library, instrument) -> str:
         "This library was calculated with a different instrument than this "
         "measurement: " + "; ".join(complaints) + ". Rebuild the library so the "
         "reference peaks have the right width, or the fit will be short of "
-        "intensity at every strong peak."
+        "intensity at every strong peak. One library serves every scan from the "
+        "same diffractometer - it does not need rebuilding per sample."
     )
 
 

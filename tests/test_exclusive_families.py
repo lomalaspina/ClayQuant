@@ -349,9 +349,14 @@ def test_a_composition_is_one_family_whatever_its_orientation():
         + [sharp("Quartz", 20.86)]
     ))
     labels = orientation_families(library)
-    assert labels[:4] == ["illite d=9.95"] * 4
-    assert labels[4:8] == ["illite d=10.1"] * 4
+    # What matters is which entries share a family, not how the label reads.
+    assert len(set(labels[:4])) == 1
+    assert len(set(labels[4:8])) == 1
+    assert labels[0] != labels[4]
     assert labels[8] == ""
+    # and the label must still say which composition it is
+    assert "illite" in labels[0] and "9.95" in labels[0]
+    assert "10.1" in labels[4]
     # Two compositions of one phase are two families, not one: a specimen may
     # hold two illite populations of different spacing, and that is not the
     # double count the orientation is.
@@ -371,6 +376,26 @@ def test_the_interstratified_composition_is_part_of_the_family_key():
     assert labels[0] == labels[1]          # same composition, two orientations
     assert labels[2] != labels[0]          # different host fraction, own family
     assert "0.90 host" in labels[0] and "N=49.9" in labels[0] and "d=9.9" in labels[0]
+
+
+def test_a_difference_the_library_only_names_is_still_a_difference():
+    """The chlorite iron series is named, not stored in a field.
+
+    A family key built from the stored fields alone put an iron-free chlorite
+    and an Fe = 0.4 one in the same family, so the fit could keep only one of
+    them - and on a real specimen the iron-free one is the wrong one.
+    """
+    library = PatternLibrary(two_theta=GRID, entries=[
+        entry("chlorite PO=0.5 d=14.2", "chlorite", peak(6.2, 1.0, 1.0),
+              march_dollase=0.5, thickness=14.2),
+        entry("chlorite Fe=0.4/0 PO=0.5 d=14.2", "chlorite", peak(6.2, 1.6, 1.0),
+              march_dollase=0.5, thickness=14.2),
+        entry("chlorite Fe=0.4/0 PO=0.9 d=14.2", "chlorite", peak(6.2, 1.2, 1.0),
+              march_dollase=0.9, thickness=14.2),
+    ])
+    labels = orientation_families(library)
+    assert labels[0] != labels[1], "iron content is part of the composition"
+    assert labels[1] == labels[2], "but orientation is not"
 
 
 def test_two_orientations_of_one_composition_cannot_both_be_fitted():
