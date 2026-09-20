@@ -133,6 +133,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-23">A.23 One orientation per composition</a>
 <a href="#a-24">A.24 The air-dried mount as evidence</a>
 <a href="#a-25">A.25 Fitting a mount in the state it was in</a>
+<a href="#a-26">A.26 The width of a clay peak</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4494,6 +4495,89 @@ air-dried mount, and nothing here would detect it. That is a limit of the eviden
 arithmetic, which is why the ceiling is reported in the fit's own status rather than applied
 silently.</p>
 
+<h3 id="a-26">A.26 The width of a clay peak</h3>
+
+<p><strong>Reasoning.</strong> A reference pattern that is the wrong width is the wrong height as
+well, and the fit has no way to say so: it scales the pattern until the peak tops agree and the area
+is then short, or it matches the area and overshoots the top. Either way the coefficient is wrong,
+and the coefficient is what the weight percent is made of.</p>
+
+<p>Until now the discrete phases &mdash; illite, chlorite and the two kaolinites, calculated as
+three-dimensional powder patterns &mdash; carried the instrumental width and nothing else. On one
+real glycol mount, measured on a 240&nbsp;mm goniometer through a 0.5&nbsp;&deg; divergence slit,
+the instrumental FWHM near 12&nbsp;&deg; is 0.051&nbsp;&deg; and the clay basal reflections are
+these:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Reflection</th><th>2&theta;</th><th>measured FWHM</th><th>&divide; instrument</th></tr>
+<tr><td>chlorite 001</td><td>6.24&nbsp;&deg;</td><td>0.125&nbsp;&deg;</td><td>2.4</td></tr>
+<tr><td>illite 001</td><td>8.88&nbsp;&deg;</td><td>0.093&nbsp;&deg;</td><td>1.8</td></tr>
+<tr><td>kaolinite 001 + chlorite 002</td><td>12.51&nbsp;&deg;</td><td>0.117&nbsp;&deg;</td><td>2.3</td></tr>
+<tr><td>illite 002</td><td>17.81&nbsp;&deg;</td><td>0.131&nbsp;&deg;</td><td>2.6</td></tr>
+</table></div>
+
+<p>A factor of two to two and a half is not a detail of the profile shape. The specimen is doing the
+broadening, and there are two ways it can: a finite number of layers per crystallite, which broadens
+as 1/cos&thinsp;&theta;, and a spread of layer spacings within one crystallite &mdash; microstrain
+&mdash; which through the Bragg law broadens as</p>
+
+<div class="eq"><var>FWHM</var><sub>strain</sub>(&theta;) = <var>e</var>&nbsp;tan&thinsp;&theta;
+<span class="n">(A.5)</span></div>
+
+<p>The first is already in ClayQuant for the interstratified patterns, where the crystallite
+thickness distribution of &sect;<a href="#a-7">A.7</a> sets the basal width and the fit chooses among
+<var>N</var> = 5, 15 and 50 layers. The second was not there at all.</p>
+
+<p><strong>Method.</strong> <span class="kw">PeakShape</span> gains a strain term, added in
+quadrature to the instrumental and size contributions, with <var>e</var> stated as the FWHM in
+degrees at tan&thinsp;&theta; = 1 &mdash; the convention of TOPAS's <span class="kw">Strain_L</span>
+macro, so that a value refined there can be carried over unchanged. The library gains an axis in it,
+spanning 0, 0.25, 0.5, 0.75 and 1.0. An entry at zero strain keeps its old name, so nothing that
+referred to one stops matching, and the strain chosen is reported in the name of the entry the fit
+picks (<span class="kw">kaolinite_1M PO=1 e=1</span>).</p>
+
+<p>Orientation and strain are both chosen rather than mixed: the family of
+&sect;<a href="#a-23">A.23</a> now sets aside both, so the fit takes one orientation
+<em>and</em> one strain per composition. Mixing two strains does not corrupt the weight percent the
+way mixing two orientations does &mdash; broadening conserves area &mdash; but five entries of one
+composition differing only in width can approximate any peak shape at all, and the width that comes
+out is then the width of nothing while the wings are free to take intensity from the phases next
+door. One per composition keeps it a measurement, and in the same form a refinement gives it.</p>
+
+<p><strong>Result.</strong> On the mount above, which has an independent TOPAS refinement to answer
+against, giving the axis to more phases always lowers <var>R</var><sub>wp</sub> and does not always
+improve the answer. Shares are of the clay:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Strain axis on</th><th><var>R</var><sub>wp</sub></th><th>chlorite</th><th>kaolinite</th><th>illite</th></tr>
+<tr><td>nothing (as before)</td><td>52.03&nbsp;%</td><td>49.1&nbsp;%</td><td>22.0&nbsp;%</td><td>28.9&nbsp;%</td></tr>
+<tr><td>the kaolinites</td><td>51.30&nbsp;%</td><td>37.8&nbsp;%</td><td>34.7&nbsp;%</td><td>27.5&nbsp;%</td></tr>
+<tr><td>every discrete clay</td><td>50.78&nbsp;%</td><td>28.9&nbsp;%</td><td>28.2&nbsp;%</td><td>42.9&nbsp;%</td></tr>
+<tr><td>every discrete clay, to <var>e</var> = 1.5</td><td>50.32&nbsp;%</td><td>20.0&nbsp;%</td><td>31.2&nbsp;%</td><td>48.8&nbsp;%</td></tr>
+<tr><td>TOPAS refinement of the same mount</td><td>&mdash;</td><td>65.0&nbsp;%</td><td>30.3&nbsp;%</td><td>4.7&nbsp;%</td></tr>
+</table></div>
+
+<p>So the axis goes to the kaolinites and to nothing else by default. That is not a fit to this one
+table: it is the rule the table confirms. Illite and chlorite already have a width axis through the
+interstratified series, which reaches the discrete end member at a host fraction of 1.00; the
+kaolinites have no such series and so had no width axis at all. Giving illite and chlorite a
+<em>second</em> one lets the discrete entries outcompete the interstratified ones and takes the
+illite share from 27 to 43&nbsp;% of the clay where the refinement says 5&nbsp;%. Spanning them is
+one argument away for anyone whose own standards call for it.</p>
+
+<p>Both kaolinites choose the top of the range, <var>e</var> = 1.0, which is where the TOPAS
+refinement of the same specimen also puts <span class="kw">Kaolinite2M</span> &mdash; at its own
+bound of 1. At the kaolinite 001 that is 0.110&nbsp;&deg; of broadening, which with the instrument
+gives 0.121&nbsp;&deg; against the 0.117&nbsp;&deg; measured.</p>
+
+<p><strong>What it does not settle.</strong> Whether that width is strain or crystallite size. The
+two are told apart by their angular dependence, and the illite basal series says the truth is
+between them: from 001 to 002 the measured width grows by a factor of 1.41, where pure size
+broadening predicts 1.01 and pure strain 2.01. For the kaolinites the question cannot be put at all
+on these mounts &mdash; the 001 overlaps the chlorite 002 and the 002 is not resolved &mdash; so
+this axis buys the width, not its cause. A size axis for the discrete phases is the complementary
+half, and is not in yet.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4558,6 +4642,12 @@ both jobs run on real files</td>
 <tr><td>File and folder choosers</td><td>17 automated; the real dialogs opened, cancelled and
 accepted under a virtual display, and all three driven through the running server</td>
 <td>Pass; the chosen folder, database and library each reach their box</td></tr>
+<tr><td>Clay peak width</td><td>11 automated; four basal reflections measured against the
+instrumental width on a real mount; four library variants fitted against an independent TOPAS
+refinement</td>
+<td>Microstrain added to the peak shape and spanned for the kaolinites, which had no width axis;
+extending it to illite and chlorite lowers <var>R</var><sub>wp</sub> and worsens the assemblage, so
+it is left off by default</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

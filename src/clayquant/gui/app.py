@@ -335,6 +335,7 @@ def instrument_strip():
                 u=float(stored.get("u", 0.0)), v=float(stored.get("v", 0.0)),
                 w=float(stored.get("w", 0.01)), eta=float(stored.get("eta", 0.5)),
                 size_c=stored.get("size_c"), size_ab=stored.get("size_ab"),
+                strain=float(stored.get("strain", 0.0) or 0.0),
             )
             complaint = (
                 describe_instrument_mismatch(library, STATE.instrument)

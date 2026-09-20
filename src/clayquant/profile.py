@@ -15,6 +15,30 @@ with ``alpha`` the angle between the reflection vector and ``c*``.  For basal
 reflections of a mixed-layer stack the thickness broadening is already contained
 in the interference function of :mod:`clayquant.mixed_layer`, so ``size_c``
 should be left at ``None`` there to avoid counting it twice.
+
+A third contribution is microstrain - a spread of layer spacings within one
+crystallite rather than a finite number of them - which broadens in proportion
+to the spacing spread and so, through the Bragg law, as
+
+    FWHM_strain(theta) = e tan(theta)    [deg]
+
+The distinction from size broadening is the angular dependence: size goes as
+``1 / cos(theta)`` and strain as ``tan(theta)``, which is what lets a fit tell
+them apart over a wide enough range.  It matters for the clays of an oriented
+mount because their measured basal widths are far larger than the instrument
+alone gives - on a well collimated scan the instrumental FWHM near 12 deg is
+about 0.05 deg where kaolinite and illite measure 0.084 deg and chlorite
+0.134 deg - and describing a peak at half its true width leaves the fit unable
+to place the phase at its true height, which is the number being reported.
+``e`` is stated here as the FWHM in degrees at ``tan(theta) = 1``, the same
+convention as TOPAS's ``Strain_L`` macro, so that a value refined there can be
+carried over unchanged.
+
+All three contributions are added in quadrature.  That is exact only for
+Gaussians, and size and strain broadening are closer to Lorentzian, so the
+combination is an approximation - the same one already made between the
+instrumental and size terms; the pseudo-Voigt mixing parameter ``eta`` carries
+the shape.
 """
 
 from __future__ import annotations
@@ -75,6 +99,10 @@ class PeakShape:
     size_c, size_ab:
         Coherent domain sizes in A along ``c*`` and in the ``ab`` plane.
         ``None`` disables the corresponding size broadening.
+    strain:
+        Microstrain broadening, as the FWHM in degrees at ``tan(theta) = 1``.
+        Zero disables it.  See the module docstring for the convention, which
+        is the one TOPAS's ``Strain_L`` macro uses.
     """
 
     u: float = 0.0
@@ -83,6 +111,7 @@ class PeakShape:
     eta: float = 0.5
     size_c: float | None = None
     size_ab: float | None = None
+    strain: float = 0.0
 
     def fwhm(
         self,
@@ -96,6 +125,9 @@ class PeakShape:
         tan_theta = np.tan(theta)
         instrumental = self.u * tan_theta**2 + self.v * tan_theta + self.w
         variance = np.clip(instrumental, 1e-8, None)
+
+        if self.strain:
+            variance = variance + (self.strain * tan_theta) ** 2
 
         if self.size_c is not None or self.size_ab is not None:
             size_c = self.size_c if self.size_c is not None else np.inf

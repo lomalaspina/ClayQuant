@@ -62,6 +62,7 @@ __all__ = [
     "CHLORITE_SMECTITE_FRACTIONS",
     "CSDS_MEANS",
     "DEFAULT_PEAK_SHAPE",
+    "DISCRETE_STRAINS",
     "HOST_THICKNESSES",
     "describe_instrument_mismatch",
     "instrument_from_measurement",
@@ -139,6 +140,38 @@ measure it: fit the composition to a pattern of the pure mineral
 out of your own standards.
 """
 
+DISCRETE_STRAINS: dict[str, tuple[float, ...]] = {
+    "kaolinite_1M": (0.0, 0.25, 0.5, 0.75, 1.0),
+    "kaolinite_2M": (0.0, 0.25, 0.5, 0.75, 1.0),
+}
+"""Microstrain values to span per discrete phase, and which phases get the axis.
+
+Each value is the broadening FWHM in degrees at ``tan(theta) = 1``
+(:class:`clayquant.profile.PeakShape`), so zero is the instrumental width alone
+and one adds about 0.11 deg at the kaolinite 001.  A phase not named here is
+calculated at zero strain only.
+
+The axis exists because the instrument does not account for the width of a clay
+peak.  On one real oriented mount the instrumental FWHM near 12 deg is 0.051 deg
+while the measured basal reflections are 0.093 to 0.131 deg wide - a factor of
+two to two and a half.  A reference peak half as wide as the measured one cannot
+be scaled to it: the fit can match its height or its area but not both, and it
+is the area that carries the weight percent.
+
+Only the kaolinites carry the axis by default, and the reason is that they are
+the only clays without one already.  Illite and chlorite have their basal widths
+spanned through the crystallite thickness distribution of the interstratified
+series, which reaches the discrete end member at a host fraction of 1.00; the
+kaolinites have no such series, so without this they are fitted at essentially
+instrumental width.  Giving the discrete illite and chlorite a *second* width
+axis on top of that one was measured on a mount with an independent TOPAS
+refinement to answer against: it lowered ``R_wp`` by a further half point and
+moved the clay assemblage away from the refinement, the discrete illite
+outcompeting the interstratified entries and taking the illite share from 27 to
+43 % of the clay where the refinement says 5 %.  Span them here if your own
+standards call for it - the cost is a larger library, not a wrong one.
+"""
+
 NORMALIZATION_FLOOR = 4.0
 """Patterns are normalised on their maximum above this 2theta, in degrees."""
 
@@ -201,6 +234,14 @@ class LibraryEntry:
     fraction: float | None = None
     csds_mean: float | None = None
     thickness: float | None = None
+    strain: float = 0.0
+    """Microstrain the pattern was calculated with, in deg at ``tan(theta) = 1``.
+
+    Zero for a pattern carrying the instrumental width alone, which is every
+    interstratified entry and every discrete one in a library built before the
+    strain axis existed.
+    """
+
     normalization: float = 1.0
     """What the calculated pattern was divided by before storage.
 
@@ -282,6 +323,7 @@ class PatternLibrary:
         fraction: float | None = None,
         csds_mean: float | None = None,
         thickness: float | None = None,
+        strain: float = 0.0,
         unit_mass: float | None = None,
         unit_volume: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
@@ -339,6 +381,7 @@ class PatternLibrary:
                 fraction=fraction,
                 csds_mean=csds_mean,
                 thickness=thickness,
+                strain=strain,
                 normalization=scale,
                 unit_mass=unit_mass,
                 unit_volume=unit_volume,
@@ -518,6 +561,7 @@ class PatternLibrary:
             thickness=np.array(
                 [np.nan if entry.thickness is None else entry.thickness for entry in self.entries]
             ),
+            strain=np.array([entry.strain for entry in self.entries]),
             normalization=np.array([entry.normalization for entry in self.entries]),
             unit_mass=np.array(
                 [np.nan if entry.unit_mass is None else entry.unit_mass for entry in self.entries]
@@ -541,6 +585,11 @@ class PatternLibrary:
             sizes = data["csds_mean"] if "csds_mean" in data.files else np.full(len(fractions), np.nan)
             spacings = (
                 data["thickness"] if "thickness" in data.files else np.full(len(fractions), np.nan)
+            )
+            # Libraries written before microstrain became a library dimension
+            # carry the instrumental width alone.
+            strains = (
+                data["strain"] if "strain" in data.files else np.zeros(len(fractions))
             )
             # Libraries written before weight percent was possible carry neither
             # column; without them a fit still runs and reports shares, and the
@@ -574,13 +623,14 @@ class PatternLibrary:
                     fraction=None if np.isnan(fraction) else float(fraction),
                     csds_mean=None if np.isnan(size) else float(size),
                     thickness=None if np.isnan(spacing) else float(spacing),
+                    strain=0.0 if np.isnan(strain) else float(strain),
                     normalization=float(scale),
                     unit_mass=None if np.isnan(mass) else float(mass),
                     unit_volume=None if np.isnan(volume) else float(volume),
                     metadata=metadata,
                 )
                 for (name, phase, row, air_row, orientation, fraction, size, spacing,
-                     scale, mass, volume, metadata) in zip(
+                     strain, scale, mass, volume, metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -589,6 +639,7 @@ class PatternLibrary:
                     fractions,
                     sizes,
                     spacings,
+                    strains,
                     scales,
                     masses,
                     volumes,
@@ -633,6 +684,7 @@ def build_library(
     chlorite_smectite: tuple[float, ...] = CHLORITE_SMECTITE_FRACTIONS,
     chlorite_iron: tuple[tuple[float, float], ...] = CHLORITE_IRON,
     csds_means: tuple[float, ...] = CSDS_MEANS,
+    strains: dict[str, tuple[float, ...]] | None = None,
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
@@ -686,6 +738,14 @@ def build_library(
         random powder, which is not what an oriented mount of a glycolated
         smectite is; set it to the orientation the fit gives the other platy
         clays if the clay percentages are to be compared with each other.
+    strains:
+        Microstrain values to span per discrete phase, as the broadening FWHM in
+        degrees at ``tan(theta) = 1``; see :data:`DISCRETE_STRAINS`, which is
+        the default and gives the axis to the kaolinites alone.  A phase not
+        named is calculated at zero strain.  The interstratified series is left
+        out of this axis altogether because its basal widths already come from a
+        crystallite thickness distribution that the fit chooses among.  Pass
+        ``{}`` for the instrumental width throughout.
     chlorite_iron:
         Octahedral iron fractions to calculate chlorite for, as
         ``(2:1 sheet, hydroxide sheet)`` pairs; see :data:`CHLORITE_IRON`.
@@ -719,6 +779,7 @@ def build_library(
         divergence=Divergence(),
     )
     host_thicknesses = HOST_THICKNESSES if host_thicknesses is None else host_thicknesses
+    strains = DISCRETE_STRAINS if strains is None else strains
     distributions = [lognormal_csds(float(mean), csds_beta) for mean in csds_means]
     if not distributions:
         raise ValueError("at least one CSDS mean is needed")
@@ -750,6 +811,7 @@ def build_library(
                 "eta": instrument.peak_shape.eta,
                 "size_c": instrument.peak_shape.size_c,
                 "size_ab": instrument.peak_shape.size_ab,
+                "strain": instrument.peak_shape.strain,
             },
             "geometry": None if instrument.divergence is None else {
                 "specimen_length": instrument.divergence.specimen_length,
@@ -760,6 +822,7 @@ def build_library(
             "illite_smectite": list(illite_smectite),
             "chlorite_smectite": list(chlorite_smectite),
             "chlorite_iron": [list(pair) for pair in chlorite_iron],
+            "strains": {key: list(value) for key, value in strains.items()},
             "csds_means": [distribution.mean for distribution in distributions],
             "csds_beta": csds_beta,
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
@@ -794,21 +857,34 @@ def build_library(
             ]
         for base, iron_tag in variants:
             spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
+            values = strains.get(key) or (0.0,)
             announce(f"{key}{iron_tag}: {len(orientations)} orientations "
-                     f"x {len(spacings)} layer spacings")
+                     f"x {len(spacings)} layer spacings x {len(values)} strains")
             for thickness in spacings:
                 crystal = scaled_to_d001(base, source.layers_per_cell, thickness)
                 spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
-                for r in orientations:
-                    pattern = powder_pattern(
-                        crystal,
-                        extended,
+                for strain in values:
+                    strained = replace(
                         instrument,
-                        r_march_dollase=r,
-                        name=f"{key}{iron_tag} PO={r:g}{spacing_tag}",
+                        peak_shape=replace(instrument.peak_shape, strain=float(strain)),
                     )
-                    library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
-                                unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
+                    # Zero strain keeps the plain name, as the published
+                    # chlorite does in the iron series above: adding an axis
+                    # must not rename an entry that was already there, or every
+                    # reference to it - a saved result, a test, a note in a lab
+                    # book - stops matching.
+                    strain_tag = "" if not strain else f" e={strain:g}"
+                    for r in orientations:
+                        pattern = powder_pattern(
+                            crystal,
+                            extended,
+                            strained,
+                            r_march_dollase=r,
+                            name=f"{key}{iron_tag} PO={r:g}{spacing_tag}{strain_tag}",
+                        )
+                        library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
+                                    strain=float(strain),
+                                    unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
 
     # Pure glycolated smectite.  One entry, and the reason is worth setting out
     # because the consequence is not obvious.  Every reflection of this phase is
@@ -962,6 +1038,31 @@ def build_library(
     return library
 
 
+def _parse_strains(arguments: list[str] | None) -> dict[str, tuple[float, ...]] | None:
+    """Read ``--strains kaolinite_2M=0,0.5,1`` into the mapping build_library takes."""
+    if arguments is None:
+        return None
+    if len(arguments) == 1 and arguments[0].lower() == "none":
+        return {}
+    parsed: dict[str, tuple[float, ...]] = {}
+    for argument in arguments:
+        phase, separator, values = argument.partition("=")
+        if not separator:
+            raise SystemExit(
+                f"--strains takes PHASE=VALUES, as in kaolinite_2M=0,0.5,1; got {argument!r}"
+            )
+        if phase not in CIF_SOURCES:
+            raise SystemExit(
+                f"--strains: {phase!r} is not a discrete phase. "
+                f"The phases are {', '.join(CIF_SOURCES)}."
+            )
+        try:
+            parsed[phase] = tuple(float(value) for value in values.split(",") if value)
+        except ValueError:
+            raise SystemExit(f"--strains: {values!r} is not a list of numbers") from None
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command line entry point for ``clayquant-build-library``."""
     parser = argparse.ArgumentParser(
@@ -981,6 +1082,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--csds-beta", type=float, default=0.35, help="width of the lognormal CSDS in ln(N)"
+    )
+    parser.add_argument(
+        "--strains",
+        nargs="+",
+        default=None,
+        metavar="PHASE=VALUES",
+        help="microstrain to span for a discrete phase, as the broadening FWHM in "
+             "degrees at tan(theta) = 1, e.g. kaolinite_2M=0,0.5,1. Repeat per "
+             "phase; a phase not named is calculated at zero strain. A clay peak "
+             "on an oriented mount is about twice as wide as the instrument alone "
+             "gives, and the kaolinites, which have no interstratified series to "
+             "take a width from, carry this axis by default. Pass 'none' for the "
+             "instrumental width throughout.",
     )
     parser.add_argument(
         "--measurement",
@@ -1196,6 +1310,7 @@ def main(argv: list[str] | None = None) -> int:
         chlorite_iron=iron,
         csds_means=tuple(arguments.csds_means),
         csds_beta=arguments.csds_beta,
+        strains=_parse_strains(arguments.strains),
         smectite_thickness=arguments.smectite_thickness,
         smectite_orientation=arguments.smectite_orientation,
         air_dried_thickness=(None if arguments.no_air_dried
@@ -1330,6 +1445,7 @@ def describe_instrument_mismatch(library, instrument) -> str:
         eta=float(stored_shape.get("eta", 0.5)),
         size_c=stored_shape.get("size_c"),
         size_ab=stored_shape.get("size_ab"),
+        strain=float(stored_shape.get("strain", 0.0) or 0.0),
     )
     built_width = float(built.fwhm(wavelength, 1.540596)[0])
     now_width = float(instrument.peak_shape.fwhm(wavelength, 1.540596)[0])

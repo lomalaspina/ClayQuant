@@ -607,6 +607,7 @@ def clay_families(library, fixed: set[str] | None = None) -> list[str]:
 
 
 _PO = re.compile(r"\s*PO=[-+0-9.eE]+")
+_STRAIN = re.compile(r"\s*e=[-+0-9.eE]+")
 
 
 def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
@@ -631,12 +632,23 @@ def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
       ``I/S 0.50/0.50 PO=0.3``, ``PO=0.4`` and ``PO=1`` - which reads as three
       findings and is one phase fitted three times.
 
-    The family is therefore everything about an entry *except* its orientation:
-    its phase, its host fraction, its crystallite thickness and its layer
-    spacing.  ClayQuant's library is built as a grid of exactly that shape - 175
-    compositions at ten orientations each - so this picks one orientation per
-    composition and leaves the compositions free, which is a weaker and more
-    defensible restriction than one entry per phase.
+    Microstrain is inside the family for a related but not identical reason.
+    Mixing two strains does not corrupt the weight percent the way mixing two
+    orientations does - broadening conserves area - but five entries of one
+    composition differing only in width can approximate almost any peak shape,
+    and the width that comes out is then the width of nothing and the wings are
+    free to take intensity from the phases next door.  One strain per
+    composition keeps the width a measurement, chosen by the same search that
+    chooses the orientation, and reported as the strain of the entry it picked -
+    which is also the form a refinement in TOPAS gives it, one ``Strain_L`` per
+    phase, so the two can be compared.
+
+    The family is therefore everything about an entry *except* its orientation
+    and its microstrain: its phase, its host fraction, its crystallite thickness
+    and its layer spacing.  ClayQuant's library is built as a grid of exactly
+    that shape - 175 compositions at ten orientations each - so this picks one
+    orientation per composition and leaves the compositions free, which is a
+    weaker and more defensible restriction than one entry per phase.
 
     The same argument can be made about the crystallite-size distribution, whose
     mean is also a distribution parameter; it is left free here because a real
@@ -663,7 +675,7 @@ def orientation_families(library, fixed: set[str] | None = None) -> list[str]:
         # out.  A label is only ever compared with another label, so saying a
         # thing twice costs nothing and guessing when it has already been said
         # costs correctness.
-        parts = [_PO.sub("", entry.name).strip() or entry.phase]
+        parts = [_STRAIN.sub("", _PO.sub("", entry.name)).strip() or entry.phase]
         if entry.fraction is not None:
             parts.append(f"{float(entry.fraction):.2f} host")
         if entry.csds_mean is not None:
