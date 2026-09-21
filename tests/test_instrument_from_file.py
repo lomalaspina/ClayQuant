@@ -120,12 +120,13 @@ def test_without_quartz_it_falls_back_and_says_which_it_used():
 
 
 def test_the_slit_changes_how_much_beam_the_specimen_intercepts_at_low_angle():
-    # This is the whole reason the slit has to be read: at 8.9 deg a 0.5 deg
-    # slit overflows a 20 mm specimen and a 0.25 deg slit does not, so the 001
-    # reflection is attenuated in one case and not in the other.
+    # This is the whole reason the slit has to be read: at the chlorite 001 a
+    # 0.5 deg slit overflows a 35 mm specimen - it irradiates 38 mm there - and
+    # a 0.25 deg slit does not, so the reflection is attenuated in one case and
+    # not in the other.
     wide, _ = instrument_from_measurement(a_pattern(slit=0.5))
     narrow, _ = instrument_from_measurement(a_pattern(slit=0.25))
-    angle = np.array([8.9])
+    angle = np.array([6.24])
     assert float(wide.divergence.factor(angle)[0]) < float(narrow.divergence.factor(angle)[0])
     assert float(narrow.divergence.factor(angle)[0]) == pytest.approx(1.0)
 
@@ -166,21 +167,21 @@ def test_a_library_built_with_another_instrument_is_reported():
         metadata={
             "peak_shape": {"u": 0.02, "v": -0.005, "w": 0.01, "eta": 0.6,
                            "size_c": None, "size_ab": 400.0},
-            "geometry": {"specimen_length": 20.0, "goniometer_radius": 280.0,
+            "geometry": {"specimen_length": 35.0, "goniometer_radius": 280.0,
                          "divergence": 0.5},
         },
     )
     same = Instrument(peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0),
-                      divergence=Divergence(20.0, 280.0, 0.5))
+                      divergence=Divergence(35.0, 280.0, 0.5))
     assert describe_instrument_mismatch(library, same) == ""
 
     other = Instrument(peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0),
-                       divergence=Divergence(20.0, 240.0, 0.5))
+                       divergence=Divergence(35.0, 240.0, 0.5))
     complaint = describe_instrument_mismatch(library, other)
     assert "goniometer radius 280" in complaint
 
     wider = Instrument(peak_shape=PeakShape(u=0.08, v=-0.02, w=0.04, eta=0.6, size_ab=400.0),
-                       divergence=Divergence(20.0, 280.0, 0.5))
+                       divergence=Divergence(35.0, 280.0, 0.5))
     assert "peak width at 26 deg" in describe_instrument_mismatch(library, wider)
 
 
@@ -238,7 +239,7 @@ def test_a_library_built_with_the_defaults_is_recognised_as_such():
         metadata={
             "peak_shape": {"u": 0.02, "v": -0.005, "w": 0.01, "eta": 0.6,
                            "size_c": None, "size_ab": 400.0},
-            "geometry": {"specimen_length": 20.0, "goniometer_radius": 280.0,
+            "geometry": {"specimen_length": 35.0, "goniometer_radius": 280.0,
                          "divergence": 0.5},
         },
     )
@@ -267,7 +268,7 @@ def a_library(radius=240.0, slit=0.5, width=0.09):
         metadata={
             "peak_shape": {"u": 0.0, "v": 0.0, "w": width**2, "eta": 0.5,
                            "size_c": None, "size_ab": None},
-            "geometry": {"specimen_length": 20.0, "goniometer_radius": radius,
+            "geometry": {"specimen_length": 35.0, "goniometer_radius": radius,
                          "divergence": slit},
         },
     )

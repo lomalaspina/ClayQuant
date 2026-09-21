@@ -617,6 +617,18 @@ calculated pattern carries an unphysical low-angle ramp. The specimen length, go
 divergence are settable; for a variable-divergence (automatic) slit, which keeps the irradiated
 length constant, the correction should be disabled.</p>
 
+<p>The goniometer radius and the divergence come from the data file. The specimen length does not
+&mdash; nothing in a data file knows how long the smear was &mdash; and it decides where the
+correction stops acting: full illumination is reached at sin&thinsp;<var>&theta;</var> =
+<var>L</var><sub>spec</sub>/(<var>R &gamma;</var>), which for a 0.5&nbsp;&deg; slit on a
+240&nbsp;mm goniometer is 6.9&nbsp;&deg; at 35&nbsp;mm of specimen and 12.0&nbsp;&deg; at
+20&nbsp;mm. The chlorite 001 lies between the two, so the assumption is not free there: on a real
+mount the calculated chlorite 001/002 is 0.26 at 20&nbsp;mm and 0.47 at 35&nbsp;mm, against 0.43
+measured and 0.47 from an independent TOPAS refinement of the same specimen. Above 12&nbsp;&deg;
+neither value acts at all, which is why the pure-mineral ratios of &sect;<a href="#a-17">A.17</a>
+are flat from 20 to 25&nbsp;mm. The default is therefore 35&nbsp;mm, a full smear on a standard
+slide; set it to the length you actually prepare.</p>
+
 <h3 id="s2-11">2.11 Emission profile and peak shape</h3>
 
 <p>The source is described as a sum of Lorentzian-weighted lines, each with its own wavelength,

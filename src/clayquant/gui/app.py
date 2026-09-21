@@ -557,7 +557,7 @@ def _ask(arguments: list[str]) -> tuple[str | None, str | None]:
 
 
 def gui_instrument(
-    specimen_length: float = 20.0,
+    specimen_length: float = 35.0,
     goniometer_radius: float = 280.0,
     divergence_slit: float = 0.5,
     size_ab: float = 400.0,

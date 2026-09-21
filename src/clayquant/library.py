@@ -1141,7 +1141,11 @@ def main(argv: list[str] | None = None) -> int:
         help="sample points per emission line; >1 reproduces the natural line widths",
     )
     parser.add_argument(
-        "--specimen-length", type=float, default=20.0, help="specimen length along the beam in mm"
+        "--specimen-length", type=float, default=35.0,
+        help="length of the smear along the beam in mm. It sets where the beam stops "
+             "overflowing the specimen, which for a 0.5 deg slit on a 240 mm goniometer "
+             "is 6.9 deg at 35 mm and 12.0 deg at 20 mm - the chlorite 001 lies between "
+             "them (default: 35, a full smear on a standard slide)"
     )
     parser.add_argument(
         "--goniometer-radius", type=float, default=280.0, help="goniometer radius in mm"
@@ -1333,14 +1337,22 @@ DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
 def instrument_from_measurement(
     pattern,
     background=None,
-    specimen_length: float = 20.0,
+    specimen_length: float = 35.0,
     shift: float = 0.0,
 ) -> tuple[Instrument, str]:
     """An instrument taken from a measurement: its geometry and its peak widths.
 
     The geometry comes from the file, which records the goniometer radius and
     the divergence slit; only the specimen length has to be supplied, because
-    nothing in a data file knows how long the smear was.
+    nothing in a data file knows how long the smear was.  It defaults to 35 mm,
+    a full smear on a standard slide, and it is worth setting to the real one:
+    the beam-overflow correction (:class:`clayquant.optics.Divergence`) acts
+    only where the irradiated length exceeds it, which for a 0.5 deg slit on a
+    240 mm goniometer is below 6.9 deg at 35 mm and below 12.0 deg at 20 mm.
+    Between those two the difference is the whole of the chlorite 001, and on a
+    real mount it is what took the calculated chlorite 001/002 from 0.26 to 0.47
+    against 0.43 measured; above 12 deg neither value acts at all, which is why
+    the pure-mineral ratios of Sec. A.17 are flat across this range.
 
     The width model is anchored on the quartz 101 K-alpha doublet
     (:func:`~clayquant.profile.quartz_line_width`), whose width in a clay
