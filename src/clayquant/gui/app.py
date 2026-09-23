@@ -96,6 +96,7 @@ from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crys
 from ..nnls import (
     _library_subset,
     screen_diagnostic_peaks,
+    select_in_two_stages,
     select_with_lattice_scaling,
     clay_families,
     nnls_fit,
@@ -1316,6 +1317,8 @@ def fit_tab() -> html.Div:
                         options=[
                             {"label": "One per composition (recommended)",
                              "value": "composition"},
+                            {"label": "One per composition, thickness second",
+                             "value": "staged"},
                             {"label": "One per phase (as Clayfit)", "value": "phase"},
                             {"label": "Every entry free", "value": "free"},
                         ],
@@ -2775,7 +2778,11 @@ def register_callbacks(app: Dash) -> None:
                     constraints=constraints,
                     treatment=mount,
                 )
-                if deviation > 0.0:
+                if exclusive == "staged" and deviation <= 0.0:
+                    selection = select_in_two_stages(
+                        state.corrected(), library, families, **arguments,
+                    )
+                elif deviation > 0.0:
                     selection = select_with_lattice_scaling(
                         state.corrected(), library, families,
                         maximum_deviation=deviation, **arguments,
@@ -2857,7 +2864,10 @@ def register_callbacks(app: Dash) -> None:
                 html.Div(status),
                 html.Div(
                     f"One pattern per "
-                    f"{'composition' if exclusive == 'composition' else 'phase'}: "
+                    + ("phase" if exclusive == "phase" else "composition")
+                    + (", crystallite thickness chosen second"
+                       if exclusive == "staged" else "")
+                    + ": "
                     f"{len(selection.chosen)} chosen in {selection.evaluations} fits"
                     + (f", {selection.screened_out} families set aside by a screening "
                        f"fit" if selection.screened_out else "")

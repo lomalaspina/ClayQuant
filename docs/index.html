@@ -147,6 +147,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-27">A.27 Diagnostic reflections</a>
 <a href="#a-28">A.28 Refining the layer spacing</a>
 <a href="#a-29">A.29 The cell allowance</a>
+<a href="#a-30">A.30 Thickness chosen second</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4767,6 +4768,45 @@ kaolinites (&sect;<a href="#a-26">A.26</a>), the refined layer spacing
 (&sect;<a href="#a-28">A.28</a>), and this. Each time the extra freedom improved the number being
 minimised and moved the answer away from an independent determination of it.</p>
 
+<h3 id="a-30">A.30 Choosing the crystallite thickness second</h3>
+
+<p><strong>Reasoning.</strong> Clayfit settles the orientation with every interstratified pattern
+held at one crystallite thickness, and only then offers each <em>chosen</em> composition its other
+thicknesses, as a second exclusive family with everything else fixed. Its own comment says what for:
+keeping the thickness as a second, linear stage stops a much larger joint coordinate search from
+moving an otherwise better orientation solution. The argument is about how a coordinate search fails
+rather than about the physics - spanning composition, orientation, layer spacing and thickness at
+once multiplies the families, and the sweeps then move one family at a time through a space whose
+good solutions are narrow.</p>
+
+<p><strong>Result.</strong> On M_26_1041, as percentages of the seven phases:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Search</th><th><var>R</var><sub>wp</sub></th><th>Quartz</th><th>Chlorite</th>
+<th>Kaolinite</th><th>Albite</th><th>Rutile</th><th>Illite</th><th>Time</th></tr>
+<tr><td>jointly</td><td>51.21&nbsp;%</td><td>31.9</td><td>19.9</td><td>20.5</td><td>8.0</td>
+<td>5.4</td><td>14.5</td><td>6&nbsp;s</td></tr>
+<tr><td>thickness second</td><td>51.81&nbsp;%</td><td>32.1</td><td>21.1</td><td>20.8</td><td>7.9</td>
+<td>5.3</td><td>12.8</td><td>2&nbsp;s</td></tr>
+<tr><td><strong>TOPAS refinement</strong></td><td>&mdash;</td><td><strong>51.8</strong></td>
+<td><strong>25.0</strong></td><td><strong>11.7</strong></td><td><strong>6.1</strong></td>
+<td><strong>3.3</strong></td><td><strong>1.8</strong></td><td>&mdash;</td></tr>
+</table></div>
+
+<p>Half a point of <var>R</var><sub>wp</sub> worse, chlorite and illite each about a point closer to
+the refinement, the rest unmoved, and three times faster - despite fitting <em>more</em> combinations,
+3134 against 2614, because the second stage's design matrix is small. Neither search is better on
+this evidence, which is worth saying plainly rather than picking a winner: the differences are
+smaller than the disagreements that remain with the refinement, and one mount cannot separate them.
+So it is offered in the interface beside the joint search rather than replacing it, and the joint
+search stays the default.</p>
+
+<p>The one thing the staged search does that is not neutral: it moves clay from illite to
+interstratified illite/smectite - 23.5 to 12.4&nbsp;% of the clay for illite, 3.0 to 10.9&nbsp;% for
+I/S. On this specimen the air-dried mount says there is no expandable clay, so that is a move in the
+wrong direction, and the diagnostic screen of &sect;<a href="#a-27">A.27</a> removes it again.
+Two stages and that screen belong together.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4851,6 +4891,11 @@ by moving kaolinite onto the chlorite 002</td></tr>
 triplet against 209 candidate structures</td>
 <td>Set to none, as Clayfit has it: 11 phases reported instead of 65, and the three the specimen
 contains ranked first, second and third</td></tr>
+<tr><td>Two-stage search</td><td>5 automated, including that the second stage can
+reach a thickness the first never offered; both searches on a real mount against its TOPAS
+refinement</td>
+<td>Offered beside the joint search, which stays the default: half a point of
+<var>R</var><sub>wp</sub> worse, a point of chlorite and of illite better, three times faster</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

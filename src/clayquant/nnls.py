@@ -52,6 +52,7 @@ __all__ = [
     "bragg_resample",
     "orientation_families",
     "screen_diagnostic_peaks",
+    "select_in_two_stages",
     "select_one_per_family",
     "select_with_lattice_scaling",
 ]
@@ -1616,3 +1617,96 @@ def _refine_lattice_scales(
     refined = dict(start)
     refined.update({phase: float(value) for phase, value in zip(order, values)})
     return refined
+
+
+# --------------------------------------------------------------------------
+# Choosing the composition first and the crystallite thickness second
+# --------------------------------------------------------------------------
+
+_CSDS = re.compile(r"\s*N=[-+0-9.eE]+")
+
+
+def select_in_two_stages(
+    measured: Pattern,
+    library,
+    families: list[str] | None = None,
+    **selection,
+) -> "FamilySelection":
+    """Choose composition and orientation first, crystallite thickness second.
+
+    Clayfit's two-stage search.  Its first stage chooses one orientation per
+    composition with every interstratified pattern held at one crystallite
+    thickness; only then is each *chosen* composition offered its other
+    thicknesses, as a second exclusive family, with everything else fixed.  The
+    comment in Clayfit says what it is for: keeping the thickness as a second,
+    linear stage stops a much larger joint coordinate search from moving an
+    otherwise better orientation solution.
+
+    The argument is about how a coordinate search fails rather than about the
+    physics.  Spanning composition, orientation, layer spacing and thickness at
+    once multiplies the families, and the sweeps then move one family at a time
+    through a space whose good solutions are narrow; a search that has to settle
+    twenty coupled choices can settle them worse than one that settles fifteen
+    and then five.  Whether it does is a question about the data, and
+    Sec. A.30 of the manual is the answer on a real mount.
+
+    Falls back to :func:`select_one_per_family` when the library spans only one
+    thickness, which is then the same thing.
+    """
+    labels = list(clay_families(library) if families is None else families)
+    if len(labels) != len(library.entries):
+        raise ValueError("families must give one label per library entry")
+
+    means = sorted({
+        float(entry.csds_mean) for entry in library.entries
+        if entry.csds_mean is not None
+    })
+    if len(means) < 2:
+        return select_one_per_family(measured, library, families=labels, **selection)
+    held = means[len(means) // 2]
+
+    first = [
+        index for index, entry in enumerate(library.entries)
+        if entry.csds_mean is None or math.isclose(float(entry.csds_mean), held)
+    ]
+    stage_one = select_one_per_family(
+        measured,
+        _library_subset(library, np.asarray(first, dtype=int)),
+        families=[labels[index] for index in first],
+        **selection,
+    )
+
+    # Everything the first stage kept, and for each interstratified entry it
+    # kept, that same composition at its other thicknesses.
+    kept = {name for name in stage_one.result.names}
+    siblings: dict[str, list[int]] = {}
+    second: list[int] = []
+    second_labels: list[str] = []
+    for index, entry in enumerate(library.entries):
+        name = library.entries[index].name
+        if entry.csds_mean is None:
+            if name in kept:
+                second.append(index)
+                second_labels.append("")
+            continue
+        stem = _CSDS.sub("", name).strip()
+        siblings.setdefault(stem, []).append(index)
+    for stem, group in siblings.items():
+        if not any(library.entries[index].name in kept for index in group):
+            continue
+        for index in group:
+            second.append(index)
+            second_labels.append(f"N:{stem}")
+    if not second:
+        return stage_one
+
+    order = np.argsort(np.asarray(second, dtype=int))
+    indices = np.asarray(second, dtype=int)[order]
+    stage_two = select_one_per_family(
+        measured,
+        _library_subset(library, indices),
+        families=[second_labels[position] for position in order],
+        **selection,
+    )
+    stage_two.evaluations += stage_one.evaluations
+    return stage_two
