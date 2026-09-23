@@ -35,13 +35,20 @@ from .background import BackgroundFit
 from .pattern import Pattern
 
 __all__ = [
+    "DIAGNOSTIC_HALF_WIDTH",
+    "DIAGNOSTIC_SIGNAL_TO_NOISE",
+    "DIAGNOSTIC_SUPPORT_FRACTION",
+    "DIAGNOSTIC_WINDOWS",
     "FAMILY_SWEEPS",
     "MAX_EXHAUSTIVE_COMBINATIONS",
+    "DiagnosticRejection",
+    "DiagnosticScreening",
     "FamilySelection",
     "FitResult",
     "clay_families",
     "nnls_fit",
     "orientation_families",
+    "screen_diagnostic_peaks",
     "select_one_per_family",
 ]
 
@@ -1012,3 +1019,348 @@ def _objective_of(result: "FitResult") -> float:
     weights = 1.0 / np.clip(np.abs(observed), 1.0, None)
     residual = observed - calculated
     return float(np.sum(weights * residual**2))
+
+
+# --------------------------------------------------------------------------
+# Making an expandable clay justify the reflection that identifies it
+# --------------------------------------------------------------------------
+
+DIAGNOSTIC_WINDOWS: dict[str, tuple[float, float]] = {
+    "I/S": (8.75, 10.40),
+    "smectite_EG": (4.80, 6.00),
+}
+"""Where each expandable phase declares itself, in degrees 2theta.
+
+A phase is screened only if it appears here.  ``I/S`` is Clayfit's band: the
+8.75-10.4 deg window holds the order that an interstratified stack has and a
+pure illite has not, so it is the reflection that decides whether the specimen
+contains one.  ``smectite_EG`` is its own 001 at 16.9 A.  ``C/S`` is deliberately
+absent, as it is in Clayfit, because no equally sharp band has been established
+for it; an entry of a phase not named here is left alone rather than screened
+against a window chosen by guesswork.
+"""
+
+DIAGNOSTIC_HALF_WIDTH = 0.12
+"""Half-width in degrees of the template the diagnostic peak is matched with."""
+
+DIAGNOSTIC_SIGNAL_TO_NOISE = 3.0
+"""How many standard errors of the matched height the support must reach."""
+
+DIAGNOSTIC_SUPPORT_FRACTION = 0.25
+"""And what fraction of the height the entry itself predicts there."""
+
+
+@dataclass(frozen=True)
+class DiagnosticRejection:
+    """One expandable entry dropped because its own diagnostic peak is absent."""
+
+    name: str
+    index: int
+    position: float
+    predicted: float
+    supported: float
+    required: float
+    improvement: float
+
+    @property
+    def invisible(self) -> bool:
+        """Whether the entry's diagnostic is too weak to be seen at all.
+
+        Then the measurement can neither confirm nor deny it, and the entry is
+        dropped for the same reason the air-dried mount caps the expandable
+        clays: a phase is reported when its evidence is there, not when nothing
+        rules it out.
+        """
+        return self.predicted < self.required
+
+    def describe(self) -> str:
+        if self.invisible:
+            return (
+                f"{self.name} would show only {self.predicted:.1f} counts at "
+                f"{self.position:.2f} deg, below the {self.required:.1f} this "
+                f"measurement could distinguish, so nothing in it says the "
+                f"expandable layers are there"
+            )
+        return (
+            f"{self.name} predicts {self.predicted:.1f} counts at "
+            f"{self.position:.2f} deg where the rest of the fit leaves "
+            f"{self.supported:.1f}, short of the {self.required:.1f} needed"
+        )
+
+
+@dataclass
+class DiagnosticScreening:
+    """Result of screening the expandable entries on their diagnostic peaks."""
+
+    result: FitResult
+    kept: np.ndarray
+    rejected: tuple[DiagnosticRejection, ...]
+    noise: float
+
+    @property
+    def status(self) -> str:
+        if not self.rejected:
+            return (
+                "Every expandable clay in the fit is supported by its own diagnostic "
+                "reflection."
+            )
+        return (
+            f"{len(self.rejected)} expandable "
+            f"{'entry was' if len(self.rejected) == 1 else 'entries were'} removed for "
+            f"predicting a diagnostic reflection the measurement does not show: "
+            + "; ".join(item.describe() for item in self.rejected)
+            + ". A non-negative fit can buy a strong overlapping peak with a little "
+            "mixed-layer pattern and predict a low-angle reflection that is not there; "
+            "this is the test of whether the expandable clay is real."
+        )
+
+
+def screen_diagnostic_peaks(
+    measured: Pattern,
+    library,
+    *,
+    result: "FitResult | None" = None,
+    windows: dict[str, tuple[float, float]] | None = None,
+    half_width: float = DIAGNOSTIC_HALF_WIDTH,
+    minimum_signal_to_noise: float = DIAGNOSTIC_SIGNAL_TO_NOISE,
+    minimum_support: float = DIAGNOSTIC_SUPPORT_FRACTION,
+    mask: np.ndarray | None = None,
+    background: BackgroundFit | None = None,
+    range_two_theta: tuple[float, float] | None = None,
+    constraints: "list | tuple" = (),
+    treatment: str = "glycol",
+) -> DiagnosticScreening:
+    """Drop fitted expandable entries whose diagnostic reflection is not there.
+
+    Clayfit's ``screen_isr_diagnostic_peaks``, which is a test the fit cannot
+    make for itself.  A non-negative least squares will take a small amount of a
+    broad mixed-layer pattern because it improves a strong reflection the
+    pattern happens to overlap, and pay for it by predicting a low-angle
+    reflection the measurement does not contain.  Nothing in the residual
+    objects loudly enough: the improvement at the strong peak, where the counts
+    are, outweighs the damage at the weak one.  But that low-angle reflection is
+    the whole evidence for the expandable clay, and a fit which predicts it
+    without it being there has reported a phase it has not seen.
+
+    So every entry that carries expandable layers and took a coefficient is made
+    to justify its own diagnostic peak:
+
+    * its strongest peak inside that phase's window (:data:`DIAGNOSTIC_WINDOWS`)
+      is located on its own calculated pattern;
+    * the fit is run again *without* that entry, so that illite's tail, or
+      whatever illite can absorb once it is free to re-optimise, cannot be
+      mistaken for support;
+    * what is left of the measurement there is projected onto a unit-height
+      template of the peak, which is the matched filter for it and the best
+      estimator of its height;
+    * that height must clear both ``minimum_signal_to_noise`` standard errors -
+      from a robust noise estimate of the measurement itself - and
+      ``minimum_support`` of the height the entry predicts;
+    * and the full fit must actually reduce the local sum of squares there
+      against the leave-one-out fit, so an entry cannot pass by making that
+      region worse.
+
+    Entries that fail are removed and everything is fitted again, until the
+    decision is stable.  Phases with no window - ``C/S``, the discrete clays,
+    the accompanying minerals - are not screened.
+
+    Pass the fit in ``result`` to save the first solve; the remaining arguments
+    are :func:`nnls_fit`'s and must be the ones it was made with.
+    """
+    windows = DIAGNOSTIC_WINDOWS if windows is None else windows
+    if half_width <= 0.0:
+        raise ValueError("half_width must be positive")
+    if minimum_signal_to_noise < 0.0 or minimum_support < 0.0:
+        raise ValueError("the support thresholds must be non-negative")
+    if len(library.entries) == 0:
+        raise ValueError("the library is empty")
+
+    def fit(sub_library, sub_constraints):
+        return nnls_fit(
+            measured,
+            sub_library,
+            mask=mask,
+            background=background,
+            range_two_theta=range_two_theta,
+            constraints=sub_constraints,
+            treatment=treatment,
+        )
+
+    active = np.arange(len(library.entries), dtype=int)
+    current = result if result is not None else fit(library, constraints)
+    rejected: list[DiagnosticRejection] = []
+
+    two_theta = current.two_theta
+    inside = current.mask
+    observed = current.observed[inside]
+    angles = two_theta[inside]
+    # The noise of the measurement, from successive differences rather than from
+    # the residual: a residual carries whatever the model failed to describe,
+    # and this has to be a property of the data alone.
+    noise = (
+        1.4826 * float(np.median(np.abs(np.diff(observed)))) / math.sqrt(2.0)
+        if observed.size > 1 else 0.0
+    )
+    if not math.isfinite(noise):
+        noise = 0.0
+
+    while True:
+        sub_library = _library_subset(library, active)
+        sub_constraints = tuple(item.subset(active) for item in (constraints or ()))
+        if current is None:
+            current = fit(sub_library, sub_constraints)
+
+        calculated = current.calculated[inside]
+        drop: list[int] = []
+        for position, entry in enumerate(sub_library.entries):
+            window = windows.get(entry.phase)
+            coefficient = float(current.coefficients[position])
+            if (
+                window is None
+                or coefficient <= 1e-12
+                or entry.fraction is None
+                or float(entry.fraction) >= 1.0
+            ):
+                continue
+            profile = np.interp(
+                angles, sub_library.two_theta, entry.intensity, left=0.0, right=0.0
+            )
+            # What this entry has that its own host end member has not.  The
+            # strongest peak of the entry itself inside the window is usually
+            # the host's - a 0.90/0.10 illite/smectite still has an illite-like
+            # 001 - and the host is in the library too, so a leave-one-out fit
+            # explains that peak completely and would reject every entry,
+            # expandable or not.  The excess over the largest multiple of the
+            # host that fits underneath is the part only this entry can account
+            # for, and it is the part that has to be supported.
+            excess = _host_excess(angles, profile, sub_library, entry)
+            peak = _diagnostic_peak(angles, excess, window)
+            if peak is None:
+                continue
+            predicted = coefficient * float(excess[peak])
+            if not math.isfinite(predicted) or predicted <= 0.0:
+                continue
+
+            local = np.abs(angles - float(angles[peak])) <= half_width
+            height = float(excess[peak])
+            template = excess[local] / height
+            norm = float(np.dot(template, template))
+            if norm <= 0.0:
+                continue
+
+            others = np.delete(np.arange(active.size, dtype=int), position)
+            if others.size == 0:
+                continue
+            without = fit(
+                _library_subset(sub_library, others),
+                tuple(item.subset(others) for item in sub_constraints),
+            )
+            leftover = observed - without.calculated[inside]
+            supported = max(0.0, float(np.dot(template, leftover[local])) / norm)
+            required = max(
+                minimum_signal_to_noise * noise / math.sqrt(norm),
+                minimum_support * predicted,
+            )
+            # The entry must also earn its place locally: the full fit has to
+            # describe this reflection better than the fit without it does.
+            without_residual = leftover[local]
+            with_residual = observed[local] - calculated[local]
+            improvement = float(
+                np.dot(without_residual, without_residual)
+                - np.dot(with_residual, with_residual)
+            )
+            if supported + 1e-12 >= required and improvement > 0.0:
+                continue
+
+            drop.append(position)
+            rejected.append(
+                DiagnosticRejection(
+                    name=entry.name,
+                    index=int(active[position]),
+                    position=float(angles[peak]),
+                    predicted=predicted,
+                    supported=supported,
+                    required=required,
+                    improvement=improvement,
+                )
+            )
+
+        if not drop:
+            return DiagnosticScreening(
+                result=current, kept=active, rejected=tuple(rejected), noise=noise
+            )
+        active = np.delete(active, np.asarray(drop, dtype=int))
+        if active.size == 0:
+            raise ValueError("the diagnostic screen removed every entry")
+        current = None
+
+
+def _host_excess(
+    angles: np.ndarray, profile: np.ndarray, library, entry
+) -> np.ndarray:
+    """``profile`` less the largest multiple of its host that fits underneath.
+
+    The host is the end member of the same phase - the same stack with no
+    expandable layers - preferred at the same orientation, crystallite thickness
+    and layer spacing when the library holds one.  Subtracting the largest
+    multiple that stays under the profile everywhere is parameter-free and
+    leaves exactly the intensity the host cannot produce: for an illite/smectite
+    that is the order which says the stack is interstratified, which is the
+    reflection the specimen has to show.
+
+    With no host in the library - the pure glycol smectite has none, being no
+    phase's end member - the profile is its own excess, which is right: every
+    reflection it has is its own.
+    """
+    host = None
+    for candidate in library.entries:
+        if candidate.phase != entry.phase or candidate.fraction is None:
+            continue
+        if float(candidate.fraction) < 1.0:
+            continue
+        same = (
+            math.isclose(candidate.march_dollase, entry.march_dollase)
+            and _same(candidate.csds_mean, entry.csds_mean)
+            and _same(candidate.thickness, entry.thickness)
+        )
+        if same:
+            host = candidate
+            break
+        if host is None:
+            host = candidate
+    if host is None:
+        return np.asarray(profile, dtype=float)
+    host_profile = np.interp(
+        angles, library.two_theta, host.intensity, left=0.0, right=0.0
+    )
+    usable = host_profile > 1e-6 * float(np.max(host_profile) or 1.0)
+    if not np.any(usable):
+        return np.asarray(profile, dtype=float)
+    scale = float(np.min(profile[usable] / host_profile[usable]))
+    if not math.isfinite(scale) or scale <= 0.0:
+        return np.asarray(profile, dtype=float)
+    return np.clip(profile - scale * host_profile, 0.0, None)
+
+
+def _same(left: float | None, right: float | None) -> bool:
+    if left is None or right is None:
+        return left is right
+    return math.isclose(float(left), float(right))
+
+
+def _diagnostic_peak(
+    angles: np.ndarray, profile: np.ndarray, window: tuple[float, float]
+) -> int | None:
+    """Index of the strongest local maximum of ``profile`` inside ``window``."""
+    indices = np.flatnonzero((angles >= float(window[0])) & (angles <= float(window[1])))
+    if indices.size < 3:
+        return None
+    interior = indices[1:-1]
+    maxima = interior[
+        (profile[interior] >= profile[interior - 1])
+        & (profile[interior] >= profile[interior + 1])
+        & (profile[interior] > 0.0)
+    ]
+    if maxima.size == 0:
+        return None
+    return int(maxima[int(np.argmax(profile[maxima]))])

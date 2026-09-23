@@ -134,6 +134,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-24">A.24 The air-dried mount as evidence</a>
 <a href="#a-25">A.25 Fitting a mount in the state it was in</a>
 <a href="#a-26">A.26 The width of a clay peak</a>
+<a href="#a-27">A.27 Diagnostic reflections</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4590,6 +4591,64 @@ on these mounts &mdash; the 001 overlaps the chlorite 002 and the 002 is not res
 this axis buys the width, not its cause. A size axis for the discrete phases is the complementary
 half, and is not in yet.</p>
 
+<h3 id="a-27">A.27 Making an expandable clay justify itself</h3>
+
+<p><strong>Reasoning.</strong> A non-negative least squares has no way to ask whether a phase it used
+is really there. It has one question - does this column reduce the weighted residual - and a broad
+interstratified pattern can reduce it for a reason that has nothing to do with the specimen
+containing expandable clay: the pattern overlaps a strong reflection, a little of it improves that
+reflection, and the same coefficient then predicts a low-angle reflection which the measurement does
+not contain. The residual is content, because the gain sits where the counts are and the loss sits
+where they are not. But that low-angle reflection is the whole evidence for the expandable clay, and
+a fit which predicts it without its being there has reported a phase it has not seen.</p>
+
+<p>This is Clayfit's <span class="kw">screen_isr_diagnostic_peaks</span>, and the test is worth
+stating exactly because a weaker version of it does not work.</p>
+
+<p><strong>Method.</strong> Every entry which carries expandable layers and took a coefficient is
+made to justify its own diagnostic reflection:</p>
+
+<ul>
+<li><strong>What is diagnostic</strong> is not the entry's strongest peak in the window, which is
+usually its host's - a 0.90/0.10 illite/smectite still has an illite-like 001 - but what the entry
+has that its own end member has not. The largest multiple of the host that fits underneath the
+entry's pattern is subtracted, which is parameter-free and leaves exactly the intensity the host
+cannot produce. Without this every entry is rejected, because the host is in the library too and
+explains the peak completely.</li>
+<li><strong>Support is measured against a fit without that entry</strong>, so that illite's tail, or
+whatever illite can absorb once it is free to re-optimise, cannot masquerade as the evidence.</li>
+<li><strong>The height is measured by matched filter</strong>: what the measurement leaves there is
+projected onto a unit-height template of the peak, which is the best estimator of its amplitude.</li>
+<li><strong>It must clear two thresholds</strong> - three standard errors of that estimate, from a
+robust noise estimate of the measurement itself, and a quarter of the height the entry predicts -
+and the full fit must actually reduce the local sum of squares there, so an entry cannot pass by
+making the region worse.</li>
+</ul>
+
+<p>Entries that fail are removed and everything is fitted again, until the decision is stable. The
+windows are <span class="kw">I/S</span> 8.75&ndash;10.40&nbsp;&deg;, which is Clayfit's, and
+<span class="kw">smectite_EG</span> 4.80&ndash;6.00&nbsp;&deg;, its own 001 at 16.9&nbsp;&Aring;.
+<span class="kw">C/S</span> has none and is left alone, as it is in Clayfit: no equally sharp band
+has been established for it, and a window chosen by guesswork is worse than no window.</p>
+
+<p><strong>Result.</strong> On M_26_1041 the fit selected one expandable entry,
+<span class="kw">I/S 0.98/0.02 PO=0.4 N=5 d=10.02</span>, at 2.98&nbsp;% of the clay. Its diagnostic
+order at 10.14&nbsp;&deg; would stand 0.4 counts above the fitted pattern where the measurement can
+distinguish 20, so nothing in the data says those expandable layers are there. It was removed, and
+<var>R</var><sub>wp</sub> did not change at all - 51.21&nbsp;% before and after. The entry was
+buying nothing; it was being reported for free.</p>
+
+<p><strong>An entry too weak to be seen is also removed</strong>, and that is a decision rather than
+an accident. When the diagnostic a phase predicts lies below what the measurement could show, the
+data neither confirms nor denies it, and this reports the phase only when its evidence is present -
+the same rule the air-dried mount is read by (&sect;<a href="#a-25">A.25</a>).</p>
+
+<p><strong>What it depends on.</strong> The background beneath the diagnostic band. A background
+left a few per cent high puts a pedestal under the window which the matched filter reads as support,
+and the screen then keeps an entry it should drop. On synthetic scans with the background estimated
+rather than known, a pedestal of 40 counts under a 20-count threshold was enough to do it. The screen
+is no better than what is subtracted beneath it.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4660,6 +4719,11 @@ refinement</td>
 <td>Microstrain added to the peak shape and spanned for the kaolinites, which had no width axis;
 extending it to illite and chlorite lowers <var>R</var><sub>wp</sub> and worsens the assemblage, so
 it is left off by default</td></tr>
+<tr><td>Diagnostic reflections</td><td>10 automated, on a specimen with and without the
+order that identifies an expandable stack; and on a real mount against its TOPAS refinement</td>
+<td>An I/S at 3&nbsp;% of the clay removed for predicting a reflection the measurement cannot show,
+at no cost in <var>R</var><sub>wp</sub>; the dependence on the background under the window
+measured and stated</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

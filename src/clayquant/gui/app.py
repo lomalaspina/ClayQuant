@@ -95,6 +95,7 @@ from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, ra
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
 from ..nnls import (
     _library_subset,
+    screen_diagnostic_peaks,
     clay_families,
     nnls_fit,
     orientation_families,
@@ -1337,6 +1338,24 @@ def fit_tab() -> html.Div:
                         options=[{"label": " Use the air-dried mount as evidence",
                                   "value": "on"}],
                         value=["on"],
+                    ),
+                    dcc.Checklist(
+                        id="fit-diagnostic",
+                        options=[{"label": " Require a diagnostic reflection",
+                                  "value": "on"}],
+                        value=["on"],
+                        style={"marginTop": "6px"},
+                    ),
+                    html.Div(
+                        "A non-negative fit will take a little of a broad mixed-layer "
+                        "pattern because it improves a strong reflection the pattern "
+                        "overlaps, and predict a low-angle reflection the measurement "
+                        "does not contain. That reflection is the whole evidence for the "
+                        "expandable clay, so each one is made to justify it: the fit is "
+                        "run again without that entry, and what the measurement leaves "
+                        "there must clear both the noise and a quarter of what the entry "
+                        "predicts.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     html.Div(
                         "An air-dried mount cannot be fitted \u2014 its interlayer may hold "
@@ -2648,10 +2667,11 @@ def register_callbacks(app: Dash) -> None:
         State("fit-calibration", "value"),
         State("fit-exclusive", "value"),
         State("fit-air-dried", "value"),
+        State("fit-diagnostic", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
-                exclusive, use_air_dried):
+                exclusive, use_air_dried, use_diagnostic):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2730,6 +2750,30 @@ def register_callbacks(app: Dash) -> None:
                     treatment=mount,
                 )
                 result = selection.result
+            # Every expandable entry in the fit now has to justify the
+            # reflection that identifies it, which is a thing the residual
+            # cannot ask for itself.
+            diagnostic_note = ""
+            if bool(use_diagnostic) and "on" in (use_diagnostic or []):
+                fitted = (
+                    library if selection is None
+                    else _library_subset(
+                        library,
+                        np.asarray([library.names.index(name) for name in result.names],
+                                   dtype=int),
+                    )
+                )
+                screened = screen_diagnostic_peaks(
+                    state.corrected(),
+                    fitted,
+                    result=result,
+                    background=state.background_fit if use_background else None,
+                    range_two_theta=tuple(fit_range),
+                    constraints=constraints,
+                    treatment=mount,
+                )
+                result = screened.result
+                diagnostic_note = screened.status
             calibration = (
                 Calibration.from_clayfit(library) if calibration_choice == "clayfit" else None
             )
@@ -2784,6 +2828,13 @@ def register_callbacks(app: Dash) -> None:
                        "Every choice beat its runner-up by more than 2%."),
                     style={"marginTop": "8px", "fontSize": "0.8rem", "color": "#555"},
                 ),
+            ])
+        if diagnostic_note:
+            status = html.Div([
+                html.Div(status),
+                html.Div(diagnostic_note, style={
+                    "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
+                }),
             ])
         if air_note:
             # Never silent: whether the air-dried mount restrained this fit
