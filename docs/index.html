@@ -145,6 +145,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-25">A.25 Fitting a mount in the state it was in</a>
 <a href="#a-26">A.26 The width of a clay peak</a>
 <a href="#a-27">A.27 Diagnostic reflections</a>
+<a href="#a-28">A.28 Refining the layer spacing</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4659,6 +4660,74 @@ and the screen then keeps an entry it should drop. On synthetic scans with the b
 rather than known, a pedestal of 40 counts under a 20-count threshold was enough to do it. The screen
 is no better than what is subtracted beneath it.</p>
 
+<h3 id="a-28">A.28 Refining the layer spacing, and why it is left off</h3>
+
+<p><strong>Reasoning.</strong> The library spans the layer spacing on a grid - four values per host -
+and a specimen's spacing is not on the grid. A pattern calculated at 10.02&nbsp;&Aring; fitted to a
+specimen at 9.97&nbsp;&Aring; is wrong by 0.09&nbsp;&deg; at the 002, most of a peak width, and a
+non-negative fit answers a peak in the wrong place by taking less of that pattern and making up the
+difference from whatever else has intensity nearby. That is how a mis-set spacing becomes a
+mis-stated phase. Clayfit refines one linked Bragg scale per family instead, within
+&plusmn;2&nbsp;%, which covers the space between the grid points continuously.</p>
+
+<p><strong>Method.</strong> Clayfit's <span class="kw">bragg_resample_profile</span>: every spacing
+is multiplied by one factor and every reflection follows Bragg's law, so the pattern is resampled
+where sin&thinsp;&theta;<sub>old</sub> = <var>s</var>&nbsp;sin&thinsp;&theta;<sub>new</sub>. Peak
+heights are preserved, which keeps the library's unit-maximum normalisation and so the mass behind a
+coefficient. The orientation search and the scales are refined alternately rather than jointly - the
+search runs, then the scales of what it chose are refined by a bounded Powell step with the
+coefficients re-solved at every trial, then the search runs again on the moved patterns - which
+avoids the Cartesian product of every orientation and a dense grid of scales while staying
+deterministic.</p>
+
+<p>One scale per <em>phase</em>, not per family. A specimen has one illite, whose layers are the
+spacing they are; the library divides that illite into families by crystallite thickness and by which
+grid spacing it was calculated at, and refining those separately refines twenty numbers where there
+are five things to measure. At twenty scales the two kaolinites moved to opposite bounds and
+straddled the chlorite 002 between them.</p>
+
+<p><strong>Result.</strong> It fits better at every setting, and it answers worse. On M_26_1041,
+against the TOPAS refinement of the same specimen, as percentages of the seven phases:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Spacing</th><th><var>R</var><sub>wp</sub></th><th>Quartz</th><th>Chlorite</th>
+<th>Kaolinite</th><th>Albite</th><th>Rutile</th><th>Illite</th></tr>
+<tr><td>as calculated</td><td>51.21&nbsp;%</td><td>31.9</td><td>19.9</td><td>20.5</td><td>8.0</td>
+<td>5.4</td><td>14.5</td></tr>
+<tr><td>refined &plusmn;0.25&nbsp;%</td><td>47.81&nbsp;%</td><td>32.4</td><td>11.0</td><td>22.9</td>
+<td>8.0</td><td>5.2</td><td>20.5</td></tr>
+<tr><td>refined &plusmn;0.5&nbsp;%</td><td>46.63&nbsp;%</td><td>29.6</td><td>17.3</td><td>20.2</td>
+<td>7.2</td><td>4.7</td><td>20.9</td></tr>
+<tr><td>refined &plusmn;1&nbsp;%</td><td>45.15&nbsp;%</td><td>28.6</td><td>13.9</td><td>24.3</td>
+<td>6.0</td><td>4.2</td><td>23.2</td></tr>
+<tr><td>refined &plusmn;2&nbsp;%</td><td>45.08&nbsp;%</td><td>26.8</td><td>11.3</td><td>23.7</td>
+<td>5.9</td><td>4.0</td><td>28.3</td></tr>
+<tr><td><strong>TOPAS refinement</strong></td><td>&mdash;</td><td><strong>51.8</strong></td>
+<td><strong>25.0</strong></td><td><strong>11.7</strong></td><td><strong>6.1</strong></td>
+<td><strong>3.3</strong></td><td><strong>1.8</strong></td></tr>
+</table></div>
+
+<p>Six points of <var>R</var><sub>wp</sub>, and chlorite falls from 19.9 to 11.3 against a reference
+value of 25.0 while kaolinite and illite rise away from theirs. The cause is identifiable rather than
+mysterious: <span class="kw">kaolinite_1M</span> goes to its lower bound at every setting, which moves
+its 001 from 12.36 towards 12.50&nbsp;&deg; - onto the chlorite 002. The freedom is not being spent
+on finding kaolinite's spacing. It is being spent covering an error in the calculated relative
+intensities, by moving a phase onto a neighbour's peak, and the rest of the kaolinite pattern is not
+right enough to object.</p>
+
+<p><strong>So it is implemented and left off.</strong> The interface offers it at
+&plusmn;0.5, 1 and 2&nbsp;% and calculates without it by default. It is the right thing to do to a
+reference pattern whose intensities are trustworthy, and the honest reading of this table is that
+these are not yet, which is an argument about the reference patterns and not about the refinement.
+A controlled test confirms the machinery itself: a library at 10.00&nbsp;&Aring; fitted to a specimen
+at 10.06&nbsp;&Aring; recovers the scale to 0.03&nbsp;&Aring; and fits better than the grid alone.</p>
+
+<p>Two further things the table shows and should not be lost. Albite and rutile move
+<em>towards</em> the refinement at every step - 8.0 to 5.9 against 6.1, and 5.4 to 4.0 against 3.3 -
+so what the clays stop stealing goes to the right place. And the chlorite column is not monotonic:
+19.9, 11.0, 17.3, 13.9, 11.3. The alternating search is landing in different local minima at
+different bounds, which is its own reason not to run it yet.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4734,6 +4803,11 @@ order that identifies an expandable stack; and on a real mount against its TOPAS
 <td>An I/S at 3&nbsp;% of the clay removed for predicting a reflection the measurement cannot show,
 at no cost in <var>R</var><sub>wp</sub>; the dependence on the background under the window
 measured and stated</td></tr>
+<tr><td>Layer spacing refinement</td><td>11 automated, including a known spacing
+recovered from a library that does not contain it; five deviation bounds on a real mount against its
+TOPAS refinement</td>
+<td>Implemented, validated, and left off by default: six points of <var>R</var><sub>wp</sub> bought
+by moving kaolinite onto the chlorite 002</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

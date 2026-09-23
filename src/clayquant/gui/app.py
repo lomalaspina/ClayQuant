@@ -96,6 +96,7 @@ from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crys
 from ..nnls import (
     _library_subset,
     screen_diagnostic_peaks,
+    select_with_lattice_scaling,
     clay_families,
     nnls_fit,
     orientation_families,
@@ -1320,6 +1321,31 @@ def fit_tab() -> html.Div:
                         ],
                         value="composition",
                         clearable=False,
+                    ),
+                    label("Layer spacing"),
+                    dcc.Dropdown(
+                        id="fit-lattice",
+                        options=[
+                            {"label": "As calculated (recommended)", "value": "0"},
+                            {"label": "Refine per phase, up to \u00b10.5 %",
+                             "value": "0.005"},
+                            {"label": "Refine per phase, up to \u00b11 %", "value": "0.01"},
+                            {"label": "Refine per phase, up to \u00b12 % (as Clayfit)",
+                             "value": "0.02"},
+                        ],
+                        value="0",
+                        clearable=False,
+                    ),
+                    html.Div(
+                        "The library spans the layer spacing on a grid and a specimen's "
+                        "spacing is not on the grid, so refining one linked spacing per "
+                        "phase covers what lies between. It fits better and, on the one "
+                        "mount with an independent refinement to answer against, it "
+                        "answers worse: the freedom is spent moving kaolinite onto the "
+                        "chlorite 002 rather than on finding kaolinite's own spacing, "
+                        "because the calculated intensities are not yet right enough to "
+                        "object. Left off until they are.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     html.Div(
                         "The March–Dollase parameter r is a distribution: P(α;r) "
@@ -2668,10 +2694,11 @@ def register_callbacks(app: Dash) -> None:
         State("fit-exclusive", "value"),
         State("fit-air-dried", "value"),
         State("fit-diagnostic", "value"),
+        State("fit-lattice", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
-                exclusive, use_air_dried, use_diagnostic):
+                exclusive, use_air_dried, use_diagnostic, lattice):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2728,6 +2755,7 @@ def register_callbacks(app: Dash) -> None:
 
         try:
             selection = None
+            lattice_note = ""
             if exclusive == "free":
                 result = nnls_fit(
                     state.corrected(),
@@ -2740,15 +2768,30 @@ def register_callbacks(app: Dash) -> None:
             else:
                 families = (clay_families(library) if exclusive == "phase"
                             else orientation_families(library))
-                selection = select_one_per_family(
-                    state.corrected(),
-                    library,
-                    families=families,
+                deviation = float(lattice or 0.0)
+                arguments = dict(
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
                     constraints=constraints,
                     treatment=mount,
                 )
+                if deviation > 0.0:
+                    selection = select_with_lattice_scaling(
+                        state.corrected(), library, families,
+                        maximum_deviation=deviation, **arguments,
+                    )
+                    # The result is a fit of the *moved* patterns, so everything
+                    # after this has to read them rather than the originals.
+                    library = selection.library or library
+                    lattice_note = "Layer spacing refined: " + ", ".join(
+                        f"{phase} \u00d7{scale:.4f}"
+                        for phase, scale in sorted(selection.lattice_scales.items())
+                        if abs(scale - 1.0) > 1e-5
+                    )
+                else:
+                    selection = select_one_per_family(
+                        state.corrected(), library, families=families, **arguments,
+                    )
                 result = selection.result
             # Every expandable entry in the fit now has to justify the
             # reflection that identifies it, which is a thing the residual
@@ -2828,6 +2871,13 @@ def register_callbacks(app: Dash) -> None:
                        "Every choice beat its runner-up by more than 2%."),
                     style={"marginTop": "8px", "fontSize": "0.8rem", "color": "#555"},
                 ),
+            ])
+        if lattice_note:
+            status = html.Div([
+                html.Div(status),
+                html.Div(lattice_note, style={
+                    "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
+                }),
             ])
         if diagnostic_note:
             status = html.Div([

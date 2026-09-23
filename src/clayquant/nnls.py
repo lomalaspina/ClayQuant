@@ -23,7 +23,7 @@ otherwise read the output as relative.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import product
 
 import re
@@ -47,9 +47,13 @@ __all__ = [
     "FitResult",
     "clay_families",
     "nnls_fit",
+    "MAXIMUM_LATTICE_DEVIATION",
+    "apply_lattice_scales",
+    "bragg_resample",
     "orientation_families",
     "screen_diagnostic_peaks",
     "select_one_per_family",
+    "select_with_lattice_scaling",
 ]
 
 
@@ -575,6 +579,23 @@ class FamilySelection:
 
     reinstated: tuple[str, ...] = ()
     """Those the check afterwards found the restricted fit did want after all."""
+
+    lattice_scales: dict[str, float] = field(default_factory=dict)
+    """The layer spacing refined for each phase, as a factor on every spacing.
+
+    Empty unless the selection came from :func:`select_with_lattice_scaling`.
+    A value of 1.004 means the family's patterns were stretched by 0.4 %, so a
+    10.02 A spacing was fitted at 10.06 A.
+    """
+
+    library: object | None = None
+    """The library the result's patterns came from, once they have been moved.
+
+    :attr:`result` is a fit of *these* patterns, not of the ones passed in, so
+    anything that draws or quantifies it afterwards has to use this rather than
+    the original - the difference is the whole point of refining the spacing.
+    ``None`` when nothing was moved.
+    """
 
     def summary(self) -> str:
         lines = [
@@ -1364,3 +1385,234 @@ def _diagnostic_peak(
     if maxima.size == 0:
         return None
     return int(maxima[int(np.argmax(profile[maxima]))])
+
+
+# --------------------------------------------------------------------------
+# One linked layer spacing per family, refined rather than spanned
+# --------------------------------------------------------------------------
+
+MAXIMUM_LATTICE_DEVIATION = 0.02
+"""How far a family's layer spacing may be refined, as a fraction."""
+
+LATTICE_CYCLES = 3
+"""Passes of choose-orientation-then-refine-spacing before giving up."""
+
+
+def bragg_resample(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    d_scale: float,
+    preserve_peak_height: bool = True,
+) -> np.ndarray:
+    """Move a calculated pattern by one linked Bragg d-spacing scale.
+
+    Clayfit's ``bragg_resample_profile``.  Every spacing is multiplied by the
+    same factor and every reflection follows Bragg's law, so the pattern is
+    resampled at the angles where ``sin(theta_old) = scale * sin(theta_new)``.
+    A stored pattern carries no hkl labels, so refining ``a``, ``b`` and ``c``
+    separately is not identifiable from it; one factor for the whole pattern is
+    the defensible approximation, and for a clay on an oriented mount it is
+    nearly the right one, because what a basal series measures is ``c``.
+
+    Peak heights are preserved rather than areas, which keeps the library's
+    unit-maximum normalisation - and so the mass behind a coefficient - what it
+    was before the move.
+    """
+    x = np.asarray(two_theta, dtype=float)
+    y = np.asarray(intensity, dtype=float)
+    if x.ndim != 1 or y.shape != x.shape or x.size < 2:
+        raise ValueError("the pattern must be aligned one-dimensional arrays")
+    if not np.all(np.isfinite(x)) or not np.all(np.isfinite(y)):
+        raise ValueError("the pattern contains non-finite values")
+    if not np.all(np.diff(x) > 0.0):
+        raise ValueError("the 2theta grid must be strictly increasing")
+    scale = float(d_scale)
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("the d-spacing scale must be finite and positive")
+    if scale == 1.0:
+        return y.copy()
+
+    sine = scale * np.sin(np.deg2rad(x / 2.0))
+    reachable = np.abs(sine) <= 1.0
+    source = np.zeros_like(x)
+    source[reachable] = 2.0 * np.rad2deg(np.arcsin(sine[reachable]))
+    moved = np.zeros_like(y)
+    moved[reachable] = np.interp(source[reachable], x, y, left=0.0, right=0.0)
+    if preserve_peak_height:
+        before = float(np.max(y))
+        after = float(np.max(moved))
+        if before > 0.0 and after > 0.0:
+            moved *= before / after
+    return moved
+
+
+def apply_lattice_scales(library, families: list[str], scales: dict[str, float]):
+    """The library with each family's patterns moved by its own spacing scale.
+
+    Entries whose family has no scale are left exactly as they were, which
+    matters: the accompanying minerals are fitted from their published cells and
+    have no business being stretched.
+    """
+    labels = list(families)
+    if len(labels) != len(library.entries):
+        raise ValueError("families must give one label per library entry")
+    if not scales:
+        return library
+    moved = []
+    for label, entry in zip(labels, library.entries):
+        scale = scales.get(label)
+        if not label or scale is None or scale == 1.0:
+            moved.append(entry)
+            continue
+        moved.append(
+            replace(
+                entry,
+                intensity=bragg_resample(library.two_theta, entry.intensity, scale),
+                air_intensity=(
+                    None if entry.air_intensity is None
+                    else bragg_resample(library.two_theta, entry.air_intensity, scale)
+                ),
+            )
+        )
+    return type(library)(
+        two_theta=library.two_theta, entries=moved, metadata=dict(library.metadata)
+    )
+
+
+def select_with_lattice_scaling(
+    measured: Pattern,
+    library,
+    families: list[str] | None = None,
+    *,
+    maximum_deviation: float = MAXIMUM_LATTICE_DEVIATION,
+    cycles: int = LATTICE_CYCLES,
+    **selection,
+) -> "FamilySelection":
+    """Choose one pattern per family *and* refine each family's layer spacing.
+
+    Clayfit's ``select_exclusive_family_fit_with_lattice_scaling``.  The two
+    choices are made alternately rather than jointly: the orientation search of
+    :func:`select_one_per_family` runs on the patterns as they stand, then the
+    spacing scales of the families it chose are refined by a bounded Powell step
+    with the coefficients re-solved at every trial - a variable projection - and
+    the orientation search is run again on the moved patterns.  Up to ``cycles``
+    times, stopping as soon as the search chooses the same entries twice.  The
+    joint Cartesian product of every orientation and a dense grid of scales is
+    what this avoids, and it stays deterministic.
+
+    Why it is worth having when the library already spans the layer spacing:
+    the spanned values are a grid, four per host, and a specimen's spacing is
+    not on the grid.  A calculated pattern at 10.02 A fitted to a specimen at
+    9.97 A is wrong by 0.05 A, which at the illite 002 is 0.09 deg - most of a
+    peak width - and a non-negative fit answers a peak that is in the wrong
+    place by taking less of that pattern and making up the difference from
+    whatever else has intensity nearby.  That is how a mis-set spacing becomes a
+    mis-stated phase.  Refining one linked scale per family covers the space
+    between the grid points continuously, and ``maximum_deviation`` of 0.02 is
+    +/- 0.2 A on a 10 A spacing, wider than the whole spanned range.
+
+    The scales are refined one per *phase*, not one per family: see the comment
+    in the code for what happened when they were not.
+
+    The scales chosen are returned in :attr:`FamilySelection.lattice_scales`,
+    and :attr:`FamilySelection.library` is the library they were applied to -
+    which is the one the result's patterns came from, and the one anything
+    drawing or quantifying the fit afterwards must use.
+    """
+    deviation = float(maximum_deviation)
+    if not math.isfinite(deviation) or deviation < 0.0 or deviation >= 1.0:
+        raise ValueError("maximum_deviation must be in [0, 1)")
+    if int(cycles) < 1:
+        raise ValueError("cycles must be at least one")
+
+    labels = list(clay_families(library) if families is None else families)
+    # One spacing per *phase*, not per family.  A specimen has one illite, whose
+    # layers are the spacing they are; the library divides that illite into
+    # families by crystallite thickness and by which grid spacing it was
+    # calculated at, and refining those separately would be refining twenty
+    # numbers where there are five things to measure.  Measured on a real mount
+    # that freedom was spent badly: at twenty scales the two kaolinites moved to
+    # opposite bounds and straddled the chlorite 002 between them.  Only the
+    # clays are moved; an accompanying mineral is fitted from its published cell.
+    phases = [
+        entry.phase if label else ""
+        for label, entry in zip(labels, library.entries)
+    ]
+    chosen = select_one_per_family(measured, library, families=labels, **selection)
+    if deviation == 0.0 or not chosen.chosen:
+        chosen.lattice_scales = {}
+        chosen.library = library
+        return chosen
+
+    bounds = (1.0 - deviation, 1.0 + deviation)
+    scales = {phase: 1.0 for phase in dict.fromkeys(phases) if phase}
+    best, best_scales, best_library = chosen, dict(scales), library
+    for _cycle in range(int(cycles)):
+        previous = dict(chosen.chosen)
+        scales = _refine_lattice_scales(
+            measured, library, labels, phases, chosen, scales, bounds, selection
+        )
+        moved = apply_lattice_scales(library, phases, scales)
+        chosen = select_one_per_family(measured, moved, families=labels, **selection)
+        if chosen.objective < best.objective:
+            best, best_scales, best_library = chosen, dict(scales), moved
+        if chosen.chosen == previous:
+            break
+    best.lattice_scales = best_scales
+    best.library = best_library
+    return best
+
+
+def _refine_lattice_scales(
+    measured: Pattern,
+    library,
+    families: list[str],
+    phases: list[str],
+    chosen: "FamilySelection",
+    start: dict[str, float],
+    bounds: tuple[float, float],
+    selection: dict,
+) -> dict[str, float]:
+    """Refine the spacing of the families the search chose, holding the choice.
+
+    The variable-projection step: the coefficients are not parameters here, they
+    are re-solved at every trial, so the only unknowns are one scale per family.
+    """
+    from scipy.optimize import minimize
+
+    picked = [library.names.index(name) for name in chosen.result.names]
+    subset = _library_subset(library, np.asarray(picked, dtype=int))
+    sub_phases = [phases[index] for index in picked]
+    order = tuple(phase for phase in dict.fromkeys(sub_phases) if phase)
+    if not order:
+        return dict(start)
+    fit_arguments = {
+        key: value for key, value in selection.items()
+        if key in {"mask", "background", "range_two_theta", "constraints", "treatment"}
+    }
+    picked_array = np.asarray(picked, dtype=int)
+    constraints = fit_arguments.pop("constraints", ())
+    sub_constraints = tuple(item.subset(picked_array) for item in (constraints or ()))
+
+    def objective(values: np.ndarray) -> float:
+        trial = {phase: float(value) for phase, value in zip(order, values)}
+        moved = apply_lattice_scales(subset, sub_phases, trial)
+        return _objective_of(
+            nnls_fit(measured, moved, constraints=sub_constraints, **fit_arguments)
+        )
+
+    initial = np.asarray([start.get(phase, 1.0) for phase in order], dtype=float)
+    outcome = minimize(
+        objective,
+        initial,
+        method="Powell",
+        bounds=[bounds] * len(order),
+        options={"xtol": 1.0e-5, "ftol": 1.0e-8, "maxiter": 8},
+    )
+    values = np.asarray(outcome.x, dtype=float)
+    if values.shape != initial.shape or not np.all(np.isfinite(values)):
+        values = initial
+    values = np.clip(values, bounds[0], bounds[1])
+    refined = dict(start)
+    refined.update({phase: float(value) for phase, value in zip(order, values)})
+    return refined
