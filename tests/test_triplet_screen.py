@@ -16,6 +16,7 @@ import math
 import numpy as np
 import pytest
 
+from clayquant.calibration import CU_KA1, reference_two_theta
 from clayquant.crystal import AtomSite, Crystal
 from clayquant.detection import (
     CLAYFIT_MATCH_TOLERANCE,
@@ -61,6 +62,38 @@ def synthetic_mount(
 
 QUARTZ_LINES = [(QUARTZ_CALIBRATION[0], 1800.0), (QUARTZ_CALIBRATION[1], 9000.0)]
 
+# A clay separate with no quartz in it whatever.  Kaolinite alone puts two lines
+# inside the half-degree window around the 20.86 deg quartz 100 - the 4.36 A
+# band and the 4.18 A line - and one inside the window around the 26.64 deg
+# quartz 101; the illite/smectite adds a third order near 3.5 A.  Nothing here
+# is quartz, so nothing here may be calibrated on.
+KAOLINITE_1M = [(4.46, 1200.0), (4.36, 1500.0), (4.18, 1800.0), (3.84, 700.0),
+                (3.57, 6000.0), (3.37, 900.0), (2.56, 900.0), (2.49, 800.0)]
+ILLITE_SMECTITE = [(5.25, 1500.0), (4.48, 600.0), (3.50, 2500.0)]
+
+
+def at(d: float) -> float:
+    """Where a d-spacing falls, in degrees."""
+    return reference_two_theta(d, CU_KA1)
+
+
+def clay_only_mount(d001: float = 10.5, seed: int = 11, shift: float = 0.0) -> Pattern:
+    """One mount of a quartz-free specimen: kaolinite, and a clay that moves."""
+    lines = [(at(d), height) for d, height in KAOLINITE_1M + ILLITE_SMECTITE]
+    return synthetic_mount(lines, at(d001), shift=shift, seed=seed)
+
+
+def glycol_smectite_mount(seed: int = 21) -> Pattern:
+    """A glycolated smectite, whose 17 A series puts its 004 at 4.25 A.
+
+    Within 0.01 A of quartz 100, so that order sits on top of the 20.86 deg
+    calibration line: the tidiest way for a specimen with no quartz in it to
+    look as though it had some.
+    """
+    lines = [(at(17.0 / order), height)
+             for order, height in ((2, 1500.0), (3, 2500.0), (4, 1200.0), (5, 900.0))]
+    return synthetic_mount(lines, at(17.0), seed=seed)
+
 
 def triplet(shifts=(0.0, 0.0, 0.0), extra=()):
     """Three mounts whose clay peak moves and whose quartz does not."""
@@ -88,19 +121,21 @@ def test_the_peaks_of_a_scan_are_found_without_a_background_being_chosen():
 def test_the_shift_of_one_scan_is_measured_from_its_own_quartz_pair():
     for imposed in (0.0, 0.07, -0.12, 0.31, -0.42):
         peaks = treatment_peaks(synthetic_mount(QUARTZ_LINES, 8.8, shift=imposed))
-        shift, indices = quartz_zero_shift(peaks)
-        assert shift is not None
-        assert len(indices) == 2, imposed
+        zero = quartz_zero_shift(peaks)
+        assert zero.shift is not None
+        assert len(zero.used) == 2, imposed
+        # Two lines agreed, so this one may be applied without asking.
+        assert zero.confirmed
         # The screen returns the correction, so it comes back with the sign that
         # puts the measured angles back where they belong.
-        assert shift == pytest.approx(imposed, abs=0.03)
+        assert zero.shift == pytest.approx(imposed, abs=0.03)
 
 
 def test_a_shift_beyond_the_search_window_is_not_invented():
     peaks = treatment_peaks(synthetic_mount(QUARTZ_LINES, 8.8,
                                             shift=CLAYFIT_MAX_ZERO_SHIFT + 0.3))
-    shift, indices = quartz_zero_shift(peaks)
-    assert shift is None or len(indices) < 2
+    zero = quartz_zero_shift(peaks)
+    assert not zero.confirmed
 
 
 def test_a_pair_whose_two_lines_disagree_is_rejected():
@@ -111,16 +146,74 @@ def test_a_pair_whose_two_lines_disagree_is_rejected():
         prominence=np.array([1000.0, 1000.0]),
         width=np.array([0.1, 0.1]),
     )
-    shift, indices = quartz_zero_shift(peaks)
-    # They disagree by 0.8 deg, so no pair is usable and the low line is
-    # returned alone, as a starting value.
-    assert len(indices) <= 1
+    zero = quartz_zero_shift(peaks)
+    # They disagree by 0.8 deg, so no pair is usable.  The low line is still
+    # reported, because the operator may know the specimen has quartz in it,
+    # but it is not confirmed and no caller may apply it unasked.
+    assert not zero.confirmed
+    assert len(zero.used) <= 1
 
 
 def test_no_quartz_at_all_gives_no_shift():
     peaks = TreatmentPeaks(np.array([7.0, 12.0]), np.array([10.0, 10.0]),
                            np.array([0.1, 0.1]))
-    assert quartz_zero_shift(peaks) == (None, ())
+    zero = quartz_zero_shift(peaks)
+    assert (zero.shift, zero.used, zero.confirmed) == (None, (), False)
+    assert zero.note
+
+
+def test_a_specimen_with_no_quartz_in_it_gets_no_confident_shift():
+    """The failure this guards against, on a pattern built without quartz.
+
+    Kaolinite puts its 4.18 A line 0.4 deg from the quartz 100, and read as
+    quartz that is a zero shift of -0.38 deg on a specimen that has nothing to
+    calibrate on.  A wrong shift does not fail loudly - it quietly misaligns
+    whatever it is applied to - so what matters is that nothing here comes back
+    confirmed.
+    """
+    zero = quartz_zero_shift(treatment_peaks(clay_only_mount()))
+    assert not zero.confirmed
+    assert len(zero.used) <= 1
+    # It rested on one peak, and that peak is kaolinite's.
+    assert zero.shift == pytest.approx(at(4.255) - at(4.18), abs=0.05)
+    # The 26.64 deg window holds kaolinite's 3.37 A line and it agrees with
+    # nothing, which is the evidence against quartz: the 101 is the stronger of
+    # the two reflections, so a specimen showing the 100 has to show it.
+    assert "none agrees with it" in zero.note
+
+
+def test_a_lone_line_is_reported_rather_than_discarded():
+    """A one-line match is worth showing; it is not worth applying.
+
+    The operator may know the specimen has quartz in it and that the 101 fell
+    outside the scan, and then the number is usable - by them, deliberately.
+    """
+    zero = quartz_zero_shift(treatment_peaks(clay_only_mount()))
+    assert zero.shift is not None
+    assert not zero.confirmed
+    assert zero.note
+
+
+def test_a_basal_order_that_lands_on_the_quartz_line_is_named_as_one():
+    """The scan explains the peak itself: it is the 004 of its own 17 A series."""
+    zero = quartz_zero_shift(treatment_peaks(glycol_smectite_mount()))
+    assert not zero.confirmed
+    assert "basal series" in zero.note
+    assert "order 4" in zero.note
+
+
+def test_quartz_among_crowding_clay_lines_is_still_confirmed():
+    """The test has to be strong enough to refuse, and no stronger.
+
+    The same quartz-free pattern with quartz added: two lines are there, they
+    agree, and the clay lines in both windows do not stop them being found.
+    """
+    lines = [(at(d), height) for d, height in KAOLINITE_1M + ILLITE_SMECTITE]
+    mount = synthetic_mount(lines + QUARTZ_LINES, at(10.5), shift=0.12, seed=11)
+    zero = quartz_zero_shift(treatment_peaks(mount))
+    assert zero.confirmed
+    assert len(zero.used) == 2
+    assert zero.shift == pytest.approx(0.12, abs=0.03)
 
 
 # --------------------------------------------------------------------------
@@ -277,8 +370,43 @@ def test_without_quartz_the_screen_declines_rather_than_guesses():
     }
     screen = screen_treatments(mounts, {"Quartz": quartz_like()})
     assert screen.findings == []
-    assert "Quartz was not found" in screen.note
+    assert "No quartz pair was found" in screen.note
     assert not screen.calibrated
+
+
+def test_a_quartz_free_specimen_is_declined_by_the_screen_as_well():
+    """The screen is built on the peaks the mounts share, so it needs the shift.
+
+    A shift invented from a kaolinite line would move one mount's peaks a few
+    tenths of a degree away from the others' and corrupt exactly the comparison
+    the screen is.  It declines, and says what it refused, so the operator can
+    set the zero error themselves if they know better.
+    """
+    mounts = {"air": clay_only_mount(10.5, seed=11),
+              "glycol": clay_only_mount(17.0, seed=12),
+              "heated": clay_only_mount(10.0, seed=13)}
+    screen = screen_treatments(mounts, {"Quartz": quartz_like()})
+    assert screen.findings == []
+    assert screen.shifts == {}
+    assert not screen.calibrated
+    assert sorted(screen.unconfirmed) == ["air", "glycol", "heated"]
+    assert all(value == pytest.approx(-0.38, abs=0.05)
+               for value in screen.unconfirmed.values())
+    assert "not applied" in screen.note
+
+
+def test_a_mount_whose_shift_is_not_confirmed_is_left_out_and_named():
+    """One mount of the three has no quartz; the other two keep working."""
+    mounts = {"air": synthetic_mount(QUARTZ_LINES, 8.8, 0.09, seed=1),
+              "glycol": synthetic_mount(QUARTZ_LINES, 5.2, -0.07, seed=2),
+              "heated": clay_only_mount(10.0, seed=13)}
+    screen = screen_treatments(mounts, {"Quartz": quartz_like()})
+    assert sorted(screen.shifts) == ["air", "glycol"]
+    assert sorted(screen.unconfirmed) == ["heated"]
+    assert not screen.calibrated
+    assert "heated" in screen.note
+    # The quartz that really is in the other two is still found on them.
+    assert [evidence.name for evidence in screen.findings][:1] == ["Quartz"]
 
 
 def test_a_flat_pattern_yields_nothing_rather_than_raising():

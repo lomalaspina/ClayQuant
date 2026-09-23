@@ -69,7 +69,7 @@ import numpy as np
 
 from .background import snip_baseline
 from .bern import is_clay_phase
-from .calibration import QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
+from .calibration import CU_KA1, QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
 from .crystal import Crystal
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
@@ -94,6 +94,7 @@ __all__ = [
     "QUARTZ_CALIBRATION",
     "TreatmentPeaks",
     "TripletScreen",
+    "ZeroShift",
     "match_across_treatments",
     "quartz_zero_shift",
     "evidence_score",
@@ -1251,14 +1252,108 @@ def treatment_peaks(
     )
 
 
+@dataclass(frozen=True)
+class ZeroShift:
+    """What one scan's quartz lines say about its zero error.
+
+    The number is kept together with what it rests on, because the two ways of
+    arriving at it are not worth the same.  A shift two quartz lines agree on is
+    a calibration.  One taken from a single line is a reading of one peak that
+    was *assumed* to be quartz, and in a clay separate that assumption is cheap:
+    the half-degree window around the 20.86 deg line holds kaolinite's 4.36 and
+    4.18 A lines, either of which reads as a shift of several tenths.
+
+    Both come back - a one-line match is reported rather than discarded, since
+    the operator may know the specimen has quartz in it and that the 101 fell
+    outside the scan - but ``confirmed`` says which of the two this is, and only
+    a confirmed one should be applied without asking.
+    """
+
+    shift: float | None
+    """The correction in degrees, or ``None`` when no candidate was found.
+
+    Signed the way :func:`match_across_treatments` uses it: *added* to the
+    measured angles it puts them back where they belong.  That is the opposite
+    sign from :class:`clayquant.calibration.ZeroErrorResult`, whose shift is the
+    error to be subtracted.
+    """
+
+    used: tuple[int, ...]
+    """Which peaks it was measured from: two for a pair, one for a lone line."""
+
+    confirmed: bool
+    """Whether two quartz lines were found and agreed on it."""
+
+    note: str = ""
+    """Why it is what it is, in a sentence the operator can act on."""
+
+
+def _peaks_lie(count: int) -> str:
+    """Phrase a count of peaks so that a note reads as a sentence."""
+    return f"{count} peaks lie" if count != 1 else "1 peak lies"
+
+
+def _basal_series_order(
+    peaks: TreatmentPeaks,
+    index: int,
+    floor: float,
+    tolerance: float = CLAYFIT_MATCH_TOLERANCE,
+    wavelength: float = CU_KA1,
+    max_order: int = 6,
+) -> tuple[int, float] | None:
+    """The basal series this peak belongs to, if the scan shows the rest of it.
+
+    A clay's 00l reflections are a harmonic series: if the peak at ``index`` is
+    the l-th order of one, the same scan must hold the orders below it, at
+    ``l * d``, ``l * d / 2`` and so on.  Quartz 100 has no such family - its
+    companion is the 101 at 3.3435 A, which is what the pair test looks for - so
+    finding the series is a positive explanation of the peak as something other
+    than quartz, rather than a rule against lone lines.
+
+    The case worth naming is the glycolated smectite, whose 17 A series puts its
+    004 at 4.25 A - within 0.01 A of quartz 100, so on top of it.
+
+    Only orders the scan could show are asked for, the first of them is
+    required, and only peaks above ``floor`` count: the low orders of a basal
+    series are its strongest, and letting noise answer them would explain any
+    peak at all.  Returns the order and the d001 it implies, or ``None``.
+    """
+    observed = float(peaks.two_theta[index])
+    sine = math.sin(math.radians(0.5 * observed))
+    if sine <= 0.0:
+        return None
+    spacing = wavelength / (2.0 * sine)
+    strong = peaks.two_theta[peaks.prominence >= floor]
+    if strong.size == 0:
+        return None
+    first, last = float(np.min(peaks.two_theta)), float(np.max(peaks.two_theta))
+    for order in range(2, max_order + 1):
+        basal = order * spacing
+        wanted: list[float] = []
+        for lower in range(1, order):
+            try:
+                angle = reference_two_theta(basal / lower, wavelength)
+            except ValueError:  # the order does not exist at this wavelength
+                continue
+            if first <= angle <= last:
+                wanted.append(angle)
+            elif lower == 1:
+                break  # the 001 is outside the scan, so the series cannot be shown
+        if len(wanted) < 2:
+            continue
+        if all(float(np.min(np.abs(strong - angle))) <= tolerance for angle in wanted):
+            return order, basal
+    return None
+
+
 def quartz_zero_shift(
     peaks: TreatmentPeaks,
     calibration: tuple[float, float] = QUARTZ_CALIBRATION,
     reach: float = CLAYFIT_MAX_ZERO_SHIFT,
     agreement: float = CLAYFIT_SHIFT_AGREEMENT,
     strength: float = CLAYFIT_QUARTZ_STRENGTH,
-) -> tuple[float | None, tuple[int, ...]]:
-    """The zero shift one scan's quartz lines imply, and which peaks gave it.
+) -> ZeroShift:
+    """The zero shift one scan's quartz lines imply, and what it rests on.
 
     Every peak within ``reach`` of the 20.86 and 26.64 degree quartz lines is a
     candidate; each pair implies two shifts, and a pair is usable only when
@@ -1270,14 +1365,44 @@ def quartz_zero_shift(
     The constant keeps a pair that agrees exactly from scoring infinitely, so
     strength decides between two pairs that both agree well - which is the right
     way round, because a strong pair that agrees to 0.01 degrees is better
-    evidence than a weak one that agrees to 0.001.
+    evidence than a weak one that agrees to 0.001.  Such a pair comes back
+    ``confirmed``.
 
-    With no usable pair the isolated 20.86 line is returned on its own, as a
-    starting value rather than a calibration.  ``None`` means quartz was not
-    found at all.
+    One line is not a calibration
+    -----------------------------
+    With no usable pair the strongest candidate at the 20.86 degree line is
+    still returned, but never confirmed, because on its own it is not evidence
+    of quartz.  A clay separate with no quartz in it at all supplies candidates
+    there: kaolinite's 4.36 and 4.18 A lines sit 0.5 and 0.4 degrees from it,
+    and the second of them reads as a zero shift of -0.40 degrees on a pattern
+    that has no quartz to calibrate on.  That is the same trap
+    :func:`clayquant.calibration.estimate_zero_error` keeps its window narrow to
+    avoid, and a shift of that size does not fail loudly - it quietly misaligns
+    whatever it is applied to.
+
+    What the lone line is worth depends on why the 26.64 degree line is missing,
+    and the note says which case this is:
+
+    *nothing was in that window* - the scan may simply stop short of it, or the
+    101 may be lost under the illite 003 at 3.33 A, and then the number may well
+    be right;
+
+    *something was, and none of it agreed* - quartz 101 is far the stronger of
+    the two reflections, so a specimen showing the 100 has to show it; a 100
+    that pairs with nothing is more likely a clay line in that window.
+
+    The note also carries the peak's height against the strongest in the scan,
+    and says so when the scan itself explains the peak as an order of a basal
+    series (:func:`_basal_series_order`).
+
+    The 26.64 degree line is never taken on its own, in either direction: the
+    illite and mica 003 at 3.33 A sits on top of it, which makes it the last
+    window in a clay separate to calibrate from.
+
+    ``shift`` is ``None`` only when no candidate was found at all.
     """
     if len(peaks) == 0:
-        return None, ()
+        return ZeroShift(None, (), False, "The scan has no peaks to calibrate on.")
     low_reference, high_reference = calibration
     # A scan of a clay separate holds forty to a hundred peaks, so within half a
     # degree of each reference there are usually several candidates and a pair
@@ -1289,12 +1414,13 @@ def quartz_zero_shift(
     # has.  Requiring a candidate to carry `strength` of the strongest peak
     # leaves a modest quartz in - the weakest real one measured was 3.3 per cent
     # - and removes those.
-    floor = strength * float(np.max(peaks.prominence)) if len(peaks) else 0.0
+    strongest = float(np.max(peaks.prominence))
+    floor = strength * strongest
     strong = peaks.prominence >= floor
     low = np.flatnonzero((np.abs(peaks.two_theta - low_reference) <= reach) & strong)
     high = np.flatnonzero((np.abs(peaks.two_theta - high_reference) <= reach) & strong)
 
-    best: tuple[float, float, int, int] | None = None
+    best: tuple[float, float, int, int, float] | None = None
     for first in low:
         for second in high:
             low_shift = low_reference - float(peaks.two_theta[first])
@@ -1302,17 +1428,69 @@ def quartz_zero_shift(
             disagreement = abs(low_shift - high_shift)
             if disagreement > agreement:
                 continue
-            strength = math.sqrt(max(peaks.prominence[first], 0.0)
-                                 * max(peaks.prominence[second], 0.0))
-            score = strength / (0.02 + disagreement)
+            pair_strength = math.sqrt(max(peaks.prominence[first], 0.0)
+                                      * max(peaks.prominence[second], 0.0))
+            score = pair_strength / (0.02 + disagreement)
             if best is None or score > best[0]:
-                best = (score, 0.5 * (low_shift + high_shift), int(first), int(second))
+                best = (score, 0.5 * (low_shift + high_shift),
+                        int(first), int(second), disagreement)
     if best is not None:
-        return float(best[1]), (best[2], best[3])
-    if low.size:
-        index = int(low[int(np.argmax(peaks.prominence[low]))])
-        return low_reference - float(peaks.two_theta[index]), (index,)
-    return None, ()
+        return ZeroShift(
+            float(best[1]), (best[2], best[3]), True,
+            f"The {low_reference:.2f} and {high_reference:.2f}° quartz lines agree "
+            f"to {best[4]:.3f}° on a shift of {best[1]:+.3f}°.",
+        )
+
+    if low.size == 0:
+        if high.size:
+            return ZeroShift(
+                None, (), False,
+                f"{_peaks_lie(int(high.size))} within "
+                f"{reach:.2f}° of the {high_reference:.2f}° quartz line and none "
+                f"within {reach:.2f}° of the {low_reference:.2f}° one. That window "
+                f"is not calibrated from on its own: the illite and mica 003 at 3.33 Å "
+                f"sits on top of the {high_reference:.2f}° line.",
+            )
+        return ZeroShift(
+            None, (), False,
+            f"No peak carrying {100.0 * strength:.0f}% of the strongest lies within "
+            f"{reach:.2f}° of either quartz line, so there is no quartz to calibrate "
+            f"on.",
+        )
+
+    index = int(low[int(np.argmax(peaks.prominence[low]))])
+    shift = low_reference - float(peaks.two_theta[index])
+    share = float(peaks.prominence[index]) / strongest if strongest > 0.0 else 0.0
+    reasons = [
+        f"Only the {low_reference:.2f}° line was usable, so {shift:+.3f}° is what "
+        f"one peak implies and not a calibration."
+    ]
+    if high.size:
+        reasons.append(
+            f"{_peaks_lie(int(high.size))} within {reach:.2f}° "
+            f"of the {high_reference:.2f}° line and none agrees with it to "
+            f"{agreement:.2f}°. Quartz 101 is the stronger of the two reflections, so "
+            f"a specimen showing the 100 should show it: this is more likely a clay line "
+            f"in the {low_reference:.2f}° window - kaolinite's 4.36 and 4.18 Å lines and a "
+            f"glycolated smectite's 004 at 4.25 Å all fall in it - than quartz."
+        )
+    else:
+        reasons.append(
+            f"Nothing rose above the floor within {reach:.2f}° of the "
+            f"{high_reference:.2f}° line, so the 101 could not be looked for; if the "
+            f"scan stops short of it, or the illite 003 has swallowed it, the number may "
+            f"be right."
+        )
+    reasons.append(f"The peak carries {100.0 * share:.0f}% of the strongest in the scan.")
+    basal = _basal_series_order(peaks, index, floor)
+    if basal is not None:
+        order, spacing = basal
+        reasons.append(
+            f"The scan also holds the orders below it of a {spacing:.2f} Å basal "
+            f"series, of which this peak would be order {order}, so a clay reflection "
+            f"explains it without quartz."
+        )
+    return ZeroShift(float(shift), (index,), False, " ".join(reasons))
 
 
 def _clustered_lines(
@@ -1447,12 +1625,26 @@ class TripletScreen:
     """The zero shift measured from quartz on each mount, in degrees."""
 
     calibrated: bool
-    """Whether every mount gave a full quartz pair rather than one line."""
+    """Whether every mount gave a full quartz pair rather than one line.
+
+    False means at least one mount was left out: only a shift two quartz lines
+    agreed on is used here, because the cross-treatment matching the whole
+    screen rests on is exactly what a wrong shift corrupts.
+    """
 
     width: float
     """Median full width at half maximum of the quartz lines, in degrees."""
 
     note: str = ""
+
+    unconfirmed: dict[str, float] = field(default_factory=dict)
+    """What a single quartz line implied, per mount, for the mounts left out.
+
+    Reported and not applied.  The operator may know the specimen has quartz in
+    it and that the 101 fell outside the scan, in which case the number is
+    usable and they can set it by hand; the screen has no way to tell that from
+    a kaolinite line read as quartz, so it declines rather than guesses.
+    """
 
 
 def screen_treatments(
@@ -1477,6 +1669,14 @@ def screen_treatments(
     least ``min_matched`` of its calculated lines are stable and they carry at
     least ``min_coverage`` of its calculated intensity.
 
+    Only a scan whose shift two quartz lines agreed on takes part.  The whole
+    test is which peaks the mounts have at the same angle, so a mount aligned on
+    a peak that merely sat in the quartz window - kaolinite supplies one - would
+    not be compared with the others but against them, and would drag every
+    coverage down.  A mount left out is named in the note and what its single
+    line implied is returned in ``unconfirmed``, for the operator to accept or
+    not.
+
     No reference library is needed and no background model has to have been
     chosen, which is the point: the answer is available before the operator has
     set anything, and the things it depends on - where quartz is, and which
@@ -1489,35 +1689,55 @@ def screen_treatments(
     a per-line window of the same size would be up to 1.6 degrees wide at high
     angle and would match almost anything (Sec. A.6 of the manual).
 
-    Returns the findings by coverage, the shift measured on each mount, and the
-    quartz line width - which is a usable starting value for the instrument's
-    peak width before any fit has been made.
+    Returns the findings by coverage, the confirmed shift of each mount that
+    took part, the shifts it declined, and the quartz line width - which is a
+    usable starting value for the instrument's peak width before any fit has
+    been made.
     """
     reference = instrument or Instrument()
+    calibration_low, calibration_high = QUARTZ_CALIBRATION
     peaks_by_mount = {name: treatment_peaks(pattern) for name, pattern in mounts.items()}
     usable = {name: peaks for name, peaks in peaks_by_mount.items() if len(peaks)}
     if not usable:
         return TripletScreen([], {}, False, float("nan"),
                              "No peaks rose above the noise in any mount.")
 
+    # Only a shift that two quartz lines agreed on is used.  A mount aligned on
+    # one line is aligned on a peak that was assumed to be quartz, and in a clay
+    # separate that assumption is cheap - kaolinite's 4.18 A line reads as
+    # -0.40 deg in the 20.86 deg window - while the cost is the whole screen:
+    # every phase is judged on peaks the mounts share, and a mount shifted by a
+    # few tenths shares nothing with the others.  What the lone line implied is
+    # carried out in `unconfirmed` rather than thrown away.
     shifts: dict[str, float] = {}
+    unconfirmed: dict[str, float] = {}
+    quiet: list[str] = []
     widths: list[float] = []
-    paired = 0
     for name, peaks in usable.items():
-        shift, indices = quartz_zero_shift(peaks)
-        if shift is None:
+        zero = quartz_zero_shift(peaks)
+        if not zero.confirmed or zero.shift is None:
+            if zero.shift is None:
+                quiet.append(name)
+            else:
+                unconfirmed[name] = float(zero.shift)
             continue
-        shifts[name] = shift
-        if len(indices) == 2:
-            paired += 1
-        widths.extend(float(peaks.width[index]) for index in indices)
-    calibrated = bool(shifts) and paired == len(usable)
+        shifts[name] = float(zero.shift)
+        widths.extend(float(peaks.width[index]) for index in zero.used)
+    calibrated = bool(shifts) and len(shifts) == len(usable)
+    declined = ", ".join(f"{name} {unconfirmed[name]:+.3f}°" for name in sorted(unconfirmed))
     if not shifts:
+        also = (
+            f" A single {calibration_low:.2f}° line would have put {declined}, but one "
+            f"line is a peak assumed to be quartz rather than a calibration - in a clay "
+            f"separate kaolinite supplies one in that window - so it was not applied."
+            if unconfirmed else ""
+        )
         return TripletScreen(
             [], {}, False, float("nan"),
-            "Quartz was not found in any mount, so the scans could not be put on a "
-            "common angle scale and nothing was screened. Set the zero error by hand "
-            "and use the main-mineral search instead.",
+            "No quartz pair was found in any mount, so the scans could not be put on a "
+            "common angle scale and nothing was screened." + also + " Set the zero "
+            "error by hand and use the main-mineral search instead.",
+            dict(unconfirmed),
         )
     # Only the mounts that were aligned can take part: a scan left on its own
     # angle scale would fail every phase and drag every coverage to zero.
@@ -1560,10 +1780,19 @@ def screen_treatments(
                 f"{aligned}. {len(findings)} phases have {min_matched} or more lines "
                 f"stable across them.")
     else:
-        note = (f"Only the 20.86° quartz line was usable in at least one mount, so "
-                f"the alignment is a starting value rather than a calibration: "
-                f"{aligned}. Treat what follows as provisional and check it after the "
-                f"zero error is set.")
+        left_out = []
+        if unconfirmed:
+            left_out.append(
+                f"{declined} came from a single {calibration_low:.2f}° line, which is a "
+                f"peak assumed to be quartz rather than a calibration")
+        if quiet:
+            left_out.append(f"{', '.join(sorted(quiet))} gave no quartz line at all")
+        note = (f"{len(shifts)} of {len(usable)} mounts were aligned on their own quartz "
+                f"pair: {aligned}. The rest were left out of the screen - "
+                f"{', and '.join(left_out)}. A phase now has to stand in fewer mounts, "
+                f"which is weaker evidence: set the zero error by hand on the mounts left "
+                f"out, or check their {calibration_low:.2f} and {calibration_high:.2f}° "
+                f"peaks, and screen again.")
     # Each mount is aligned on its own quartz, which is right - they are three
     # preparations and a displacement is a property of the preparation - but a
     # difference of more than a tenth of a degree between them is larger than a
@@ -1589,4 +1818,4 @@ def screen_treatments(
                      f"{', ...' if len(stretched) > 4 else ''}), which is weaker evidence: "
                      f"the allowance is there for a solid solution a per cent off its "
                      f"database entry, not to rescue a phase that does not fit.")
-    return TripletScreen(findings, shifts, calibrated, width, note)
+    return TripletScreen(findings, shifts, calibrated, width, note, dict(unconfirmed))

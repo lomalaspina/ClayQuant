@@ -1755,8 +1755,29 @@ def register_callbacks(app: Dash) -> None:
             STATE.screen = None
             return error_message(exc)
         STATE.screen = screen
+        # A shift measured from one quartz line is shown and not used: it is a
+        # peak that was assumed to be quartz, and in a clay separate kaolinite
+        # supplies one in that window.  Said here because the operator may know
+        # the specimen has quartz in it and that the 101 fell outside the scan,
+        # in which case the number is theirs to set in step 3.
+        declined = getattr(screen, "unconfirmed", {})
+        listed = ", ".join(f"{MOUNT_LABELS.get(name, name)} {shift:+.3f}\u00b0"
+                           for name, shift in sorted(declined.items()))
+        left_out = "those mounts were" if len(declined) > 1 else "that mount was"
+        unconfirmed = html.Div(
+            [
+                html.B("Not applied: "),
+                f"{listed} came from a single quartz line, which is a peak assumed to be "
+                f"quartz rather than a calibration, so {left_out} left out of the screen. "
+                f"If you know the specimen has quartz and the 26.64\u00b0 line fell outside "
+                f"the scan or under the illite 003, set the zero error by hand in step 3 "
+                f"and screen again.",
+            ],
+            style={"fontSize": "0.78rem", "color": "#8a5a00", "marginTop": "6px"},
+        ) if declined else ""
         if not screen.findings:
-            return html.Div([html.B("No accompanying mineral was found. "), screen.note],
+            return html.Div([html.B("No accompanying mineral was found. "), screen.note,
+                             unconfirmed],
                             style={"fontSize": "0.82rem", "color": "#666",
                                    "marginTop": "8px"})
 
@@ -1796,6 +1817,7 @@ def register_callbacks(app: Dash) -> None:
                 ),
                 html.Div(screen.note, style={"fontSize": "0.78rem", "color": "#555",
                                              "marginTop": "6px"}),
+                unconfirmed,
                 html.Div(
                     "Coverage is the share of the phase's own calculated intensity that "
                     "stands on a stable peak, and the score is that rewarded for resting "

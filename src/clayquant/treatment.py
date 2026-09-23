@@ -986,18 +986,23 @@ def air_dried_observation(
         The mount being fitted - the glycol one - which the air-dried mount is
         scaled against on quartz 100.
     shift:
-        Zero shift of the air-dried mount against the fitted one, in degrees.
-        Zero by default, because ClayQuant zero-corrects each mount as it is
-        loaded and correcting it twice would misalign the two blocks; ``None``
-        measures it from the quartz lines instead, for a mount that has not been
-        corrected.
+        Zero shift of the air-dried mount against the fitted one, in degrees,
+        signed as :func:`clayquant.calibration.apply_zero_error` signs it - the
+        error to be *subtracted* from the measured angles, not the correction to
+        be added.  Zero by default, because ClayQuant zero-corrects each mount
+        as it is loaded and correcting it twice would misalign the two blocks;
+        ``None`` measures it from the quartz lines instead, for a mount that has
+        not been corrected.
 
         Measuring is not the safe default it looks.  On a specimen with no
         quartz in it, :func:`~clayquant.detection.quartz_zero_shift` will match
-        a clay reflection to a quartz line and return a shift of several
-        hundredths of a degree - on a test case here, -0.40 deg from a single
-        peak - and a misaligned air-dried block does not restrain the expandable
-        clays, it wrecks the fit: 2.24% became 37.91%.
+        a clay reflection to a quartz line and read a shift of several tenths of
+        a degree off it - on a test case here, -0.40 deg from a single peak -
+        and a misaligned air-dried block does not restrain the expandable clays,
+        it wrecks the fit: 2.24% became 37.91%.  So only a shift that function
+        confirms, meaning two quartz lines were found and agreed on it, is taken
+        here; a one-line reading is reported in the note and the mount is left
+        on the fitted mount's scale.
     counts:
         Raw counts of the air-dried mount, for the 1/counts weighting that the
         pattern block uses.  Without them every point of the air-dried mount
@@ -1010,7 +1015,7 @@ def air_dried_observation(
         glycol patterns would assert that nothing expands, which is the question
         being asked, so this refuses instead and says to rebuild.
     """
-    from .detection import quartz_zero_shift, treatment_peaks
+    from .detection import ZeroShift, quartz_zero_shift, treatment_peaks
 
     if not library.has_air_dried():
         raise ValueError(
@@ -1044,12 +1049,24 @@ def air_dried_observation(
         )
 
     measured_shift = None
+    declined = ""
+    measuring = shift is None
     if shift is None:
         try:
-            measured_shift, _ = quartz_zero_shift(treatment_peaks(air))
+            measured = quartz_zero_shift(treatment_peaks(air))
         except Exception:  # noqa: BLE001 - reported below, not raised
-            measured_shift = None
-        shift = 0.0 if measured_shift is None else float(measured_shift)
+            measured = ZeroShift(None, (), False, "The air-dried mount could not be "
+                                                  "searched for quartz.")
+        if measured.confirmed and measured.shift is not None:
+            # `quartz_zero_shift` returns the correction to add to the measured
+            # angles; this function's `shift` is the error to subtract from
+            # them, the way `apply_zero_error` signs it.  Same quantity, opposite
+            # sign, and taking it across unnegated doubles the displacement
+            # instead of removing it.
+            measured_shift = -float(measured.shift)
+        elif measured.shift is not None:
+            declined = measured.note
+        shift = 0.0 if measured_shift is None else measured_shift
     shift = float(shift)
     corrected = replace(air, two_theta=air.two_theta - shift)
 
@@ -1064,7 +1081,10 @@ def air_dried_observation(
                 f"100 ({exc}), so one coefficient cannot describe both and the air-dried "
                 f"mount is not used. Give the scale explicitly to use it anyway.",
             )
-    if measured_shift is None and shift == 0.0:
+    if declined:
+        note = (" The air-dried mount's own zero shift was measured but not applied, so "
+                "it was taken to share the fitted mount's. " + declined)
+    elif measuring and measured_shift is None:
         note = (" No quartz line gave the air-dried mount a zero shift, so it was taken "
                 "to share the fitted mount's.")
     scale = float(scale)

@@ -6,6 +6,7 @@ from clayquant.library import LibraryEntry, PatternLibrary
 from clayquant.pattern import Pattern
 from clayquant.treatment import (
     LEAST_MOVING_HYDRATION,
+    air_dried_observation,
     expandable_bound,
     shift_evidence,
 )
@@ -141,3 +142,65 @@ def test_the_status_says_what_was_measured_and_what_was_excluded():
     status = expandable_bound(evidence, a_library()).status
     assert "Nothing moved" in status
     assert "expandable" in status and "left out of the fit" in status
+
+
+# --------------------------------------------------------------------------
+# The air-dried mount as a block in the fit
+# --------------------------------------------------------------------------
+
+# Kaolinite's 4.18 and 3.37 A lines, which fall inside the windows around the
+# two quartz lines without being quartz.  A specimen with these and no quartz
+# still offers the calibration a peak to read.
+KAOLINITE_NEAR_QUARTZ = [(21.24, 1800.0), (26.42, 900.0)]
+
+
+def an_air_dried_library() -> PatternLibrary:
+    """Two entries, one of which shows a different pattern air-dried."""
+    return PatternLibrary(two_theta=GRID, entries=[
+        LibraryEntry(name="kaolinite", phase="kaolinite", intensity=peak(12.45),
+                     unit_mass=100.0, unit_volume=100.0),
+        LibraryEntry(name="I/S 0.70", phase="I/S", fraction=0.70,
+                     intensity=peak(5.20), air_intensity=peak(8.84),
+                     unit_mass=100.0, unit_volume=100.0),
+    ])
+
+
+def displaced(lines, by):
+    """The same lines, measured on a mount sitting ``by`` degrees low."""
+    return [(centre - by, height) for centre, height in lines]
+
+
+def test_a_zero_shift_taken_from_a_single_quartz_line_is_not_applied():
+    """On a specimen with no quartz, one clay line reads as a shift of -0.38 deg.
+
+    Applied to the air-dried block that is not a small error: the block is there
+    to restrain the expandable clays by predicting a definite air-dried pattern,
+    and a misaligned one predicts the wrong pattern everywhere.
+    """
+    air = scan(CLAY + KAOLINITE_NEAR_QUARTZ, seed=20)
+    glycol = scan(CLAY + REF, seed=21)
+    observation = air_dried_observation(air, glycol, an_air_dried_library(),
+                                        shift=None, scale=1.0)
+    assert observation.shift == 0.0
+    assert "not applied" in observation.status
+
+
+def test_a_confirmed_quartz_pair_is_applied_with_the_sign_that_removes_it():
+    """And the sign is the one that puts the mount back, not twice out.
+
+    ``quartz_zero_shift`` returns the correction to add to the measured angles;
+    this function's ``shift`` is the error to subtract from them, the way
+    ``apply_zero_error`` signs it.  Carrying one across as the other would double
+    the displacement, which is why the corrected mount is checked here and not
+    just the number.
+    """
+    offset = 0.15
+    air = scan(displaced(CLAY + REF, offset), seed=22)
+    glycol = scan(CLAY + REF, seed=23)
+    observation = air_dried_observation(air, glycol, an_air_dried_library(),
+                                        shift=None, scale=1.0)
+    assert observation.shift == pytest.approx(-offset, abs=0.03)
+    # The quartz 101 is the strongest line in the scan; after correction it is
+    # back at 26.640 deg rather than 0.15 deg below or 0.15 deg above it.
+    landed = GRID[int(np.argmax(observation.constraint.target))]
+    assert landed == pytest.approx(26.640, abs=0.04)
