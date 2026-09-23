@@ -1196,7 +1196,7 @@ def main_minerals_tab() -> html.Div:
                         value="air",
                     ),
                     label("Unit cell allowance (%)"),
-                    dcc.Slider(id="detect-allowance", min=0.0, max=5.0, step=0.25, value=2.0,
+                    dcc.Slider(id="detect-allowance", min=0.0, max=5.0, step=0.25, value=0.0,
                                marks={0: "0", 2: "2", 5: "5"}),
                     label("Minimum share (‰) or score (%)"),
                     dcc.Slider(id="detect-score", min=5, max=95, step=5, value=10,

@@ -146,6 +146,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-26">A.26 The width of a clay peak</a>
 <a href="#a-27">A.27 Diagnostic reflections</a>
 <a href="#a-28">A.28 Refining the layer spacing</a>
+<a href="#a-29">A.29 The cell allowance</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4728,6 +4729,44 @@ so what the clays stop stealing goes to the right place. And the chlorite column
 19.9, 11.0, 17.3, 13.9, 11.3. The alternating search is landing in different local minima at
 different bounds, which is its own reason not to run it yet.</p>
 
+<h3 id="a-29">A.29 The cell allowance in the triplet screen</h3>
+
+<p><strong>Reasoning.</strong> The triplet screen reports a phase when its calculated lines are
+found at stable positions in all three mounts. It was also allowed to scale each candidate's whole
+pattern coherently by up to 2&nbsp;% of its cell and take the best scaling, on the argument - which
+is true - that most accompanying minerals are solid solutions whose cell differs from the database
+entry, and that scaling the pattern coherently is the right shape of freedom, far better than a
+per-line window of the same size (&sect;<a href="#a-6">A.6</a>). Clayfit allows none.</p>
+
+<p><strong>Result.</strong> On M_26_1041's three mounts against 209 candidate structures:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Cell allowance</th><th>Phases reported</th><th>Quartz</th><th>Albite</th><th>Rutile</th></tr>
+<tr><td>none (Clayfit's)</td><td>11</td><td>1st</td><td>2nd</td><td>3rd</td></tr>
+<tr><td>&plusmn;0.2&nbsp;%</td><td>30</td><td>1st</td><td>2nd</td><td>4th</td></tr>
+<tr><td>&plusmn;0.5&nbsp;%</td><td>42</td><td>1st</td><td>2nd</td><td>4th</td></tr>
+<tr><td>&plusmn;1&nbsp;%</td><td>63</td><td>1st</td><td>3rd</td><td>7th</td></tr>
+<tr><td>&plusmn;2&nbsp;%</td><td>65</td><td>1st</td><td>3rd</td><td>6th</td></tr>
+</table></div>
+
+<p>With no allowance the three phases reported first are the three the specimen contains, and the
+eight below them - bayerite, a lead thiosulfate, otavite - are recognisably noise. At 2&nbsp;% they
+are buried under cotunnite, litharge and qusongite, and sixty-five phases are reported where eleven
+were. The allowance never recovers sekaninaite, the one solid solution the specimen actually holds:
+that phase is found by the competitive fit instead, at 40&nbsp;% coverage.</p>
+
+<p><strong>Why the argument for it fails here</strong> even though it is sound in itself. This screen
+matches two hundred candidates against one set of peaks, so the candidates outnumber the evidence,
+and any freedom given to all of them is used by the wrong ones more often than by the right ones -
+there are simply more wrong ones. The freedom is not mis-shaped, it is unaffordable. The interface
+still offers it, starting at zero, for when a particular solid solution is suspected and can be
+asked about deliberately.</p>
+
+<p>That is the third measurement in this appendix with the same shape: microstrain beyond the
+kaolinites (&sect;<a href="#a-26">A.26</a>), the refined layer spacing
+(&sect;<a href="#a-28">A.28</a>), and this. Each time the extra freedom improved the number being
+minimised and moved the answer away from an independent determination of it.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4808,6 +4847,10 @@ recovered from a library that does not contain it; five deviation bounds on a re
 TOPAS refinement</td>
 <td>Implemented, validated, and left off by default: six points of <var>R</var><sub>wp</sub> bought
 by moving kaolinite onto the chlorite 002</td></tr>
+<tr><td>Cell allowance in the screen</td><td>22 automated; five allowances on a real
+triplet against 209 candidate structures</td>
+<td>Set to none, as Clayfit has it: 11 phases reported instead of 65, and the three the specimen
+contains ranked first, second and third</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

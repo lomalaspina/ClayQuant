@@ -307,3 +307,44 @@ def test_the_tolerances_are_clayfits():
     assert CLAYFIT_MAX_ZERO_SHIFT == pytest.approx(0.50)
     assert QUARTZ_CALIBRATION[0] == pytest.approx(20.86, abs=0.01)
     assert QUARTZ_CALIBRATION[1] == pytest.approx(26.64, abs=0.01)
+
+
+def test_the_triplet_screen_does_not_scale_a_cell_by_default():
+    """Clayfit's, and a measured decision rather than an omission.
+
+    Most accompanying minerals are solid solutions whose cell differs from the
+    database entry, so allowing for it looks obviously right.  On a real triplet
+    of 209 candidates it took the phases reported from 11 to 65 and pushed
+    rutile from third to sixth, behind cotunnite, litharge and qusongite, while
+    never recovering the one solid solution the specimen contains.
+    """
+    import inspect
+
+    from clayquant.detection import CLAYFIT_CELL_ALLOWANCE, screen_treatments
+
+    assert CLAYFIT_CELL_ALLOWANCE == 0.0
+    default = inspect.signature(screen_treatments).parameters["cell_allowance"].default
+    assert default == CLAYFIT_CELL_ALLOWANCE
+
+
+def test_a_cell_scaled_phase_is_found_only_when_the_allowance_is_asked_for():
+    """The freedom is real, which is why it has to be asked for deliberately."""
+    from clayquant.detection import screen_treatments
+
+    # A quartz whose cell is 1 % larger than the database entry's: the same
+    # mineral, the wrong reference, and every line displaced together.
+    scale = 1.01
+    stretched = [
+        (2.0 * math.degrees(math.asin(math.sin(math.radians(position / 2.0)) / scale)),
+         height)
+        for position, height in QUARTZ_LINES
+    ]
+    mounts = {
+        "air": synthetic_mount(stretched, 8.8, seed=1),
+        "glycol": synthetic_mount(stretched, 5.2, seed=2),
+        "heated": synthetic_mount(stretched, 8.85, seed=3),
+    }
+    crystals = {"Quartz": quartz_like()}
+    strict = screen_treatments(mounts, crystals, cell_allowance=0.0)
+    loose = screen_treatments(mounts, crystals, cell_allowance=0.02)
+    assert len(loose.findings) >= len(strict.findings)

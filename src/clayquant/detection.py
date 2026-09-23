@@ -85,6 +85,7 @@ __all__ = [
     "DEFAULT_CELL_ALLOWANCE",
     "CLAYFIT_CLUSTER",
     "CLAYFIT_INTENSITY_FLOOR",
+    "CLAYFIT_CELL_ALLOWANCE",
     "CLAYFIT_MATCH_TOLERANCE",
     "CLAYFIT_MAX_ZERO_SHIFT",
     "CLAYFIT_MIN_COVERAGE",
@@ -142,6 +143,10 @@ loaded database are simply skipped.
 """
 
 DEFAULT_CELL_ALLOWANCE = 0.02
+"""How far the competitive fit may scale a candidate's cell to match."""
+
+CLAYFIT_CELL_ALLOWANCE = 0.0
+"""And how far the triplet screen may: not at all.  See :func:`screen_treatments`."""
 """Relative cell deviation allowed when matching peak positions (2%)."""
 
 
@@ -1464,7 +1469,7 @@ def screen_treatments(
     min_coverage: float = CLAYFIT_MIN_COVERAGE,
     min_matched: int = CLAYFIT_MIN_MATCHES,
     floor: float = CLAYFIT_INTENSITY_FLOOR,
-    cell_allowance: float = DEFAULT_CELL_ALLOWANCE,
+    cell_allowance: float = CLAYFIT_CELL_ALLOWANCE,
     scale_steps: int = 5,
     include_clays: bool = False,
     only: set[str] | None = None,
@@ -1482,12 +1487,20 @@ def screen_treatments(
     set anything, and the things it depends on - where quartz is, and which
     peaks the three treatments share - are not things the operator sets.
 
-    ``cell_allowance`` additionally lets each phase's whole pattern be scaled
-    coherently, by up to that fraction of its cell, and takes the best scaling.
-    Most accompanying minerals are solid solutions whose cell differs from the
-    database entry, and scaling the pattern is the right way to allow for that:
-    a per-line window of the same size would be up to 1.6 degrees wide at high
-    angle and would match almost anything (Sec. A.6 of the manual).
+    ``cell_allowance`` lets each phase's whole pattern be scaled coherently, by
+    up to that fraction of its cell, and takes the best scaling.  It is zero
+    here, which is Clayfit's, and that is a measured decision rather than an
+    omission: most accompanying minerals *are* solid solutions whose cell
+    differs from the database entry, so allowing for it looks obviously right,
+    and on a real triplet it multiplied the phases reported from 11 to 65 and
+    pushed the true ones down the ranking - rutile from third to sixth, behind
+    cotunnite, litharge and qusongite - while never recovering the one solid
+    solution the specimen actually contains.  A coherent scale is still the
+    right shape of freedom, and better than the per-line window of the same size
+    that Sec. A.6 rejected; it is simply freedom this screen cannot afford,
+    because it is matching 200 candidates against one set of peaks and the
+    candidates outnumber the evidence.  Raise it deliberately when a particular
+    solid solution is suspected, not as a matter of course.
 
     Returns the findings by coverage, the shift measured on each mount, and the
     quartz line width - which is a usable starting value for the instrument's
