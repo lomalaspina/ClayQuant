@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from .crystal import Crystal
 from .masses import atomic_weight, element_of
 
@@ -43,6 +45,8 @@ __all__ = [
     "mass_attenuation_of",
     "penetration_depth",
     "thick_enough",
+    "thin_film_factor",
+    "mass_per_area",
 ]
 
 MASS_ATTENUATION_CU_KA: dict[str, float] = {
@@ -146,3 +150,68 @@ def thick_enough(
     depth = penetration_depth(two_theta, mass_attenuation_coefficient, density)
     # Intensity from a film of thickness t, against an infinite one: 1 - exp(-t/depth).
     return (1.0 - math.exp(-film_thickness_um / depth)) >= fraction
+
+
+def mass_per_area(mass_g: float, area_cm2: float) -> float:
+    """Mass per unit area of a mount, in g/cm^2.
+
+    The quantity a weighed film enters every absorption expression through.  It
+    is not the mass: two mounts carrying the same milligrams over different
+    areas absorb differently and diffract differently, so the area the
+    suspension dried over has to be measured too.
+    """
+    if mass_g <= 0.0:
+        raise ValueError(f"a mount's mass must be positive, not {mass_g}")
+    if area_cm2 <= 0.0:
+        raise ValueError(f"a deposited area must be positive, not {area_cm2}")
+    return mass_g / area_cm2
+
+
+def thin_film_factor(
+    two_theta: np.ndarray | float,
+    mass_attenuation_coefficient: float,
+    film_mass_per_area: float,
+) -> np.ndarray:
+    """How much of a thick specimen's intensity a weighed film delivers.
+
+    Every calculated pattern in ClayQuant is for a flat plate thick enough to
+    absorb the beam completely: that is what the Debye-Scherrer Lorentz factor
+    and the beam-overflow correction of :class:`Divergence` describe between
+    them, with the specimen's ``1 / 2 mu`` folded into the scale factor.  A clay
+    film smeared on a glass slide is not that specimen.  It delivers a fraction
+
+        A = 1 - exp(-2 mu_m W / sin(theta))
+
+    of it, with ``W`` the film's mass per area and ``mu_m`` its mass attenuation
+    coefficient - the same expression :func:`thick_enough` tests, written as the
+    factor rather than as a yes or no.
+
+    The angle dependence is the whole point, and it is not a rescaling.  The
+    exponent carries ``1 / sin(theta)``, so a thin film keeps more of its
+    low-angle intensity than of its high-angle intensity: at the limit the
+    factor becomes ``2 mu_m W / sin(theta)``, which *rises* towards low angle.
+    An illite film of 1.3 mg/cm^2 delivers 0.77 of its 10 A reflection, 0.52 of
+    its 5 A one and 0.38 of its 3.33 A one, so its basal series is measured with
+    the first order enhanced by a factor of 1.5 against the second - which is
+    the same size as the structural effects the series is used to measure, and
+    in the same direction.
+
+    Multiply a calculated pattern by this to compare it with a measurement of a
+    film of known mass.  ``W`` needs the deposited area as well as the mass;
+    see :func:`mass_per_area`.
+
+    This is the correction the external-standard relation of
+    :class:`clayquant.quantification.ExternalStandard` cannot make.  That
+    relation is for a specimen where absorption alone decides how much
+    diffracts, and the mass has cancelled out of it; a weighed film is the other
+    case, and the better one, because the mass is known rather than inferred.
+    """
+    if mass_attenuation_coefficient <= 0.0:
+        raise ValueError("a mass attenuation coefficient must be positive")
+    if film_mass_per_area < 0.0:
+        raise ValueError("a mass per area cannot be negative")
+    theta = np.radians(np.asarray(two_theta, dtype=float) / 2.0)
+    sine = np.sin(theta)
+    if np.any(sine <= 0.0):
+        raise ValueError("every two-theta must lie strictly between 0 and 180 degrees")
+    return 1.0 - np.exp(-2.0 * mass_attenuation_coefficient * film_mass_per_area / sine)

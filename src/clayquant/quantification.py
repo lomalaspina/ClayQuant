@@ -42,6 +42,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +53,8 @@ __all__ = [
     "PhaseShare",
     "ExternalStandard",
     "calibration_factor",
+    "WeighedMount",
+    "agreement_between",
     "Quantification",
     "Calibration",
     "quantify",
@@ -343,6 +346,122 @@ def _fitted_mass(result: FitResult, phase: str) -> float:
         mass for name, mass, coefficient in zip(result.phases, masses, result.coefficients)
         if name == phase and coefficient > 0.0
     ))
+
+
+@dataclass
+class WeighedMount:
+    """The absolute scale, taken from a mount whose material was weighed.
+
+    The alternative to an external standard, and on a clay film the better of
+    the two.  The external-standard relation
+    (:class:`ExternalStandard`) is for a specimen thick enough that its own
+    absorption decides how much material diffracts; the mass then cancels out of
+    it, which is what lets a corundum plug stand in for an unknown.  A clay film
+    on a glass slide is not thick, so a constant taken from a corundum plug does
+    not transfer to it - and does not need to, because the mass of a film can
+    simply be weighed, which is the quantity the relation was going round the
+    houses to infer.
+
+    What is weighed is the mount, so what this fixes is one constant for the
+    whole mount: how many counts the instrument returns per gram of material in
+    the beam.  Given several mounts of known mass it becomes a test as well as a
+    calibration - the constant has to be the same for all of them, and a phase
+    whose mount disagrees is a phase whose calculated pattern is wrong by that
+    factor.  That is the check a relative analysis can never make on itself.
+
+    ``area`` is the area the suspension dried over, not the area of the glass.
+    It is needed because absorption within the film depends on mass per area and
+    not on mass (:func:`clayquant.absorption.thin_film_factor`), and it is the
+    one quantity here that has to be measured rather than weighed.
+    """
+
+    constant: float
+    """Fitted relative mass per gram of material on the mount."""
+
+    mass: float
+    """What the mount carried, in grams."""
+
+    area: float | None = None
+    """The area it dried over, in cm^2; ``None`` if it was not measured."""
+
+    measurement: str = ""
+    phases: tuple[str, ...] = ()
+
+    @property
+    def mass_per_area(self) -> float | None:
+        """Grams per square centimetre, or ``None`` without an area."""
+        return None if not self.area else self.mass / self.area
+
+    @classmethod
+    def from_fit(
+        cls,
+        result: FitResult,
+        mass: float,
+        area: float | None = None,
+        phases: Sequence[str] | None = None,
+    ) -> "WeighedMount":
+        """The constant from one fit of one weighed mount.
+
+        ``phases`` restricts the sum to named phases, for a mount where some of
+        what was weighed is not being counted - the glass is not weighed, but an
+        amorphous fraction is.  By default every phase the fit found is counted,
+        which is right for a mount taken to be wholly crystalline and wholly
+        described.
+        """
+        if mass <= 0.0:
+            raise ValueError(f"a weighed mass must be positive, not {mass}")
+        if area is not None and area <= 0.0:
+            raise ValueError(f"a deposited area must be positive, not {area}")
+        wanted = None if phases is None else set(phases)
+        total = 0.0
+        found: list[str] = []
+        for name in dict.fromkeys(result.phases):
+            if wanted is not None and name not in wanted:
+                continue
+            one = _fitted_mass(result, name)
+            if one > 0.0:
+                total += one
+                found.append(name)
+        if total <= 0.0:
+            raise ValueError(
+                "the fit gives this mount no mass at all, so there is no constant in it"
+            )
+        return cls(
+            constant=total / mass,
+            mass=float(mass),
+            area=None if area is None else float(area),
+            measurement=str(result.metadata.get("measurement", "")),
+            phases=tuple(found),
+        )
+
+    def mass_of(self, result: FitResult, phase: str) -> float:
+        """What this fit says a phase weighs, in grams, on this constant."""
+        return _fitted_mass(result, phase) / self.constant
+
+
+def agreement_between(mounts: Sequence[WeighedMount]) -> dict:
+    """How well several weighed mounts agree on the constant, and who does not.
+
+    One number per mount, and they should be one number.  The spread is the
+    honest uncertainty of every absolute weight percent the constant is used
+    for, and a single mount far from the rest is the interesting case: the
+    instrument did not change between them, so what changed is how well that
+    mineral's calculated pattern describes what was on the slide.
+
+    Returns the mean, the relative spread, and each mount's departure from the
+    mean as a factor - which for a pure standard is exactly the factor by which
+    its reference pattern is wrong.
+    """
+    values = [mount.constant for mount in mounts if mount.constant > 0.0]
+    if not values:
+        raise ValueError("no mount has a positive constant")
+    mean = sum(values) / len(values)
+    departures = {
+        (mount.measurement or f"mount {index + 1}"): mount.constant / mean
+        for index, mount in enumerate(mounts)
+    }
+    spread = max(values) / min(values) if min(values) > 0.0 else float("inf")
+    return {"mean": mean, "ratio_max_to_min": spread, "departures": departures}
 
 
 def calibration_factor(

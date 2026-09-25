@@ -145,6 +145,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-35">A.35 The illite is not a muscovite</a>
 <a href="#a-36">A.36 The chlorite after the oven</a>
 <a href="#a-37">A.37 A clay that is not a platelet</a>
+<a href="#a-38">A.38 Weighing the mount</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5325,6 +5326,67 @@ two mounts &mdash; visible as a 0.008&nbsp;&Aring; shift of the 3.34&nbsp;&Aring
 be swelling. What is left is of order 1&nbsp;%, against the 15&nbsp;&rarr;&nbsp;17&nbsp;&Aring; of a
 smectite. The channel water does leave on heating, and that is unmistakable: the 110 collapses to
 10.07&nbsp;&Aring;, the folding to sepiolite anhydride.</p>
+
+
+<h3 id="a-38">A.38 Weighing the mount, and the correction it uncovers</h3>
+
+<p><strong>What weighing buys.</strong> A relative analysis cannot check itself. It says how the
+phases of one mount divide that mount between them, and it says it whatever the calculated patterns
+get wrong, because an error common to the numerator and the denominator cancels. Weighing the
+material on the slide breaks that: the fit then has to account for a known number of milligrams, and
+one constant &mdash; fitted mass per gram &mdash; has to serve every mount measured through the same
+optics. Where it does not, the instrument is not what changed.</p>
+
+<p>This is not the external-standard method of &sect;<a href="#s2-13">2.13</a>, and it is better on a
+clay film. The external-standard relation
+<var>W</var>&nbsp;=&nbsp;<var>S</var>(ZMV)<var>&mu;</var><sub>m</sub>/<var>K</var> holds for a
+specimen thick enough that its own absorption decides how much material diffracts; the mass cancels
+out of it, which is exactly what lets a corundum plug stand in for an unknown. A clay film is not
+thick, so a constant from a corundum plug does not carry over to it &mdash; and does not need to,
+because the mass of a film can simply be weighed, which is the quantity that relation goes round the
+houses to infer.</p>
+
+<p><strong>The correction it uncovers.</strong> Every calculated pattern here is for a flat plate
+thick enough to absorb the beam completely: that is what the Debye&ndash;Scherrer Lorentz factor and
+the beam-overflow correction describe between them, with the specimen's 1/2<var>&mu;</var> folded
+into the scale. A weighed film delivers only a fraction of that,</p>
+
+<p style="text-align:center"><var>A</var> = 1 &minus; exp(&minus;2 <var>&mu;</var><sub>m</sub>
+<var>W</var> / sin&nbsp;<var>&theta;</var>)</p>
+
+<p>with <var>W</var> the mass per area. The exponent carries 1/sin&nbsp;<var>&theta;</var>, so the
+factor is not a rescaling: a thin film keeps more of its low-angle intensity than of its high-angle
+intensity, because the beam's path through it is longest at low angle. For an illite film of
+8&nbsp;mg over 6&nbsp;cm<sup>2</sup>:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Order</th><th>10 &Aring;</th><th>5 &Aring;</th><th>3.33 &Aring;</th></tr>
+<tr><td>fraction of a thick specimen's intensity</td><td class="num">0.77</td>
+<td class="num">0.52</td><td class="num">0.38</td></tr>
+<tr><td>effect on the calculated ratio to 001</td><td class="num">&mdash;</td>
+<td class="num">&times;0.68</td><td class="num">&times;0.50</td></tr>
+</table></div>
+
+<p><strong>Which is the same direction as the chemistry.</strong> Taking potassium out of an illite
+lowers its higher basal orders; putting iron into the octahedral sheet lowers them; and so does the
+film being thin. They are not distinguishable from a basal series alone. The composition found in
+&sect;<a href="#a-35">A.35</a> was fitted against calculated patterns carrying no film correction, so
+it stands only as far as that correction is small &mdash; and how small it is depends on the area the
+suspension dried over, which is the one quantity here that has to be measured rather than weighed.
+Over 3&nbsp;cm<sup>2</sup> the correction multiplies the calculated 002/001 by 0.81; over
+12&nbsp;cm<sup>2</sup>, by 0.59. That range spans the whole effect attributed to the octahedral
+iron.</p>
+
+<p><strong>So the order of work is fixed by it.</strong> The deposited area, then the film
+correction, then the composition &mdash; not the other way round. An X-ray fluorescence analysis of
+the same mounts settles the composition independently of all of it, which is why it is worth having:
+it is the one measurement that breaks the degeneracy from outside.</p>
+
+<p><strong>And then it becomes a test.</strong> Nine weighed standards give nine constants that have
+to be one constant. <code>agreement_between</code> reports the spread and each mount's departure from
+the mean, and for a pure standard that departure is precisely the factor by which its reference
+pattern is wrong &mdash; texture, microabsorption and structural error together, which is what
+&sect;<a href="#s2-13">2.13</a> calls <var>k</var> and has never before been measurable here.</p>
 
 
 
