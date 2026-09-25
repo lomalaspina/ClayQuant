@@ -148,6 +148,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-28">A.28 Refining the layer spacing</a>
 <a href="#a-29">A.29 The cell allowance</a>
 <a href="#a-30">A.30 Thickness chosen second</a>
+<a href="#a-31">A.31 Nothing at 7.15 &Aring; is not kaolinite</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -4807,6 +4808,88 @@ I/S. On this specimen the air-dried mount says there is no expandable clay, so t
 wrong direction, and the diagnostic screen of &sect;<a href="#a-27">A.27</a> removes it again.
 Two stages and that screen belong together.</p>
 
+<h3 id="a-31">A.31 Nothing at 7.15&nbsp;&Aring; is not kaolinite</h3>
+
+<p><strong>Reasoning.</strong> The collapse test measured whatever was in its window and asked no
+questions. After a baseline is removed the tallest point in any window is positive, and the area
+integrated only the points above zero, so an empty window had a positive area <em>by
+construction</em> and could never be absent. A window holding nothing but noise therefore reported a
+fraction of its area collapsing on heating, and that fraction was reported as kaolinite.</p>
+
+<p><strong>Method.</strong> A reflection now has to stand clear of the background, and three things
+had to be got right before the threshold worked at all:</p>
+
+<ul>
+<li><strong>A single point is not a peak.</strong> Testing the tallest point against the noise of one
+point asks the wrong question, because the tallest of a hundred noise points stands three standard
+deviations above zero by itself. The window is averaged over one peak width first, which is the
+matched filter for a reflection of that width: the noise of the average falls as the root of the
+points averaged and a real reflection does not.</li>
+<li><strong>The window was searched.</strong> The largest of <var>n</var> independent samples of
+noise is about &radic;(2&nbsp;ln&nbsp;<var>n</var>) standard errors above zero with nothing present,
+so the threshold is <var>k</var>&nbsp;+&nbsp;&radic;(2&nbsp;ln&nbsp;<var>n</var>) with <var>n</var>
+the number of peak-width positions the window holds - about 5.3 for the 7.15&nbsp;&Aring; window at
+<var>k</var>&nbsp;=&nbsp;3.</li>
+<li><strong>Counting noise is not what limits it.</strong> With both of the above and a Poisson
+noise estimate, an empty window still stood six standard deviations above zero on real data, because
+a peak-stripped baseline under a curved low-angle background leaves a broad positive pedestal that
+no averaging removes. The level and the scatter are therefore both taken from the robust statistics
+of the baseline-subtracted signal itself, over a span three times the window: the median is the
+pedestal, the peak is measured from it, and 1.4826&nbsp;&times;&nbsp;MAD about it is what the peak
+has to beat.</li>
+</ul>
+
+<p><strong>Result.</strong> Nine near-pure clay standards, each prepared as the three mounts by the
+same procedure, put the empty windows at 0.9 to 5.4 standard errors and the real reflections at 700
+to 7900 - four decades of separation, against a threshold of 5.3.</p>
+
+<p><strong>And then the standards found a second thing</strong>, which is not about noise. The test
+reads the intensity lost on heating as kaolinite and what remains as chlorite 002, on the premise
+that a chlorite 002 survives. It does not survive intact. On the two chlorite standards, neither of
+which contains kaolinite, the 7.15&nbsp;&Aring; area after 1.5&nbsp;h at 550&nbsp;&deg;C was
+32&nbsp;% of the air-dried area for the clinochloritic Chlorite and 72&nbsp;% for the iron-rich
+Prochlorite - a factor of 2.2 between two chlorites, so no single correction serves both.</p>
+
+<p>So on a chlorite-bearing specimen the test cannot report a kaolinite percentage, only a range.
+With <var>A</var> the air-dried area, <var>H</var> the heated one and <var>f</var> the chlorite
+survival, the chlorite accounts for <var>H</var>/<var>f</var> of <var>A</var> and the kaolinite lies
+between 1&nbsp;&minus;&nbsp;<var>H</var>/(0.32<var>A</var>) and
+1&nbsp;&minus;&nbsp;<var>H</var>/(0.72<var>A</var>). Kaolinite is reported as present only when the
+lower bound clears 10&nbsp;%, which is to say only when no chlorite 002 could have accounted for the
+loss.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Standard</th><th>7.15&nbsp;&Aring; air</th><th>Kaolinite</th><th>Verdict</th></tr>
+<tr><td>Kaolinite (1)</td><td class="num">898&sigma;</td><td class="num">100&nbsp;%</td>
+<td>present; the peak wholly disappeared, so no chlorite under it</td></tr>
+<tr><td>Kaolinite (2)</td><td class="num">1529&sigma;</td><td class="num">92&ndash;97&nbsp;%</td>
+<td>present</td></tr>
+<tr><td>Dickite</td><td class="num">7932&sigma;</td><td class="num">25&ndash;67&nbsp;%</td>
+<td>present, and see below</td></tr>
+<tr><td>Chlorite</td><td class="num">720&sigma;</td><td class="num">0&ndash;55&nbsp;%</td>
+<td>not established; chlorite indicated <strong>&#10003;</strong></td></tr>
+<tr><td>Prochlorite</td><td class="num">4697&sigma;</td><td class="num">0&nbsp;%</td>
+<td>not established; chlorite indicated <strong>&#10003;</strong></td></tr>
+<tr><td>Illite</td><td class="num">0.9&sigma;</td><td>&mdash;</td>
+<td>nothing there <strong>&#10003;</strong></td></tr>
+<tr><td>Montmorillonite (1)</td><td class="num">1.4&sigma;</td><td>&mdash;</td>
+<td>nothing there <strong>&#10003;</strong></td></tr>
+<tr><td>Montmorillonite (2)</td><td class="num">5.4&sigma;</td><td class="num">100&nbsp;%</td>
+<td>a trace just over the threshold, which wholly collapses</td></tr>
+<tr><td>Sepiolite</td><td class="num">4.3&sigma;</td><td>&mdash;</td>
+<td>nothing there <strong>&#10003;</strong></td></tr>
+</table></div>
+
+<p>Before this, four of these nine - the illite, both montmorillonites and the sepiolite - were
+reported as containing kaolinite, and the two chlorites as 68&nbsp;% and 28&nbsp;% kaolinite. Eight
+of the nine now answer correctly.</p>
+
+<p><strong>The ninth is worth its own sentence.</strong> Dickite is a kaolin-group mineral and
+contains no chlorite, yet a quarter of its 7.15&nbsp;&Aring; peak survives the heating and the test
+reports chlorite. Dickite dehydroxylates above 550&nbsp;&deg;C, higher than kaolinite, so at this
+temperature it is only partly destroyed - and a partly destroyed kaolin is indistinguishable here
+from a chlorite that partly survived. The test cannot tell them apart and should not be asked to.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -4896,6 +4979,12 @@ reach a thickness the first never offered; both searches on a real mount against
 refinement</td>
 <td>Offered beside the joint search, which stays the default: half a point of
 <var>R</var><sub>wp</sub> worse, a point of chlorite and of illite better, three times faster</td></tr>
+<tr><td>Diagnostic significance</td><td>11 automated; nine near-pure clay standards
+measured as all three mounts</td>
+<td>A reflection must now stand clear of the background: four of the nine standards had been reported
+as containing kaolinite with nothing at 7.15&nbsp;&Aring; at all. The chlorite 002 survival measured
+at 32 and 72 % on two chlorites, so kaolinite is reported as a range and both chlorites answer
+zero</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

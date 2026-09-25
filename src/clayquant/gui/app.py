@@ -2175,23 +2175,42 @@ def register_callbacks(app: Dash) -> None:
         style_axes(figure, "Counts")
 
         conclusion = []
-        if result.kaolinite_detected:
-            conclusion.append(f"Kaolinite present: {100.0 * result.collapse_fraction:.1f}% of the "
-                              f"7.15 Å area collapsed.")
+        least, most = result.kaolinite_bounds
+        if not result.air.is_present:
+            conclusion.append(
+                "Nothing at 7.15 Å above the noise, so neither kaolinite nor chlorite "
+                "is indicated. A peak has to stand clear of the background before its "
+                "loss on heating can mean anything."
+            )
+        elif result.kaolinite_detected:
+            conclusion.append(
+                f"Kaolinite present: {100.0 * least:.0f} to {100.0 * most:.0f}% of the "
+                f"7.15 Å area, whatever the chlorite under it did."
+                if least < most else
+                f"Kaolinite present: the whole 7.15 Å peak collapsed, so all of it."
+            )
         else:
-            conclusion.append("No significant collapse: no kaolinite detected.")
+            conclusion.append(
+                f"No kaolinite established: at most {100.0 * most:.0f}% of the 7.15 Å "
+                f"area, and a chlorite 002 losing as much of itself as chlorite "
+                f"standards do would account for all of it."
+            )
         if result.chlorite_indicated:
-            conclusion.append(f"{100.0 * result.residual_fraction:.1f}% survived, indicating "
-                              f"chlorite 002.")
+            conclusion.append(
+                f"{100.0 * result.residual_fraction:.0f}% of the peak survived heating, "
+                f"which a kaolinite cannot do: there is chlorite 002 here."
+            )
         return figure, html.Div(
             [
                 html.Div(result.summary()),
                 html.Ul([html.Li(text) for text in conclusion]),
                 html.Div(
-                    f"Air area {result.air.area:.4g} at {result.air.d_spacing:.3f} Å; "
-                    f"heated area {result.heated.area:.4g} (scaled "
-                    f"{result.scale * result.heated.area:.4g}); lost height "
-                    f"{result.lost_height:.4g}.",
+                    f"Air peak {result.air.significance:.1f}\u03c3 above the background "
+                    f"(needs {result.air.minimum_sigmas:.1f}\u03c3), heated peak "
+                    f"{result.heated.significance:.1f}\u03c3. Air area "
+                    f"{result.air.area:.4g} at {result.air.d_spacing:.3f} Å; heated area "
+                    f"{result.heated.area:.4g} (scaled "
+                    f"{result.scale * result.heated.area:.4g}).",
                     style={"fontSize": "0.8rem", "color": "#555"},
                 ),
             ]
