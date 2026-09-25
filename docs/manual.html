@@ -147,6 +147,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-37">A.37 A clay that is not a platelet</a>
 <a href="#a-38">A.38 Weighing the mount</a>
 <a href="#a-39">A.39 Fluorescence on the same mounts</a>
+<a href="#a-40">A.40 The mount is a 25 mm disc</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5481,6 +5482,79 @@ chlorite 16's (0.045), and the fluorescence has the total iron the other way rou
 strictly comparable &mdash; the diffraction fits the iron of one sheet with the other held at zero,
 while the fluorescence sees all of it &mdash; but it means the sheet-by-sheet split is not yet
 established, and the 2:1 sheet has to be allowed to carry iron before those numbers are quoted.</p>
+
+
+<h3 id="a-40">A.40 The mount is a disc, and it is 25 mm</h3>
+
+<p><strong>The error.</strong> The beam-overflow correction needs the size of the mount, and nothing
+in a data file records it, so it was being supplied as 35&nbsp;mm &mdash; a full smear on a standard
+glass slide. The mounts this program is used on are not smears on slides: they are round glass
+discs 25&nbsp;mm across, which the separate is dried on. Ten millimetres does not sound like much,
+and at high angle it is nothing, but the correction acts only where the beam overflows the mount and
+that is exactly where the clay basal reflections are.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Reflection</th><th>2&theta;</th><th>beam strip</th><th>as 35 mm</th><th>as a 25 mm disc</th></tr>
+<tr><td>chlorite 001</td><td class="num">6.22&deg;</td><td class="num">38.6 mm</td>
+<td class="num">0.907</td><td class="num">0.630</td></tr>
+<tr><td>illite 001</td><td class="num">8.84&deg;</td><td class="num">27.2 mm</td>
+<td class="num">1.000</td><td class="num">0.895</td></tr>
+<tr><td>kaolinite 001</td><td class="num">12.4&deg;</td><td class="num">19.4 mm</td>
+<td class="num">1.000</td><td class="num">1.000</td></tr>
+</table></div>
+
+<p>The chlorite 001 was being calculated with nine tenths of the beam on the mount where six tenths
+of it was, which is a 44&nbsp;% error in the reflection the whole chlorite/kaolinite separation of
+&sect;<a href="#a-34">A.34</a> is measured against. Every basal ratio in this appendix computed
+before this section carries it.</p>
+
+<p><strong>And the mount is round.</strong> The correction assumed a rectangle. The beam lights a
+strip along the surface, and on a disc the strip's corners run off the edge before its middle does,
+so a little more is lost than the length alone says: 0.630 against 0.648 at the chlorite 001.
+<code>Divergence</code> now takes <code>shape="round"</code> and computes the exact overlap of the
+strip with the disc, which agrees with a brute-force integration to better than 0.2&nbsp;%. The
+beam's axial width barely enters &mdash; widening the mask from 5 to 15&nbsp;mm moves the low-angle
+factor by 6&nbsp;% &mdash; because what limits the strip down there is its length.</p>
+
+<p>So the shape is a few per cent and the length is tens of per cent. Both are now right, and
+<code>instrument_from_measurement</code> defaults to a round mount 25&nbsp;mm across rather than a
+35&nbsp;mm smear.</p>
+
+<p><strong>What it does to the illite.</strong> Correcting the geometry raises the calculated higher
+orders, because the first order was the one being over-credited with beam. Against the measured
+1&nbsp;:&nbsp;0.164&nbsp;:&nbsp;0.477, at the composition the fluorescence gives
+(&sect;<a href="#a-39">A.39</a>):</p>
+
+<div class="tablewrap"><table>
+<tr><th>Geometry</th><th>002/001</th><th>003/001</th><th>R<sub>wp</sub>, single phase</th></tr>
+<tr><td>35 mm smear</td><td class="num">0.124</td><td class="num">0.414</td>
+<td class="num">69.7 %</td></tr>
+<tr><td>25 mm disc</td><td class="num">0.139</td><td class="num">0.462</td>
+<td class="num">66.8 %</td></tr>
+<tr><td><em>measured</em></td><td class="num"><em>0.164</em></td><td class="num"><em>0.477</em></td>
+<td>&mdash;</td></tr>
+</table></div>
+
+<p>The 3.33&nbsp;&Aring; order comes to within 3&nbsp;% and the 5&nbsp;&Aring; order to within
+15&nbsp;%, from a structure, an independent chemical analysis and the measured size of the glass
+disc, with nothing fitted to the basal series at all. The same fit prefers the fluorescence
+composition over the diffraction-only one (66.8 against 69.8&nbsp;%) and both over the published
+muscovite (77.5&nbsp;%).</p>
+
+<p><strong>And it settles the film correction: there is none to make.</strong>
+&sect;<a href="#a-38">A.38</a> left the thin-film absorption open pending the deposited area. The
+area is 4.91&nbsp;cm<sup>2</sup>, which for 8&nbsp;mg gives 1.63&nbsp;mg/cm<sup>2</sup> and a
+correction that would multiply the calculated 003/001 by 0.54 &mdash; and applying it takes the fit
+from 66.8 to 70.3&nbsp;% and the ratios far below the measurement. The pattern says the correction
+is not there.</p>
+
+<p>The resolution is that mass over nominal area is a <em>lower bound</em> on the areal density in
+the beam. A suspension drying on a disc does not leave a film of uniform thickness, and the beam
+reads a strip across the middle rather than the average; a factor of three of central thickening
+makes the film effectively thick at these angles and fits as well as no correction at all
+(67.6&nbsp;%). So <code>thin_film_factor</code> stays available and documented and is not applied by
+default: computed from the nominal area it is an upper bound on a correction that these mounts do
+not need.</p>
 
 
 

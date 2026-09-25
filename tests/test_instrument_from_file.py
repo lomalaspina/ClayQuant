@@ -260,7 +260,7 @@ def _text(node) -> str:
     return _text(children)
 
 
-def a_library(radius=240.0, slit=0.5, width=0.09):
+def a_library(radius=240.0, slit=0.5, width=0.09, length=25.0):
     from clayquant.library import PatternLibrary
 
     return PatternLibrary(
@@ -268,7 +268,7 @@ def a_library(radius=240.0, slit=0.5, width=0.09):
         metadata={
             "peak_shape": {"u": 0.0, "v": 0.0, "w": width**2, "eta": 0.5,
                            "size_c": None, "size_ab": None},
-            "geometry": {"specimen_length": 35.0, "goniometer_radius": radius,
+            "geometry": {"specimen_length": length, "goniometer_radius": radius,
                          "divergence": slit},
         },
     )

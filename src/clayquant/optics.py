@@ -58,6 +58,7 @@ low-angle ramp.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -126,15 +127,47 @@ class Divergence:
     specimen_length: float = 20.0
     goniometer_radius: float = 280.0
     divergence: float = 0.5
+    shape: str = "rectangular"
+    """``"rectangular"`` or ``"round"``.
+
+    A round mount is not a rectangular one of the same length.  The beam lights
+    a strip along the surface, and on a disc the strip's corners run off the
+    edge before its middle does, so intensity is lost sooner than the length
+    alone says.  The difference is small - about 3 per cent at the low-angle
+    end of a clay scan - but the mounts this program was written for are discs,
+    and a correction one knows the sign of is not worth leaving out.
+    """
+
+    beam_width: float = 10.0
+    """Axial width of the beam at the specimen, in mm; the mask setting.
+
+    Only a round mount uses it, and barely: widening it from 5 to 15 mm moves
+    the low-angle factor by 6 per cent, because what limits the strip there is
+    its length and not its width.
+    """
 
     def __post_init__(self) -> None:
         if self.specimen_length <= 0 or self.goniometer_radius <= 0 or self.divergence <= 0:
             raise ValueError("specimen length, goniometer radius and divergence must be positive")
+        if self.shape not in ("rectangular", "round"):
+            raise ValueError(
+                f"a specimen is 'rectangular' or 'round', not {self.shape!r}"
+            )
+        if self.beam_width <= 0:
+            raise ValueError("the beam width must be positive")
 
     @property
     def full_illumination_two_theta(self) -> float:
         """2theta in degrees above which the beam is fully intercepted."""
-        ratio = self.goniometer_radius * np.radians(self.divergence) / self.specimen_length
+        length = self.specimen_length
+        if self.shape == "round":
+            # The strip has to fit inside the disc, corners and all.
+            radius = self.specimen_length / 2.0
+            half = self.beam_width / 2.0
+            if half >= radius:
+                return 180.0
+            length = 2.0 * math.sqrt(radius**2 - half**2)
+        ratio = self.goniometer_radius * np.radians(self.divergence) / length
         if ratio >= 1.0:
             return 180.0
         return float(np.degrees(2.0 * np.arcsin(ratio)))
@@ -143,6 +176,11 @@ class Divergence:
         """The fraction of the beam intercepted by the specimen."""
         theta = np.radians(np.asarray(two_theta, dtype=float)) / 2.0
         irradiated = self.goniometer_radius * np.radians(self.divergence)
+        if self.shape == "round":
+            with np.errstate(divide="ignore", invalid="ignore"):
+                strip = irradiated / np.sin(theta)
+            return _disc_overlap(np.nan_to_num(strip, posinf=1e9),
+                                 self.beam_width, self.specimen_length / 2.0)
         with np.errstate(divide="ignore", invalid="ignore"):
             fraction = self.specimen_length * np.sin(theta) / irradiated
         return np.clip(np.nan_to_num(fraction), 0.0, 1.0)
@@ -163,3 +201,35 @@ def march_dollase(alpha: np.ndarray, r: float) -> np.ndarray:
         raise ValueError("the March-Dollase parameter must be positive")
     alpha = np.asarray(alpha, dtype=float)
     return (r**2 * np.cos(alpha) ** 2 + np.sin(alpha) ** 2 / r) ** -1.5
+
+
+def _disc_overlap(length: np.ndarray, width: float, radius: float) -> np.ndarray:
+    """Fraction of a centred ``length x width`` strip that lies on a disc.
+
+    The strip is the beam's footprint, centred on the mount; the disc is the
+    mount.  Integrating the disc's half-height over the strip's half-length,
+
+        area / 4 = b x1                           where the rectangle limits,
+                 + [x sqrt(R^2 - x^2)/2 + R^2/2 asin(x/R)]   where the disc does
+
+    with the crossover at ``x = sqrt(R^2 - b^2)``.  Exact, and cheap enough to
+    evaluate per point of a scan.
+    """
+    length = np.atleast_1d(np.asarray(length, dtype=float))
+    half_width = min(width, 2.0 * radius) / 2.0
+    half_length = np.minimum(length / 2.0, radius)
+    crossover = math.sqrt(max(radius**2 - half_width**2, 0.0))
+    flat = np.minimum(half_length, crossover)
+
+    def curved(x: np.ndarray) -> np.ndarray:
+        x = np.clip(x, 0.0, radius)
+        return 0.5 * x * np.sqrt(np.maximum(radius**2 - x**2, 0.0)) + \
+            0.5 * radius**2 * np.arcsin(np.clip(x / radius, -1.0, 1.0))
+
+    quarter = half_width * flat + np.where(
+        half_length > crossover, curved(half_length) - curved(flat), 0.0)
+    area = 4.0 * quarter
+    beam = length * width
+    with np.errstate(divide="ignore", invalid="ignore"):
+        fraction = np.where(beam > 0.0, area / beam, 0.0)
+    return np.clip(np.nan_to_num(fraction), 0.0, 1.0)

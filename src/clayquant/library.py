@@ -1507,22 +1507,31 @@ DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
 def instrument_from_measurement(
     pattern,
     background=None,
-    specimen_length: float = 35.0,
+    specimen_length: float = 25.0,
     shift: float = 0.0,
+    specimen_shape: str = "round",
 ) -> tuple[Instrument, str]:
     """An instrument taken from a measurement: its geometry and its peak widths.
 
     The geometry comes from the file, which records the goniometer radius and
     the divergence slit; only the specimen length has to be supplied, because
-    nothing in a data file knows how long the smear was.  It defaults to 35 mm,
-    a full smear on a standard slide, and it is worth setting to the real one:
+    nothing in a data file knows how large the mount was.  It defaults to a
+    round mount 25 mm across, which is the glass disc these oriented separates
+    are dried on, and it is worth setting to the real one:
     the beam-overflow correction (:class:`clayquant.optics.Divergence`) acts
     only where the irradiated length exceeds it, which for a 0.5 deg slit on a
     240 mm goniometer is below 6.9 deg at 35 mm and below 12.0 deg at 20 mm.
     Between those two the difference is the whole of the chlorite 001, and on a
     real mount it is what took the calculated chlorite 001/002 from 0.26 to 0.47
     against 0.43 measured; above 12 deg neither value acts at all, which is why
-    the pure-mineral ratios of Sec. A.17 are flat across this range.
+    the pure-mineral ratios of Sec. A.17 are flat across this range.  Getting it
+    wrong is not a small error: a 25 mm mount described as 35 mm keeps 100 per
+    cent of the beam at the illite 001 where it really keeps 90, and 91 per cent
+    at the chlorite 001 where it really keeps 63 (Sec. A.40).
+
+    ``specimen_shape`` is ``"round"`` or ``"rectangular"``.  A disc loses the
+    strip's corners before its middle, so it intercepts a few per cent less than
+    a rectangle of the same length.
 
     The width model is anchored on the quartz 101 K-alpha doublet
     (:func:`~clayquant.profile.quartz_line_width`), whose width in a clay
@@ -1583,6 +1592,7 @@ def instrument_from_measurement(
         peak_shape=shape,
         lp_mode="powder",
         divergence=Divergence(specimen_length=specimen_length,
+                              shape=specimen_shape,
                               goniometer_radius=radius, divergence=slit),
         width_source=width_source,
     )
