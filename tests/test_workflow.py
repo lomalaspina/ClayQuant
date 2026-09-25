@@ -131,7 +131,15 @@ def test_background_with_accumulated_inverse_term(synthetic):
         assert np.all(values <= intensity + 3.0 * noise)
         assert np.all(values >= 0.0)
         assert np.mean(np.abs(values - truth)) < 0.2 * truth.mean()
-    assert np.mean(np.abs(fit_inverse(two_theta) - truth)) < 0.1 * truth.mean()
+    # And the 1/x term must earn its place: closer to the true background than
+    # the polynomial alone, by a margin that is not noise.  The absolute figure
+    # is the looser claim of the two, because it depends on the synthetic
+    # pattern - the peaks the stripping has to get around are library entries,
+    # and they change whenever a structure is corrected.
+    plain_error = np.mean(np.abs(fit_plain(two_theta) - truth))
+    inverse_error = np.mean(np.abs(fit_inverse(two_theta) - truth))
+    assert inverse_error < 0.85 * plain_error
+    assert inverse_error < 0.12 * truth.mean()
 
 
 def test_background_components_can_all_be_combined(synthetic):

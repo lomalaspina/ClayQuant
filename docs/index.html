@@ -152,6 +152,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-32">A.32 Nine pure standards</a>
 <a href="#a-33">A.33 Calculated basal intensities</a>
 <a href="#a-34">A.34 Kaolinite against the chlorite</a>
+<a href="#a-35">A.35 The illite is not a muscovite</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5098,6 +5099,122 @@ same shape of restriction as the air-dried ceiling on the expandable clays
 0.01&nbsp;&deg;, and the expandable comparison takes its own pair of shifts: a separate with no
 quartz has no line to set the zero error from, and a pattern displaced as a whole otherwise reads as
 a shift that is not there.</p>
+
+<h3 id="a-35">A.35 The illite is not a muscovite, and carries iron</h3>
+
+<p><strong>The discrepancy.</strong> The largest remaining error in the calculated reference
+patterns was the illite basal series. Measured on the illite standard, air dried, the three orders
+are 1&nbsp;:&nbsp;0.164&nbsp;:&nbsp;0.477. The published structure - ICSD 90144, Gualtieri 2000 -
+calculates 1&nbsp;:&nbsp;0.507&nbsp;:&nbsp;0.868: the 5&nbsp;&Aring; order three times too strong
+and the 3.33&nbsp;&Aring; order nearly twice. That is not a small error in a pattern that is fitted
+against chlorite and kaolinite over the same range, and it is the reason illite came out at
+26&nbsp;% of the clay on M_26_1041 where the independent refinement says 4.7.</p>
+
+<p><strong>The first cause: the interlayer is full.</strong> The CIF carries
+<code>K1 K1+ 4 e 0 0.0901 0.25 0.075 1.</code> - potassium at full occupancy, which is a muscovite.
+An illite is <em>defined</em> by having less, 0.75 to 0.9 of an atom per O<sub>10</sub>(OH)<sub>2</sub>,
+and the deficit is not a detail of the composition: the K sits at z&nbsp;=&nbsp;1/4 of a two-layer
+cell, exactly between the layers, so its phase factor alternates from order to order. Scanning the
+occupancy:</p>
+
+<div class="tablewrap"><table>
+<tr><th>K occupancy</th><th>002/001</th><th>003/001</th></tr>
+<tr><td class="num">1.00 (published)</td><td class="num">0.507</td><td class="num">0.868</td></tr>
+<tr><td class="num">0.90</td><td class="num">0.490</td><td class="num">0.774</td></tr>
+<tr><td class="num">0.80</td><td class="num">0.475</td><td class="num">0.698</td></tr>
+<tr><td class="num">0.70</td><td class="num">0.462</td><td class="num">0.634</td></tr>
+<tr><td class="num">0.60</td><td class="num">0.449</td><td class="num">0.581</td></tr>
+<tr><td><strong>measured</strong></td><td class="num"><strong>0.164</strong></td>
+<td class="num"><strong>0.477</strong></td></tr>
+</table></div>
+
+<p>The potassium corrects most of the 3.33&nbsp;&Aring; order and almost none of the
+5&nbsp;&Aring; one. Taken to 0.6 - already below any illite - it leaves the 5&nbsp;&Aring; order
+2.7 times too strong. So it is a real error and not the error.</p>
+
+<p><strong>What it is not.</strong> Every other parameter the calculation has was moved across its
+plausible range, at K&nbsp;=&nbsp;0.8, to see whether any of them could take the 5&nbsp;&Aring;
+order down by a factor of three:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Varied</th><th>Range</th><th>002/001</th><th>003/001</th></tr>
+<tr><td>mean crystallite thickness</td><td>4 to 60 layers</td><td class="num">0.386 &rarr; 0.551</td>
+<td class="num">0.543 &rarr; 0.826</td></tr>
+<tr><td>microstrain</td><td>0 to 0.6&nbsp;&deg;</td><td class="num">0.475 &rarr; 0.473</td>
+<td class="num">0.698 &rarr; 0.689</td></tr>
+<tr><td>irradiated specimen length</td><td>10 to 35&nbsp;mm</td>
+<td class="num">0.695 &rarr; 0.339</td><td class="num">1.395 &rarr; 0.498</td></tr>
+<tr><td>layer spacing</td><td>9.98 to 10.20&nbsp;&Aring;</td><td class="num">0.417 &rarr; 0.844</td>
+<td class="num">0.658 &rarr; 0.908</td></tr>
+<tr><td>height of the potassium</td><td>&plusmn;0.01 in z</td><td class="num">0.475 &rarr; 0.626</td>
+<td class="num">0.698 &rarr; 2.163</td></tr>
+</table></div>
+
+<p>Microstrain does nothing to a ratio of areas, as it should not. Thickness and layer spacing move
+both orders together and cannot separate them. Displacing the potassium moves them the wrong way,
+in both directions, because it is already at the symmetric position. Specimen length matters a great
+deal - the beam overflows a 20&nbsp;mm mount at 8.8&nbsp;&deg; and not at 17.7 - and at the correct
+35&nbsp;mm it brings the 3.33&nbsp;&Aring; order to 0.498 against 0.477 measured, which is right;
+but it still leaves 002/001 at 0.339, twice the measurement. Nothing in the instrument or the
+crystallite does it.</p>
+
+<p><strong>The second cause: octahedral iron.</strong> An illite carries Fe(3+) for Al in the
+octahedral sheet, 0.05 to 0.2 of the site. That sheet lies at the middle of the 2:1 layer - the plane
+the layer is nearly symmetric about - and adding an atom with three times aluminium's electrons there
+reweights the series, hardest on the order the potassium barely touched:</p>
+
+<div class="tablewrap"><table>
+<tr><th>octahedral Fe</th><th>002/001</th><th>003/001</th></tr>
+<tr><td class="num">0.00</td><td class="num">0.361</td><td class="num">0.617</td></tr>
+<tr><td class="num">0.10</td><td class="num">0.219</td><td class="num">0.529</td></tr>
+<tr><td class="num">0.15</td><td class="num">0.170</td><td class="num">0.493</td></tr>
+<tr><td class="num">0.20</td><td class="num">0.131</td><td class="num">0.462</td></tr>
+<tr><td><strong>measured</strong></td><td class="num"><strong>0.164</strong></td>
+<td class="num"><strong>0.477</strong></td></tr>
+</table></div>
+
+<p>At 0.15 of iron the calculated series is 1&nbsp;:&nbsp;0.170&nbsp;:&nbsp;0.493 against
+1&nbsp;:&nbsp;0.164&nbsp;:&nbsp;0.477 measured - within 4&nbsp;% on the 5&nbsp;&Aring; order and
+3&nbsp;% on the 3.33&nbsp;&Aring; one, from a structure and no fitted intensity. The discrepancy is
+closed.</p>
+
+<p><strong>What the library does with it.</strong> Neither substitution is known in advance for a
+given specimen, any more than a chlorite's iron is, so both are spanned and the fit chooses, exactly
+as for the chlorite octahedra (&sect;<a href="#a-20">A.20</a>). Four compositions are calculated, as
+<code>(interlayer K, octahedral Fe)</code>: <code>(1.0, 0)</code> - the published structure, which
+keeps its plain name so that nothing already written down stops matching - <code>(1.0, 0.15)</code>,
+<code>(0.9, 0.075)</code> and <code>(0.8, 0.15)</code>. They span the published structure, each
+substitution alone at the value that fits, and the chemically ordinary illite between them. The entry
+the fit selects reports its pair, so the result says which illite it found.</p>
+
+<p><strong>The interstratified host too.</strong> The illite/smectite series is built on an illite
+layer, and it would be wrong to correct the discrete illite and leave that host a muscovite: the host
+would be systematically brighter at 5&nbsp;&Aring; than the discrete illite beside it, and the split
+between the two - the one number an illite/smectite analysis is really for - would absorb the
+difference. The host takes one composition rather than an axis, because the series already spans
+fifteen compositions times ten orientations times three crystallite sizes times four layer spacings
+and a fourth axis would multiply eighteen hundred entries by four for a distinction the fit cannot
+make anyway; an illite/smectite is identified by where its interstratification orders fall, not by
+the relative heights of its host's basal series. The default is the composition that reproduces a
+measured illite.</p>
+
+<p><strong>At the command line.</strong> Both are settable, for an illite measured on your own
+specimens:</p>
+
+<pre><code>clayquant-build-library --illite-composition 1/0,0.9/0.15 --illite-smectite-host 0.9/0.15</code></pre>
+
+<p>Each pair is (interlayer potassium)/(octahedral iron). <code>--illite-smectite-host published</code>
+uses the CIF as it stands. The cell mass follows the substitutions, so the weight percent is
+consistent with whichever composition the fit chooses, exactly as for the chlorite.</p>
+
+<p><strong>A caution about reading the chemistry off it.</strong> The two levers are not
+independent in their effect on a basal series, and the best single answer here -
+K&nbsp;=&nbsp;1 with 0.15 of iron - is a phengite rather than the K-deficient illite the mineral
+name implies. What the measurement constrains tightly is the combination; the composition axis
+should be read as the structure that reproduces the pattern, not as an analysis of the specimen.
+A chemical analysis, or the 060 region for the octahedral occupancy, would settle which of the pairs
+is the specimen's own.</p>
+
 
 <h3 id="a-13">A.13 Summary</h3>
 

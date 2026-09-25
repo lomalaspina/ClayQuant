@@ -205,6 +205,7 @@ def test_a_library_limit_still_says_to_span_it(library):
 def test_an_orientation_of_one_is_a_random_powder_not_a_missing_entry(library):
     name = next(n for n in library.names if n.startswith("kaolinite_1M PO=1"))
     notes = parameters_at_an_edge(fit_entry(library, name), library)
-    orientation = next(note for note in notes if "march_dollase" in note)
+    orientation = next(note for note in notes
+                       if "march_dollase" in note and note.startswith("kaolinite_1M"))
     assert "random powder" in orientation
     assert "span it further" not in orientation

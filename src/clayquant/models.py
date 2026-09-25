@@ -35,8 +35,10 @@ __all__ = [
     "load_crystal",
     "load_layer",
     "chlorite_crystal",
+    "illite_crystal",
     "chlorite_layer",
     "CHLORITE_OCTAHEDRA",
+    "ILLITE_OCTAHEDRON_TOLERANCE",
     "use_refined_structures",
     "clear_refined_structures",
     "refined_structures",
@@ -214,6 +216,83 @@ heights the two substitutions act differently on the basal orders - which is
 what makes them separable from a measured basal series
 (:func:`clayquant.composition.fit_chlorite_iron`).
 """
+
+
+ILLITE_OCTAHEDRON_TOLERANCE = 0.05
+"""How near a layer plane an aluminium site must sit to be the octahedral one.
+
+In fractional coordinates of the two-layer cell, whose layers are centred at
+z = 0 and z = 1/2.  The illite structure puts its octahedral aluminium at
+z = 0.007 and its tetrahedral aluminium at z = 0.137, so the two are separated
+by twenty times this tolerance and the assignment is not delicate; it is written
+by height rather than by site label so that another illite CIF, whose labels
+will not be the same, is still read correctly or refused outright.
+"""
+
+
+def illite_crystal(potassium: float = 1.0, iron: float = 0.0) -> Crystal:
+    """The illite structure with this interlayer potassium and octahedral iron.
+
+    Two substitutions, and between them they account for the basal series of a
+    measured illite, which the published structure does not.
+
+    The published structure (ICSD 90144) carries K at full occupancy, which is a
+    muscovite: an illite is defined by having less, 0.75 to 0.9 of an atom per
+    O10(OH)2.  The K sits at z = 1/4 of the two-layer cell, exactly between the
+    layers, so its phase factor alternates: it subtracts from the 10 A
+    reflection, adds to the 5 A one and subtracts from the 3.33 A one.  Removing
+    some of it therefore lowers the higher orders against the first.
+
+    ``iron`` is the fraction of the octahedral aluminium replaced by Fe(3+),
+    which an illite carries in the range 0.05 to 0.2.  That sheet lies at the
+    middle of the 2:1 layer, so it is the term the layer is nearly symmetric
+    about, and adding an atom with three times aluminium's electrons there
+    reweights the whole series - most strongly the 5 A order, which the
+    potassium barely moves.
+
+    Measured on an illite standard on this instrument, the basal series is
+    1 : 0.164 : 0.477.  The published structure calculates 1 : 0.507 : 0.868 -
+    the 5 A order three times too strong and the 3.33 A order nearly twice.
+    Lowering the potassium to 0.6 brings the 3.33 A order to 0.581 and leaves
+    the 5 A order at 0.449, so it cannot be the whole explanation; 0.15 of
+    octahedral iron gives 1 : 0.170 : 0.493, which is the measurement to within
+    4 per cent on both.  Sec. A.35 of the manual sets out what else was tried -
+    crystallite thickness, microstrain, specimen length, layer spacing and the
+    height of the potassium itself - and why none of them does it.
+    """
+    value = float(potassium)
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("the potassium occupancy must lie in [0, 1]")
+    fraction = float(iron)
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError("the octahedral iron fraction must lie in [0, 1]")
+    base = load_crystal("illite")
+    if not any(site.label.startswith("K") for site in base.sites):
+        raise ValueError("the illite structure has no interlayer potassium site")
+
+    def is_octahedral(site) -> bool:
+        if not site.species.startswith("Al"):
+            return False
+        # Distance to the nearer of the two layer planes, z = 0 and z = 1/2.
+        height = abs((site.z % 0.5 + 0.5) % 0.5)
+        return min(height, 0.5 - height) < ILLITE_OCTAHEDRON_TOLERANCE
+
+    if fraction and not any(is_octahedral(site) for site in base.sites):
+        raise ValueError("the illite structure has no octahedral aluminium site")
+
+    sites = []
+    for site in base.sites:
+        if site.label.startswith("K"):
+            sites.append(dataclasses.replace(site, occupancy=value))
+        elif fraction and is_octahedral(site):
+            sites.append(dataclasses.replace(
+                site, occupancy=site.occupancy * (1.0 - fraction)))
+            sites.append(dataclasses.replace(
+                site, label=f"{site.label}_Fe", species="Fe3+",
+                occupancy=site.occupancy * fraction))
+        else:
+            sites.append(site)
+    return dataclasses.replace(base, sites=sites)
 
 
 def chlorite_crystal(

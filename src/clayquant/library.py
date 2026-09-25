@@ -37,6 +37,7 @@ from .models import (
     available_phases,
     chlorite_crystal,
     eg_smectite_layer,
+    illite_crystal,
     load_crystal,
     load_layer,
     use_refined_structures,
@@ -64,6 +65,8 @@ __all__ = [
     "DEFAULT_PEAK_SHAPE",
     "DISCRETE_STRAINS",
     "HOST_THICKNESSES",
+    "ILLITE_COMPOSITION",
+    "ILLITE_SMECTITE_HOST",
     "describe_instrument_mismatch",
     "instrument_from_measurement",
     "CONTINUUM_WINDOW",
@@ -171,6 +174,54 @@ Whether the parameter is literally iron, or the hydroxide sheet's height, or its
 occupancy, is not settled by this: it is one number that moves the sum of the two
 sheets against their contrast, and with it two real chlorites are describable and
 with the published structure alone neither is.
+"""
+
+ILLITE_COMPOSITION: tuple[tuple[float, float], ...] = (
+    (1.0, 0.000),
+    (1.0, 0.150),
+    (0.9, 0.075),
+    (0.8, 0.150),
+)
+"""Illite compositions to calculate, as ``(interlayer K, octahedral Fe)`` pairs.
+
+Both substitutions are real in an illite and neither is known in advance, any
+more than a chlorite's iron is, so they are spanned and the fit chooses; the
+entry it picks reports the pair.
+
+They are here because the published structure does not reproduce a measured
+illite.  ICSD 90144 carries K at full occupancy - that is a muscovite - and no
+octahedral iron, and it calculates a basal series of 1 : 0.507 : 0.868 where the
+standard measures 1 : 0.164 : 0.477: the 5 A order three times too strong and
+the 3.33 A order nearly twice.  The potassium sits exactly between the layers,
+so its phase factor alternates and removing it lowers the higher orders; it
+corrects most of the 3.33 A error and almost none of the 5 A one.  The
+octahedral iron sits at the middle of the 2:1 layer and does the rest: 0.15 of
+it gives 1 : 0.170 : 0.493, the measurement to within 4 per cent on both orders.
+
+The four pairs span the published structure, each substitution on its own at the
+value that fits, and the chemically ordinary illite between them.  Sec. A.35 of
+the manual records the scan and what else was ruled out.
+"""
+
+ILLITE_SMECTITE_HOST: tuple[float, float] = (1.0, 0.150)
+"""The illite composition used for the illite/smectite host layer.
+
+One pair, not an axis. The discrete illite is calculated at each of
+:data:`ILLITE_COMPOSITION` and the fit chooses among them, but the
+interstratified series already spans fifteen compositions, ten orientations,
+three crystallite sizes and four layer spacings, so giving it a fourth axis
+would multiply eighteen hundred entries by four for a distinction the fit
+cannot make anyway: an illite/smectite is identified by where its
+interstratification orders fall, not by the relative heights of a host's basal
+series.
+
+What it must not be is the published structure, which is an iron-free muscovite
+and calculates a 5 A order three times too strong (Sec. A.35). The host would
+then be systematically brighter at 5 A than the discrete illite beside it, and
+the split between the two - the one number an illite/smectite analysis is really
+for - would absorb the difference. The default is the composition that
+reproduces a measured illite on this instrument. Pass ``None`` for the published
+structure, or another pair measured on your own illite.
 """
 
 DISCRETE_STRAINS: dict[str, tuple[float, ...]] = {
@@ -716,6 +767,8 @@ def build_library(
     illite_smectite: tuple[float, ...] = ILLITE_SMECTITE_FRACTIONS,
     chlorite_smectite: tuple[float, ...] = CHLORITE_SMECTITE_FRACTIONS,
     chlorite_iron: tuple[tuple[float, float], ...] = CHLORITE_IRON,
+    illite_composition: tuple[tuple[float, float], ...] = ILLITE_COMPOSITION,
+    illite_smectite_host: tuple[float, float] | None = ILLITE_SMECTITE_HOST,
     csds_means: tuple[float, ...] = CSDS_MEANS,
     strains: dict[str, tuple[float, ...]] | None = None,
     csds_beta: float = 0.35,
@@ -779,6 +832,17 @@ def build_library(
         out of this axis altogether because its basal widths already come from a
         crystallite thickness distribution that the fit chooses among.  Pass
         ``{}`` for the instrumental width throughout.
+    illite_composition:
+        Illite compositions to calculate, as ``(interlayer potassium, octahedral
+        iron)`` pairs; see :data:`ILLITE_COMPOSITION`.  Each pair produces its
+        own set of illite entries, all grouped under the phase ``illite``, so
+        the fit chooses among compositions as it chooses among layer spacings.
+        Empty calculates the published structure alone, which is a muscovite
+        with no iron and does not reproduce a measured illite.
+    illite_smectite_host:
+        The single ``(potassium, iron)`` pair the illite/smectite host layer is
+        built from; see :data:`ILLITE_SMECTITE_HOST`.  ``None`` uses the
+        published structure.
     chlorite_iron:
         Octahedral iron fractions to calculate chlorite for, as
         ``(2:1 sheet, hydroxide sheet)`` pairs; see :data:`CHLORITE_IRON`.
@@ -855,6 +919,9 @@ def build_library(
             "illite_smectite": list(illite_smectite),
             "chlorite_smectite": list(chlorite_smectite),
             "chlorite_iron": [list(pair) for pair in chlorite_iron],
+            "illite_composition": [list(pair) for pair in illite_composition],
+            "illite_smectite_host": (None if illite_smectite_host is None
+                                     else list(illite_smectite_host)),
             "strains": {key: list(value) for key, value in strains.items()},
             "csds_means": [distribution.mean for distribution in distributions],
             "csds_beta": csds_beta,
@@ -878,6 +945,13 @@ def build_library(
     # chlorite at each octahedral iron content asked for.
     for key, source in CIF_SOURCES.items():
         variants: list[tuple[Crystal, str]] = [(load_crystal(key), "")]
+        if key == "illite" and illite_composition:
+            # The published structure keeps its plain name, as the chlorite does.
+            variants = [
+                (illite_crystal(k, fe),
+                 "" if (k, fe) == (1.0, 0.0) else f" K={k:g}/Fe={fe:g}")
+                for k, fe in illite_composition
+            ]
         if key == "chlorite" and chlorite_iron:
             # The published structure keeps its plain name; only a substituted
             # one is labelled.  Otherwise adding the iron series renames an
@@ -979,9 +1053,14 @@ def build_library(
         ("illite", illite_smectite, "I/S"),
         ("chlorite", chlorite_smectite, "C/S"),
     ):
-        base_host = load_crystal(host_key)
-        base_layer = load_layer(host_key)
         layers_per_cell = CIF_SOURCES[host_key].layers_per_cell
+        if host_key == "illite" and illite_smectite_host is not None:
+            base_host = illite_crystal(*illite_smectite_host)
+            base_layer = base_host.layer_model(layers_per_cell=layers_per_cell,
+                                               name=host_key)
+        else:
+            base_host = load_crystal(host_key)
+            base_layer = load_layer(host_key)
         wavelengths, _ = instrument.sample_emission()
         d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(extended[-1] / 2.0)))
         spacings = host_thicknesses.get(host_key) or (base_layer.thickness,)
@@ -1232,22 +1311,40 @@ def main(argv: list[str] | None = None) -> int:
             "own pure chlorites with clayquant.composition.fit_chlorite_iron"
         ),
     )
+    parser.add_argument(
+        "--illite-composition",
+        default=None,
+        metavar="PAIRS",
+        help=(
+            "illite compositions to calculate, as 'k/fe,k/fe' pairs of "
+            "(interlayer potassium)/(octahedral iron) occupancies, for example "
+            "1/0,0.9/0.15; the published structure is 1/0, which is an iron-free "
+            "muscovite and calculates a 5 A order three times too strong"
+        ),
+    )
+    parser.add_argument(
+        "--illite-smectite-host",
+        default=None,
+        metavar="K/FE",
+        help=(
+            "the single illite composition the illite/smectite host layer is built "
+            "from, as (interlayer potassium)/(octahedral iron); 'published' uses the "
+            "CIF as it stands, which is an iron-free muscovite"
+        ),
+    )
     parser.add_argument("--quiet", action="store_true")
     arguments = parser.parse_args(argv)
 
-    iron: tuple[tuple[float, float], ...] = CHLORITE_IRON
-    if arguments.chlorite_iron:
+    def occupancy_pairs(text: str, shape: str) -> tuple[tuple[float, float], ...]:
+        """Parse ``a/b,a/b`` into pairs, reporting the caller's own wording."""
         pairs = []
-        for part in arguments.chlorite_iron.split(","):
+        for part in text.split(","):
             part = part.strip()
             if not part:
                 continue
             halves = part.split("/")
             if len(halves) != 2:
-                parser.error(
-                    f"{part!r} is not an iron pair; write each as (2:1 sheet)/(hydroxide "
-                    "sheet), for example 0.35/0.20"
-                )
+                parser.error(f"{part!r} is not a pair; write each as {shape}")
             try:
                 a, b = (float(half) for half in halves)
             except ValueError:
@@ -1255,7 +1352,34 @@ def main(argv: list[str] | None = None) -> int:
             if not (0.0 <= a <= 1.0 and 0.0 <= b <= 1.0):
                 parser.error(f"{part!r}: an occupancy lies between 0 and 1")
             pairs.append((a, b))
-        iron = tuple(pairs)
+        return tuple(pairs)
+
+    iron: tuple[tuple[float, float], ...] = CHLORITE_IRON
+    if arguments.chlorite_iron:
+        iron = occupancy_pairs(
+            arguments.chlorite_iron,
+            "(2:1 sheet)/(hydroxide sheet), for example 0.35/0.20",
+        )
+
+    composition: tuple[tuple[float, float], ...] = ILLITE_COMPOSITION
+    if arguments.illite_composition:
+        composition = occupancy_pairs(
+            arguments.illite_composition,
+            "(interlayer K)/(octahedral Fe), for example 0.9/0.15",
+        )
+
+    host_composition: tuple[float, float] | None = ILLITE_SMECTITE_HOST
+    if arguments.illite_smectite_host:
+        if arguments.illite_smectite_host.strip().lower() == "published":
+            host_composition = None
+        else:
+            pair = occupancy_pairs(
+                arguments.illite_smectite_host,
+                "(interlayer K)/(octahedral Fe), for example 0.9/0.15",
+            )
+            if len(pair) != 1:
+                parser.error("--illite-smectite-host takes one pair, not a list")
+            host_composition = pair[0]
 
     def phase_list(value):
         return [part.strip() for part in value.split(",") if part.strip()] if value else None
@@ -1345,6 +1469,8 @@ def main(argv: list[str] | None = None) -> int:
         grid=two_theta_grid(arguments.start, arguments.stop, arguments.step),
         instrument=instrument,
         chlorite_iron=iron,
+        illite_composition=composition,
+        illite_smectite_host=host_composition,
         csds_means=tuple(arguments.csds_means),
         csds_beta=arguments.csds_beta,
         strains=_parse_strains(arguments.strains),
