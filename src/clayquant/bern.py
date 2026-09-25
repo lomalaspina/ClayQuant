@@ -27,7 +27,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .crystal import AtomSite, Crystal
+from .crystal import AtomSite, Crystal, _unquote, read_cif
 
 __all__ = [
     "PhaseDefinition",
@@ -264,6 +264,15 @@ class PhaseDefinition:
     stated_mass: float | None = None
     stated_volume: float | None = None
     source_item: str = ""
+    symops: list[str] | None = None
+    """Symmetry operations, where the source states them rather than a symbol.
+
+    A CIF lists them; a TOPAS block gives a space group symbol to expand.  One
+    is as good as the other to everything downstream, and stating them is in
+    fact the better of the two, because expanding a symbol needs ``gemmi`` and
+    a symbol spelled the way gemmi expects.
+    """
+
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -535,6 +544,70 @@ def looks_like_a_macro_library(text: str) -> bool:
     return "<item name=" in text
 
 
+def parse_cif_structure(
+    path: str | Path, skipped: list[str] | None = None
+) -> list[PhaseDefinition]:
+    """Read one CIF as a phase definition, for a mineral TOPAS has no item for.
+
+    The accompanying minerals normally come from the TOPAS structure library,
+    which is the right source when the library has them.  It does not have
+    everything: a specimen can contain a mineral nobody in the lab has refined,
+    and then a published CIF - from COD, AMCSD or a subscription - is what
+    there is.  This reads one, so that such a mineral can be quantified beside
+    the rest rather than left as unexplained intensity.
+
+    The name is taken from ``_chemical_name_mineral`` where the file states one
+    and from the file's own name otherwise, because that name is the phase's
+    identity everywhere afterwards: in the fit, in the table, in the export.
+    Symmetry is taken from the file's operation list, which is why this needs no
+    space group symbol and no ``gemmi``.
+    """
+    path = Path(path)
+    try:
+        crystal = read_cif(path)
+    except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+        _note_skipped(skipped, path.name, f"could not be read as a CIF: {exc}")
+        return []
+
+    text = path.read_text(errors="replace")
+    name = ""
+    for line in text.splitlines():
+        if line.strip().startswith("_chemical_name_mineral"):
+            name = _unquote(line.split(None, 1)[1].strip()) if len(line.split()) > 1 else ""
+            break
+    if not name:
+        # "sepiolite_COD_9014723" -> "Sepiolite".  A file named after its
+        # mineral is the ordinary case, and a name that is nothing but a
+        # database code would be useless in a results table.
+        stem = re.split(r"[_-]", path.stem)[0]
+        name = stem[:1].upper() + stem[1:]
+
+    if not crystal.sites:
+        _note_skipped(skipped, name, f"{path.name} holds no atom sites")
+        return []
+
+    return [PhaseDefinition(
+        name=name,
+        cell={"a": crystal.a, "b": crystal.b, "c": crystal.c,
+              "alpha": crystal.alpha, "beta": crystal.beta, "gamma": crystal.gamma},
+        space_group=_cif_value(text, "_space_group_name_H-M_alt")
+        or _cif_value(text, "_symmetry_space_group_name_H-M")
+        or "unstated",
+        sites=list(crystal.sites),
+        source_item=path.name,
+        symops=list(crystal.symops),
+    )]
+
+
+def _cif_value(text: str, tag: str) -> str:
+    """The value of a non-looped CIF tag, or an empty string."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(tag) and len(stripped) > len(tag):
+            return _unquote(stripped[len(tag):].strip())
+    return ""
+
+
 def parse_refinement(
     path: str | Path, skipped: list[str] | None = None
 ) -> list[PhaseDefinition]:
@@ -554,6 +627,8 @@ def parse_refinement(
     matters here, because a refinement that models a clay as a peaks phase
     contributes no structure for it.
     """
+    if Path(path).suffix.lower() == ".cif":
+        return parse_cif_structure(path, skipped=skipped)
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     if looks_like_a_macro_library(text):
         return parse_macro_library(path, skipped=skipped)
@@ -782,7 +857,7 @@ def write_phase_database(
     disagreements: list[str] = []
     for phase in phases:
         try:
-            symops = symmetry_operations(phase.space_group)
+            symops = phase.symops or symmetry_operations(phase.space_group)
         except ValueError as exc:
             failures.append(f"{phase.name}: {exc}")
             continue

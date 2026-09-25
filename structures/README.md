@@ -54,3 +54,40 @@ This needs `gemmi` (`pip install -e ".[import]"`), which is used only to expand
 space group symbols; the generated `phases.json` stores the symmetry operations
 explicitly, so nothing else is needed to read it afterwards. That file is
 derived from licensed structure data too, and is likewise kept out of git.
+
+### A mineral the library does not have
+
+A specimen can contain something nobody in the lab has refined. Give the same
+command a CIF and it becomes a phase alongside the rest — the file states its
+symmetry operations, so this path needs no `gemmi` and no space group symbol:
+
+```bash
+clayquant-import-structures your_structures.xml sepiolite_COD_9014723.cif \
+    -o structures/phases.json
+```
+
+The phase is named after the file's `_chemical_name_mineral`, or after the file
+itself if it does not state one, and that name is what appears in the results
+table. Sources are read in increasing order of authority, so a CIF given last
+replaces a phase of the same name from the library.
+
+The CIF has to carry `_atom_site_type_symbol`. Some AMCSD exports give only
+`_atom_site_label`, whose spellings — `Wat10`, `O-H2`, `AlMg1` — do not name an
+element unambiguously; take the same structure from COD instead, which does.
+
+### The fibrous clays
+
+Sepiolite and palygorskite are clay minerals but not layer silicates: they are
+chain silicates, their crystallites are laths rather than plates, and their
+strongest reflection is a `110` — 12.1 Å for sepiolite, 10.4 Å for palygorskite
+— and not a basal series. They are therefore accompanying minerals here, imported
+as CIFs and fitted like quartz, rather than members of the oriented clay library.
+Both are in COD, public domain:
+
+| Mineral | COD | Reference |
+| --- | --- | --- |
+| Sepiolite | 9014723 | Sanchez *et al.* (2011) *Am. Mineral.* **96**, 1443–1454 |
+| Palygorskite | 1533365 (C2/m) or 1533366 (Pbmn) | Chiari, Giustetto & Ricchiardi (2003) *Eur. J. Mineral.* **15**, 21–33 |
+
+The two palygorskite entries are the same structure in two settings; import one,
+since the second would replace the first under the same mineral name.
