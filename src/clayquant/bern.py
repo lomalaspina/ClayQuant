@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .crystal import AtomSite, Crystal, _unquote, read_cif
+from .models import MINERAL_HABIT
 
 __all__ = [
     "PhaseDefinition",
@@ -588,6 +589,7 @@ def parse_cif_structure(
 
     return [PhaseDefinition(
         name=name,
+        po_hkl=MINERAL_HABIT.get(name.lower()),
         cell={"a": crystal.a, "b": crystal.b, "c": crystal.c,
               "alpha": crystal.alpha, "beta": crystal.beta, "gamma": crystal.gamma},
         space_group=_cif_value(text, "_space_group_name_H-M_alt")
@@ -948,6 +950,7 @@ def load_phase_database(path: str | Path) -> dict[str, Crystal]:
             ],
             symops=record["symops"],
             name=record["name"],
+            po_axis=(tuple(record["po_hkl"]) if record.get("po_hkl") else None),
             source=(
                 f"{record['name']}"
                 + (f" (ICSD {record['icsd']})" if record.get("icsd") else "")

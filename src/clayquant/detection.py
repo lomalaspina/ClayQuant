@@ -665,7 +665,15 @@ def screen_phases(
         if only is not None and name not in only:
             continue
         try:
-            one = powder_pattern(crystal, grid, reference, r_march_dollase=1.0, name=name)
+            # A mineral with a habit is screened at the middle of the range the
+            # fit would span for it, not as a random powder: a lath lying on a
+            # side face puts most of its intensity into one reflection, and a
+            # random-powder column spreads it over many and can miss it
+            # altogether.  Equant minerals keep r = 1, which is what they are.
+            pole = crystal.po_axis
+            one = powder_pattern(crystal, grid, reference,
+                                 r_march_dollase=0.5 if pole else 1.0,
+                                 po_axis=pole or (0.0, 0.0, 1.0), name=name)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the screen
             continue
         if float(np.max(one.intensity)) <= 0.0:

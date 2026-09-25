@@ -600,14 +600,24 @@ def gui_instrument(
     )
 
 
+HABIT_ORIENTATIONS: tuple[float, ...] = (0.3, 0.5, 0.7, 1.0)
+"""March-Dollase values spanned for an accompanying mineral that has a habit."""
+
+
 def _with_main_minerals(library):
     """Return the library with the confirmed main minerals appended.
 
-    Each selected phase is calculated on the library's own grid and added as one
-    entry.  They are deliberately calculated without preferred orientation:
-    quartz, feldspar and carbonate grains that survive the separation are
-    scattered through the mount rather than plated onto the glass, so there is no
-    reason to apply the clay texture to them.
+    Most are calculated as one entry without preferred orientation, and that is
+    deliberate: quartz, feldspar and carbonate grains that survive the
+    separation are equant and scattered through the mount rather than plated
+    onto the glass, so there is no reason to apply the clay texture to them.
+
+    A mineral whose crystallites are *not* equant is the exception, and it is
+    given the same treatment the clays get: its orientation is spanned about its
+    own pole and the fit chooses, exactly as it chooses among clay orientations.
+    Sepiolite and palygorskite are the case this exists for - laths that settle
+    on a side face - and forcing a lath to be a random powder misplaces every
+    line it has (Sec. A.37).
     """
     if not STATE.selected_main or not STATE.phase_database:
         return library, 0
@@ -625,14 +635,19 @@ def _with_main_minerals(library):
         crystal = STATE.phase_database.get(name)
         if crystal is None:
             continue
-        pattern = powder_pattern(
-            crystal, library.two_theta, instrument, r_march_dollase=1.0, name=name
-        )
-        if float(np.max(pattern.intensity)) <= 0.0:
-            continue
-        extended.add(pattern, phase=name, march_dollase=1.0,
-                     unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
-        added += 1
+        pole = crystal.po_axis
+        orientations = HABIT_ORIENTATIONS if pole else (1.0,)
+        for r in orientations:
+            pattern = powder_pattern(
+                crystal, library.two_theta, instrument, r_march_dollase=r,
+                po_axis=pole or (0.0, 0.0, 1.0),
+                name=name if r == 1.0 and not pole else f"{name} PO={r:g}",
+            )
+            if float(np.max(pattern.intensity)) <= 0.0:
+                continue
+            extended.add(pattern, phase=name, march_dollase=r,
+                         unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
+            added += 1
     return extended, added
 
 

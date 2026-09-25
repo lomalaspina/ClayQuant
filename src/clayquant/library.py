@@ -178,8 +178,8 @@ with the published structure alone neither is.
 
 ILLITE_COMPOSITION: tuple[tuple[float, float], ...] = (
     (1.0, 0.000),
-    (1.0, 0.150),
     (0.9, 0.075),
+    (0.9, 0.150),
     (0.8, 0.150),
 )
 """Illite compositions to calculate, as ``(interlayer K, octahedral Fe)`` pairs.
@@ -198,9 +198,20 @@ corrects most of the 3.33 A error and almost none of the 5 A one.  The
 octahedral iron sits at the middle of the 2:1 layer and does the rest: 0.15 of
 it gives 1 : 0.170 : 0.493, the measurement to within 4 per cent on both orders.
 
-The four pairs span the published structure, each substitution on its own at the
-value that fits, and the chemically ordinary illite between them.  Sec. A.35 of
-the manual records the scan and what else was ruled out.
+The potassium stays inside the range that defines the mineral, 0.75 to 0.9 per
+O10(OH)2, and that is a constraint on the axis rather than an outcome of it.
+Fitted freely, the measured series is matched marginally better by full
+potassium with 0.15 of iron - but that is a phengite, and a phengite is
+identifiable in hand specimen by its glitter, so a separate prepared from a
+sample with no visible mica is not one.  Inside the illite range the best
+member, K = 0.9 with 0.15 of iron, calculates 1 : 0.173 : 0.449 against
+1 : 0.164 : 0.477 measured, which is within 6 per cent on both orders: nothing
+is given up by respecting the mineralogy.
+
+The four pairs are the published structure, kept under its plain name so that
+nothing already written down stops matching, and three illites spanning both
+substitutions.  Sec. A.35 of the manual records the scan and what else was
+ruled out.
 """
 
 ILLITE_SMECTITE_HOST: tuple[float, float] = (1.0, 0.150)

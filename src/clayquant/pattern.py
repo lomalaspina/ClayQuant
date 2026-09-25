@@ -23,6 +23,7 @@ Three generators are provided:
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -164,13 +165,20 @@ class Reflections:
         return (self.hkl[:, 0] == 0) & (self.hkl[:, 1] == 0)
 
 
-def reflections(crystal: Crystal, d_min: float) -> Reflections:
+def reflections(
+    crystal: Crystal, d_min: float, po_axis: Sequence[float] = (0.0, 0.0, 1.0)
+) -> Reflections:
     """Enumerate all reflections of ``crystal`` with ``d >= d_min``.
 
     The full sphere of reciprocal lattice points is enumerated (excluding
     ``000``), each as a separate reflection.  Friedel pairs therefore appear
     twice, which is correct: both contribute their own diffraction ring, and
     each carries its own preferred-orientation factor.
+
+    ``po_axis`` is the pole the stored ``alpha`` is measured from, and so the
+    axis any March-Dollase factor built from this list will be about.  ``c*`` is
+    the default because a clay platelet is flattened on 001; see
+    :meth:`Crystal.angle_to`.
     """
     if d_min <= 0:
         raise ValueError("d_min must be positive")
@@ -189,7 +197,7 @@ def reflections(crystal: Crystal, d_min: float) -> Reflections:
         hkl=grid,
         d=1.0 / inv_d,
         f_squared=np.abs(f) ** 2,
-        alpha=crystal.angle_to_cstar(grid),
+        alpha=crystal.angle_to(grid, po_axis),
     )
 
 
@@ -231,21 +239,31 @@ def powder_pattern(
     instrument: Instrument | None = None,
     r_march_dollase: float = 1.0,
     name: str = "",
+    po_axis: Sequence[float] = (0.0, 0.0, 1.0),
 ) -> Pattern:
     """Simulate the powder pattern of a crystal structure.
 
     Parameters
     ----------
     r_march_dollase:
-        March-Dollase preferred-orientation parameter about ``c*``.  ``1`` is a
-        random powder; smaller values describe platelets lying flat, as in an
-        oriented clay mount.
+        March-Dollase preferred-orientation parameter about ``po_axis``.  ``1``
+        is a random powder; values below 1 describe crystallites whose
+        ``po_axis`` planes lie flat on the mount, and values above 1 the
+        opposite - that axis lying *in* the mount plane, which is what a lath
+        or a needle does when it settles.
+    po_axis:
+        The pole the orientation is about, in Miller indices.  ``c*`` describes
+        a platelet flattened on 001, which is every layer silicate and so the
+        default.  It is not every clay mineral: sepiolite and palygorskite are
+        chain silicates whose crystallites are laths, and on the specimen
+        measured here a sepiolite settles on its 110 face - about ``c*``,
+        nothing describes it (Sec. A.37).
     """
     grid = two_theta_grid() if grid is None else np.asarray(grid, dtype=float)
     instrument = instrument or Instrument()
     wavelengths, _ = instrument.sample_emission()
     d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
-    found = reflections(crystal, d_min)
+    found = reflections(crystal, d_min, po_axis=po_axis)
     intensity = _build_from_reflections(found, grid, instrument, r_march_dollase)
     return Pattern(
         two_theta=grid,

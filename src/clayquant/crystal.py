@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -293,6 +294,17 @@ class Crystal:
     name: str = ""
     source: str = ""
     default_b_iso: float = 1.0
+    po_axis: tuple[float, float, float] | None = None
+    """The pole of this mineral's preferred orientation, in Miller indices.
+
+    A habit rather than a structural parameter: it says which face the
+    crystallites settle on, which is a property of how the mineral grows and not
+    of its cell.  ``None`` means an equant crystallite with no orientation worth
+    describing, which is most accompanying minerals.  Every layer silicate is
+    flattened on 001 and so has ``(0, 0, 1)``, which is also what the clay
+    library assumes throughout; a lath-shaped mineral does not, and saying so is
+    the only way its pattern can be described at all (Sec. A.37).
+    """
 
     def __post_init__(self) -> None:
         self.sites = [
@@ -348,16 +360,32 @@ class Crystal:
         """Basal spacing ``d(001) = 1/|c*|`` in A."""
         return float(self.d_spacing([[0, 0, 1]])[0])
 
-    def angle_to_cstar(self, hkl: np.ndarray) -> np.ndarray:
-        """Angle in radians between each reflection vector and the ``c*`` axis."""
+    def angle_to(self, hkl: np.ndarray, pole: Sequence[float]) -> np.ndarray:
+        """Angle in radians between each reflection vector and a reciprocal direction.
+
+        ``pole`` is given in Miller indices, so ``(0, 0, 1)`` is ``c*`` and
+        ``(1, 1, 0)`` the normal of the 110 planes.  This is the angle a
+        preferred-orientation factor needs: the March-Dollase distribution is
+        about a *pole*, and which pole depends on the crystallite's shape.  A
+        clay platelet is flattened on 001, so its pole is ``c*`` and that is the
+        default everywhere; a lath-shaped crystallite is not, and a sepiolite
+        lying on its 110 face needs the 110 pole to be described at all.
+        """
         hkl = np.atleast_2d(np.asarray(hkl, dtype=float))
+        pole = np.asarray(pole, dtype=float)
         gstar = self.metric_reciprocal
-        cstar = np.array([0.0, 0.0, 1.0])
-        numerator = np.einsum("ni,ij,j->n", hkl, gstar, cstar)
-        denominator = self.inv_d(hkl) * math.sqrt(cstar @ gstar @ cstar)
+        length = float(pole @ gstar @ pole)
+        if length <= 0.0:
+            raise ValueError(f"{tuple(pole)} is not a direction")
+        numerator = np.einsum("ni,ij,j->n", hkl, gstar, pole)
+        denominator = self.inv_d(hkl) * math.sqrt(length)
         with np.errstate(invalid="ignore", divide="ignore"):
             cosine = np.clip(numerator / denominator, -1.0, 1.0)
         return np.arccos(cosine)
+
+    def angle_to_cstar(self, hkl: np.ndarray) -> np.ndarray:
+        """Angle in radians between each reflection vector and the ``c*`` axis."""
+        return self.angle_to(hkl, (0.0, 0.0, 1.0))
 
     # -- content --------------------------------------------------------------
     @property

@@ -39,6 +39,7 @@ __all__ = [
     "chlorite_layer",
     "CHLORITE_OCTAHEDRA",
     "CHLORITE_HYDROXYL",
+    "MINERAL_HABIT",
     "ILLITE_OCTAHEDRON_TOLERANCE",
     "use_refined_structures",
     "clear_refined_structures",
@@ -231,6 +232,27 @@ will not be the same, is still read correctly or refused outright.
 """
 
 
+MINERAL_HABIT: dict[str, tuple[int, int, int]] = {
+    "sepiolite": (1, 1, 0),
+    "palygorskite": (1, 1, 0),
+}
+"""Preferred-orientation pole per mineral, for minerals that are not platelets.
+
+Keyed on a lower-case mineral name.  A mineral absent from this table is taken
+to be equant, which is the right assumption for quartz, the feldspars and the
+carbonates in a clay mount, and a layer silicate is flattened on 001, which the
+clay library assumes throughout without needing an entry here.
+
+Sepiolite and palygorskite are the reason the table exists.  They are clay
+minerals but not layer silicates: chain silicates whose crystallites are laths,
+elongated along c, which settle on a side face rather than on a basal plane.
+Measured on the sepiolite standard, no orientation about c* improves the fit
+at all - every value below 1 makes it worse, which is what "this is not a
+platelet" looks like - while orientation about the 110 pole does improve it
+(Sec. A.37).
+"""
+
+
 CHLORITE_HYDROXYL: dict[str, tuple[str, ...]] = {
     "oxygen": ("O7", "O8", "O9"),
     "hydrogen": ("H2", "H3", "H4"),
@@ -266,9 +288,9 @@ def illite_crystal(potassium: float = 1.0, iron: float = 0.0) -> Crystal:
     1 : 0.164 : 0.477.  The published structure calculates 1 : 0.507 : 0.868 -
     the 5 A order three times too strong and the 3.33 A order nearly twice.
     Lowering the potassium to 0.6 brings the 3.33 A order to 0.581 and leaves
-    the 5 A order at 0.449, so it cannot be the whole explanation; 0.15 of
-    octahedral iron gives 1 : 0.170 : 0.493, which is the measurement to within
-    4 per cent on both.  Sec. A.35 of the manual sets out what else was tried -
+    the 5 A order at 0.449, so it cannot be the whole explanation; a proper
+    illite interlayer of 0.9 with 0.15 of octahedral iron gives
+    1 : 0.173 : 0.449, which is the measurement to within 6 per cent on both.  Sec. A.35 of the manual sets out what else was tried -
     crystallite thickness, microstrain, specimen length, layer spacing and the
     height of the potassium itself - and why none of them does it.
     """

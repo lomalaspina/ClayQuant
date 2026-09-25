@@ -154,6 +154,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-34">A.34 Kaolinite against the chlorite</a>
 <a href="#a-35">A.35 The illite is not a muscovite</a>
 <a href="#a-36">A.36 The chlorite after the oven</a>
+<a href="#a-37">A.37 A clay that is not a platelet</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5208,13 +5209,20 @@ specimens:</p>
 uses the CIF as it stands. The cell mass follows the substitutions, so the weight percent is
 consistent with whichever composition the fit chooses, exactly as for the chlorite.</p>
 
-<p><strong>A caution about reading the chemistry off it.</strong> The two levers are not
-independent in their effect on a basal series, and the best single answer here -
-K&nbsp;=&nbsp;1 with 0.15 of iron - is a phengite rather than the K-deficient illite the mineral
-name implies. What the measurement constrains tightly is the combination; the composition axis
-should be read as the structure that reproduces the pattern, not as an analysis of the specimen.
-A chemical analysis, or the 060 region for the octahedral occupancy, would settle which of the pairs
-is the specimen's own.</p>
+<p><strong>The potassium is bounded by the mineralogy, not by the fit.</strong> Fitted freely,
+the measured series is matched marginally better by full potassium with 0.15 of iron. That is a
+phengite, and a phengite glitters: it is identifiable in hand specimen, so a separate prepared from
+a sample with no visible mica cannot be one. The axis therefore stays inside the range that defines
+an illite, 0.75 to 0.9 of an atom, and nothing is given up by that - the best member inside it,
+K&nbsp;=&nbsp;0.9 with 0.15 of iron, calculates 1&nbsp;:&nbsp;0.173&nbsp;:&nbsp;0.449 against
+1&nbsp;:&nbsp;0.164&nbsp;:&nbsp;0.477 measured, within 6&nbsp;% on both orders. The published
+structure is kept in the axis as the muscovite end member and under its plain name, so that anything
+already written down still matches; it calculates the measured series worst of the four.</p>
+
+<p>What the basal series constrains tightly is the <em>combination</em> of the two substitutions, not
+either alone, so the composition the fit reports should be read as the structure that reproduces the
+pattern rather than as an analysis of the specimen. An X-ray fluorescence analysis of the same mount
+settles which member is really the specimen's, and is the right way to close it.</p>
 
 <h3 id="a-36">A.36 The chlorite after the oven, calculated rather than assumed</h3>
 
@@ -5264,6 +5272,69 @@ model.</p>
 standards are at &delta;&nbsp;=&nbsp;0.75 and 0.30. Neither is finished, and they are not at the same
 point, so a heated chlorite is a one-parameter family rather than a second structure to
 tabulate.</p>
+
+
+<h3 id="a-37">A.37 A clay that is not a platelet, and the pole it settles on</h3>
+
+<p><strong>The assumption that had been everywhere.</strong> Preferred orientation in ClayQuant was
+March&ndash;Dollase about <var>c</var>*, with no way to say otherwise. For a layer silicate that is
+not an assumption at all but a statement of what the mineral is: the crystallite is a plate whose
+flat face is 001, so 001 is the pole it settles on. It stops being true the moment a clay mineral is
+not a layer silicate.</p>
+
+<p><strong>Sepiolite and palygorskite.</strong> Both are clay minerals and neither is a layer
+silicate: they are chain silicates, built of 2:1 ribbons joined at their edges with channels between
+them, and their crystallites are laths elongated along <var>c</var>. Their strongest reflection is a
+110 &mdash; 12.1&nbsp;&Aring; for sepiolite, 10.4&nbsp;&Aring; for palygorskite &mdash; and not a
+basal series at all. A lath settling out of suspension comes to rest on a side face, which is a
+strong texture, but it is not a texture about <var>c</var>*.</p>
+
+<p><strong>What the measurement says.</strong> On the sepiolite standard, fitted as a single phase
+with the zero error and the peak width free:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Pole</th><th><var>r</var></th><th>R<sub>wp</sub></th></tr>
+<tr><td><var>c</var>*</td><td class="num">0.1</td><td class="num">99.8 %</td></tr>
+<tr><td><var>c</var>*</td><td class="num">0.5</td><td class="num">99.1 %</td></tr>
+<tr><td>random powder</td><td class="num">1.0</td><td class="num">95.5 %</td></tr>
+<tr><td>110</td><td class="num">0.7</td><td class="num">93.5 %</td></tr>
+<tr><td>110</td><td class="num">0.3</td><td class="num">95.2 %</td></tr>
+</table></div>
+
+<p>Every orientation about <var>c</var>* makes the fit worse, monotonically, and that is what "this
+is not a platelet" looks like in a residual. Orientation about the 110 pole improves it. The mineral
+is oriented &mdash; it just is not oriented about the axis the program could express.</p>
+
+<p><strong>What changed.</strong> <code>Crystal.angle_to</code> takes any pole in Miller indices,
+<code>reflections</code> and <code>powder_pattern</code> take a <code>po_axis</code>, and
+<code>Crystal.po_axis</code> carries a mineral's habit through the phase database. The habit is a
+property of how the mineral grows rather than of its cell, and
+<code>clayquant.models.MINERAL_HABIT</code> holds the few that need one; a mineral absent from it is
+taken to be equant, which is right for quartz, the feldspars and the carbonates in a clay mount, and
+a layer silicate keeps <var>c</var>* without needing an entry.</p>
+
+<p>An accompanying mineral with a habit is then treated as the clays are: its orientation is spanned
+and the fit chooses, instead of being forced to a random powder. It is also <em>screened</em> at the
+middle of that range rather than at <var>r</var>&nbsp;=&nbsp;1, because a lath puts most of its
+intensity into one reflection and a random-powder column spreads it over many, which can miss the
+mineral altogether.</p>
+
+<p><strong>What this does not fix.</strong> The sepiolite standard still fits badly &mdash;
+R<sub>wp</sub> 93.5&nbsp;% at best, with the crystallite size and the zero error free. Its 110 is one
+very broad peak running from 11.4 to 13.5&nbsp;&Aring; with a tail beyond 15, and essentially nothing
+above 9&nbsp;% of it anywhere else in the scan. A structural model of an ordered crystal cannot
+produce that, and the orientation axis was never going to be what made it, so the reason for the axis
+is the physics rather than that one specimen. That standard is a pharmacy product and carries at
+least one other component: a 14&ndash;15&nbsp;&Aring; shoulder in the air-dried scan that weakens on
+glycolation, as an expandable clay does when it moves to 17&nbsp;&Aring;.</p>
+
+<p><strong>Not, however, expandable itself.</strong> A sepiolite has no interlayer to glycolate; what
+it has is zeolitic water in the channels. Its 110 moves from 12.12 to about 12.3&nbsp;&Aring; between
+the air-dried and glycolated mounts, of which roughly half is the displacement difference between the
+two mounts &mdash; visible as a 0.008&nbsp;&Aring; shift of the 3.34&nbsp;&Aring; line, which cannot
+be swelling. What is left is of order 1&nbsp;%, against the 15&nbsp;&rarr;&nbsp;17&nbsp;&Aring; of a
+smectite. The channel water does leave on heating, and that is unmistakable: the 110 collapses to
+10.07&nbsp;&Aring;, the folding to sepiolite anhydride.</p>
 
 
 
