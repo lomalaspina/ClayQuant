@@ -151,6 +151,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-31">A.31 Nothing at 7.15 &Aring; is not kaolinite</a>
 <a href="#a-32">A.32 Nine pure standards</a>
 <a href="#a-33">A.33 Calculated basal intensities</a>
+<a href="#a-34">A.34 Kaolinite against the chlorite</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5013,6 +5014,91 @@ share by a point - because the orientation freedom of &sect;<a href="#a-32">A.32
 damage. The two findings are one piece of work: constrain the orientation, and correct the basal
 intensities the constraint then exposes.</p>
 
+<h3 id="a-34">A.34 Kaolinite measured against the chlorite, without heating anything</h3>
+
+<p><strong>Reasoning.</strong> Both windows kaolinite occupies are shared with chlorite: its 001 at
+12.36&nbsp;&deg; against the chlorite 002 at 12.46, its 002 at 24.85 against the chlorite 004 at
+25.06, each pair within a peak width. Neither window can be read alone, and the classical remedy -
+heat the specimen and call what disappears kaolinite - turns out to be the weaker one.</p>
+
+<p><strong>What heating actually does to a chlorite</strong>, measured on two chlorite standards
+neither of which contains kaolinite, after 1.5&nbsp;h at 550&nbsp;&deg;C:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Standard</th><th>002/001 air</th><th>002/001 heated</th><th>001 heated / 001 air</th></tr>
+<tr><td>Chlorite</td><td class="num">1.862</td><td class="num">0.168</td>
+<td class="num">3.51</td></tr>
+<tr><td>Prochlorite</td><td class="num">2.289</td><td class="num">0.752</td>
+<td class="num">2.18</td></tr>
+</table></div>
+
+<p>Heating does not simply weaken a chlorite. The hydroxide sheet dehydroxylates, which raises the
+contrast between the two sheets and lowers their sum, so the 001 - a contrast reflection - grows by
+two to three and a half times while the even orders collapse. The surviving 002/001 differs by a
+factor of 4.5 between two chlorites, and nothing can be bounded with that. The air-dried ratio
+differs by 1.23.</p>
+
+<p><strong>Method.</strong> Chlorite's 001 at 6.22&nbsp;&deg; and its 003 at 18.73&nbsp;&deg; are
+reflections kaolinite does not have at all. Each of them, times a ratio measured on the standards, is
+the chlorite's share of an overlapped window, and the rest is kaolinite - from the air-dried mount
+alone, with no heating:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Window</th><th>per chlorite 001</th><th>per chlorite 003</th></tr>
+<tr><td>7.15&nbsp;&Aring;</td><td class="num">1.862 &ndash; 2.289</td>
+<td class="num">1.691 &ndash; 2.360</td></tr>
+<tr><td>3.58&nbsp;&Aring;</td><td class="num">1.133 &ndash; 1.696</td>
+<td class="num">1.253 &ndash; 1.436</td></tr>
+</table></div>
+
+<p>Four estimates follow, two windows times two references, and they are reported together. Where
+they agree the answer is measured; where they do not, the disagreement is the uncertainty and the
+interface says so rather than averaging it away. A chlorite reflection below the noise is not treated
+as absent either: it bounds the chlorite at what a reflection at the detection limit would have
+accounted for, which is what lets a pure kaolinite - having no chlorite reflection at all - be
+answered at all.</p>
+
+<p><strong>Result.</strong> On the nine standards and on a real mixture:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Specimen</th><th>Kaolinite, share of the overlapped intensity</th><th>Verdict</th></tr>
+<tr><td>Kaolinite (1)</td><td class="num">99&ndash;100&nbsp;%</td><td>present
+<strong>&#10003;</strong></td></tr>
+<tr><td>Kaolinite (2)</td><td class="num">99&ndash;100&nbsp;%</td><td>present
+<strong>&#10003;</strong></td></tr>
+<tr><td>Dickite</td><td class="num">100&nbsp;%</td><td>present <strong>&#10003;</strong></td></tr>
+<tr><td>Chlorite</td><td class="num">0&ndash;34&nbsp;%</td><td>not established
+<strong>&#10003;</strong></td></tr>
+<tr><td>Prochlorite</td><td class="num">0&ndash;34&nbsp;%</td><td>not established
+<strong>&#10003;</strong></td></tr>
+<tr><td>Illite, montmorillonite, sepiolite</td><td>&mdash;</td><td>nothing above the noise in either
+window <strong>&#10003;</strong></td></tr>
+<tr><td>M_26_1041</td><td class="num">0&ndash;72&nbsp;%</td><td>the two references disagree</td></tr>
+</table></div>
+
+<p>All nine standards answer correctly, and no chlorite is called kaolinite. The upper bound of
+34&nbsp;% on a pure chlorite is the method's honest resolution with two standards to calibrate it -
+it comes from the 003 route, the one the standards did not define - and more chlorite standards would
+narrow it.</p>
+
+<p>On M_26_1041 the two references disagree: via the chlorite 003 the kaolinite is 24 to 46&nbsp;% of
+the overlapped intensity, and via the 001 it is zero, the 001 being large enough to account for the
+whole 7.15&nbsp;&Aring; peak by itself. A TOPAS refinement of that specimen finds 11.7&nbsp;wt&nbsp;%
+kaolinite, so the 003 route is the right one there and the 001 is being over-measured - which is what
+one would expect of a reflection sitting on the steepest part of the low-angle air scatter. The
+program reports the envelope and names the disagreement; it does not choose.</p>
+
+<p><strong>In the interface.</strong> Both windows are adjustable out to 27 and 30&nbsp;&deg;, the two
+chlorite reference windows are drawn on the plot, and each of the two diagnostics has its own
+checkbox for whether the fit should be restrained by it - the expandable one on, the kaolinite one
+off, because the kaolinite bound is new and should be read before it is trusted. With it on and the
+evidence unable to establish kaolinite, the kaolinite entries are left out of the fit, which is the
+same shape of restriction as the air-dried ceiling on the expandable clays
+(&sect;<a href="#a-25">A.25</a>). The zero error can also be typed rather than dragged, in steps of
+0.01&nbsp;&deg;, and the expandable comparison takes its own pair of shifts: a separate with no
+quartz has no line to set the zero error from, and a pattern displaced as a whole otherwise reads as
+a shift that is not there.</p>
+
 <h3 id="a-13">A.13 Summary</h3>
 
 <div class="tablewrap"><table>
@@ -5115,6 +5201,11 @@ the shared orientation</td>
 r<sup>&minus;3</sup> weighting inverted it; one orientation per mount gives 90 % and fits better. The
 illite 002 is measured 3&times; weaker than calculated and the chlorite iron axis is on the wrong
 sheet</td></tr>
+<tr><td>Kaolinite against the chlorite</td><td>10 automated; the chlorite basal
+ratios measured on two standards in both mounts; nine standards and one refined mixture answered</td>
+<td>Kaolinite measured from the air-dried mount alone against chlorite reflections kaolinite does not
+have. All nine standards correct and no chlorite called kaolinite; heating shown to enhance a
+chlorite 001 by 2.2 to 3.5 times, which is why the collapse test could not bound it</td></tr>
 <tr><td>Published page and Windows entry points</td>
 <td>12 automated; the generated page rendered at two widths; both PowerShell
 scripts parsed and their probes exercised under both of PowerShell's

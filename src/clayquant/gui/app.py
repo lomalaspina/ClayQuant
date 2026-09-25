@@ -71,14 +71,19 @@ from ..detection import (
 from ..calibration import (
     QUARTZ_100_D,
     QUARTZ_101_D,
+    apply_zero_error,
     estimate_zero_error,
     reference_two_theta,
     zero_error_profile,
 )
 from ..diagnostics import (
+    CHLORITE_001_WINDOW,
+    CHLORITE_003_WINDOW,
     EXPANDABLE_001_WINDOW,
     KAOLINITE_001_WINDOW,
+    KAOLINITE_002_WINDOW,
     kaolinite_collapse,
+    kaolinite_evidence,
     smectite_swelling,
 )
 from ..emission import CU_KA_5LINE
@@ -891,7 +896,18 @@ def zero_tab() -> html.Div:
                     ),
                     html.Div(
                         [
-                            label("Zero error (°2θ, steps of 0.01)"),
+                            label("Zero error (°2θ)"),
+                            dcc.Input(
+                                id="zero-typed", type="number", value=0.0, step=0.01,
+                                debounce=True,
+                                style={"width": "100%", "marginBottom": "6px"},
+                            ),
+                            html.Div(
+                                "Typed, in steps of 0.01\u00b0, for a separate with no "
+                                "quartz to set it from. The slider follows it.",
+                                style={"fontSize": "11px", "color": "#666",
+                                       "marginBottom": "6px"},
+                            ),
                             dcc.Slider(
                                 id="zero-slider",
                                 min=-0.5,
@@ -1090,14 +1106,25 @@ def kaolinite_tab() -> html.Div:
             html.Div(
                 [
                     html.P(
-                        "Kaolinite dehydroxylates on heating and its 7.15 Å reflection "
-                        "disappears; chlorite 002 at 7.13 Å survives. The intensity lost "
-                        "measures kaolinite, what remains measures chlorite.",
+                        "Both windows kaolinite occupies are shared with chlorite \u2014 "
+                        "its 001 at 12.36\u00b0 against the chlorite 002 at 12.46, its 002 "
+                        "at 24.85\u00b0 against the chlorite 004 at 25.06 \u2014 so neither "
+                        "can be read alone. Chlorite's 001 at 6.22\u00b0 and 003 at "
+                        "18.73\u00b0 are reflections kaolinite does not have: each of "
+                        "those, times a ratio measured on two chlorite standards, is the "
+                        "chlorite's share of an overlapped window, and the rest is "
+                        "kaolinite. Four estimates, and where they disagree the "
+                        "disagreement is the uncertainty.",
                         style={"fontSize": "0.82rem", "color": "#444"},
                     ),
                     label("7.15 Å window (°2θ)"),
-                    dcc.RangeSlider(id="kao-window", min=10.0, max=15.0, step=0.1,
-                                    value=list(KAOLINITE_001_WINDOW)),
+                    dcc.RangeSlider(id="kao-window", min=9.0, max=27.0, step=0.1,
+                                    value=list(KAOLINITE_001_WINDOW),
+                                    marks={v: f"{v:g}" for v in (9, 12, 15, 18, 21, 24, 27)}),
+                    label("3.58 Å window (°2θ)"),
+                    dcc.RangeSlider(id="kao-window-002", min=9.0, max=30.0, step=0.1,
+                                    value=list(KAOLINITE_002_WINDOW),
+                                    marks={v: f"{v:g}" for v in (9, 15, 21, 27, 30)}),
                     label("Scaling reference"),
                     dcc.Dropdown(
                         id="kao-reference",
@@ -1112,6 +1139,19 @@ def kaolinite_tab() -> html.Div:
                     label("Manual scale factor"),
                     dcc.Input(id="kao-scale", type="number", value=1.0, step=0.05,
                               style={"width": "100%"}),
+                    dcc.Checklist(
+                        id="kao-constrain",
+                        options=[{"label": " Use this as a constraint on the fit",
+                                  "value": "on"}],
+                        value=[],
+                        style={"marginTop": "10px"},
+                    ),
+                    html.Div(
+                        "Off by default: read the evidence first and decide whether you "
+                        "believe it. With it on, the fit is not allowed more kaolinite "
+                        "than this bound permits.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Button("Analyse", id="kao-run", n_clicks=0, style={"marginTop": "10px"}),
                     html.Div(id="kao-status", style={"marginTop": "10px"}),
                 ],
@@ -1153,6 +1193,37 @@ def smectite_tab() -> html.Div:
                     label("Manual scale factor"),
                     dcc.Input(id="sme-scale", type="number", value=1.0, step=0.05,
                               style={"width": "100%"}),
+                    label("Extra shift for this comparison (°2θ)"),
+                    html.Div(
+                        [
+                            dcc.Input(id="sme-shift-air", type="number", value=0.0,
+                                      step=0.01, debounce=True,
+                                      style={"width": "48%", "marginRight": "4%"}),
+                            dcc.Input(id="sme-shift-glycol", type="number", value=0.0,
+                                      step=0.01, debounce=True, style={"width": "48%"}),
+                        ],
+                        style={"display": "flex"},
+                    ),
+                    html.Div(
+                        "Air-dried, then glycolated, in steps of 0.01\u00b0. With no "
+                        "quartz in the separate the zero error cannot be set from a "
+                        "reference line, and a pattern displaced as a whole then reads "
+                        "as a shift that is not there. These move one mount against the "
+                        "other here, without touching the zero error the fit uses.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    dcc.Checklist(
+                        id="sme-constrain",
+                        options=[{"label": " Use this as a constraint on the fit",
+                                  "value": "on"}],
+                        value=["on"],
+                        style={"marginTop": "10px"},
+                    ),
+                    html.Div(
+                        "On by default, and it is the checkbox on the fit tab that acts: "
+                        "this one says whether you trust what you see here.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Button("Analyse", id="sme-run", n_clicks=0, style={"marginTop": "10px"}),
                     html.Div(id="sme-status", style={"marginTop": "10px"}),
                 ],
@@ -2141,15 +2212,40 @@ def register_callbacks(app: Dash) -> None:
         return figure, html.Div(background_report(pattern, fit, background) + applied)
 
     @app.callback(
+        Output("zero-slider", "value"),
+        Input("zero-typed", "value"),
+        prevent_initial_call=True,
+    )
+    def typed_zero_error(typed):
+        """Let the zero error be typed, for a separate with no quartz in it.
+
+        The slider's 0.01 step is fine enough, but a slider cannot be *set* to
+        0.01 reliably, and a specimen with no reference line has to be moved by
+        hand until its own reflections line up.
+        """
+        if typed is None:
+            return no_update
+        return float(np.clip(float(typed), -0.5, 0.5))
+
+    @app.callback(
+        Output("zero-typed", "value"),
+        Input("zero-slider", "value"),
+        prevent_initial_call=True,
+    )
+    def zero_error_typed_back(value):
+        return no_update if value is None else round(float(value), 3)
+
+    @app.callback(
         Output("kao-graph", "figure"),
         Output("kao-status", "children"),
         Input("kao-run", "n_clicks"),
         State("kao-window", "value"),
+        State("kao-window-002", "value"),
         State("kao-reference", "value"),
         State("kao-scale", "value"),
         prevent_initial_call=True,
     )
-    def run_kaolinite(_clicks, window, reference, manual_scale):
+    def run_kaolinite(_clicks, window, window_002, reference, manual_scale):
         air = STATE.mounts["air"].subtracted()
         heated = STATE.mounts["heated"].subtracted()
         if air is None or heated is None:
@@ -2162,6 +2258,11 @@ def register_callbacks(app: Dash) -> None:
             result = kaolinite_collapse(
                 air, heated, window=tuple(window), reference_window=reference_window, scale=scale
             )
+            evidence = kaolinite_evidence(
+                air, heated,
+                windows={"7.15": tuple(window), "3.58": tuple(window_002)},
+                scale=result.scale,
+            )
         except Exception as exc:  # noqa: BLE001
             return no_update, error_message(exc)
 
@@ -2173,8 +2274,16 @@ def register_callbacks(app: Dash) -> None:
                            line={"color": COLORS["heated"], "width": 1})
         figure.add_vrect(x0=window[0], x1=window[1], fillcolor="#ffd54f", opacity=0.25,
                          line_width=0, annotation_text="7.15 Å")
-        figure.update_xaxes(range=[max(air.two_theta[0], window[0] - 6.0),
-                                   min(air.two_theta[-1], window[1] + 12.0)])
+        figure.add_vrect(x0=window_002[0], x1=window_002[1], fillcolor="#ffd54f",
+                         opacity=0.25, line_width=0, annotation_text="3.58 Å")
+        # The chlorite reflections the kaolinite is measured against, which are
+        # the whole reason the answer is a number and not a guess.
+        for name, (low, high) in (("chlorite 001", CHLORITE_001_WINDOW),
+                                  ("chlorite 003", CHLORITE_003_WINDOW)):
+            figure.add_vrect(x0=low, x1=high, fillcolor="#90caf9", opacity=0.25,
+                             line_width=0, annotation_text=name)
+        figure.update_xaxes(range=[max(air.two_theta[0], CHLORITE_001_WINDOW[0] - 1.0),
+                                   min(air.two_theta[-1], window_002[1] + 3.0)])
         style_axes(figure, "Counts")
 
         conclusion = []
@@ -2203,10 +2312,33 @@ def register_callbacks(app: Dash) -> None:
                 f"{100.0 * result.residual_fraction:.0f}% of the peak survived heating, "
                 f"which a kaolinite cannot do: there is chlorite 002 here."
             )
+        least_e, most_e = evidence.bounds
+        chlorite_block = [
+            html.Div("Measured against the chlorite's own reflections",
+                     style={"fontWeight": "600", "marginTop": "10px"}),
+            html.Div(
+                f"Kaolinite is {100.0 * least_e:.0f} to {100.0 * most_e:.0f}% of the "
+                f"overlapped intensity."
+                if least_e == least_e else
+                "No usable estimate: neither window holds a reflection above the noise.",
+            ),
+            html.Ul([html.Li(share.describe() + ".") for share in evidence.usable]),
+        ]
+        if evidence.usable and not evidence.references_agree:
+            chlorite_block.append(html.Div(
+                "The chlorite 001 and 003 routes do not overlap, so one of them is being "
+                "mismeasured \u2014 the 001 sits on the steepest part of the low-angle air "
+                "scatter \u2014 and the range above is the wider of the two rather than a "
+                "measurement.",
+                style={"color": "#a15c00", "fontSize": "0.8rem"},
+            ))
         return figure, html.Div(
             [
+                html.Div("The classical collapse test",
+                         style={"fontWeight": "600"}),
                 html.Div(result.summary()),
                 html.Ul([html.Li(text) for text in conclusion]),
+                *chlorite_block,
                 html.Div(
                     f"Air peak {result.air.significance:.1f}\u03c3 above the background "
                     f"(needs {result.air.minimum_sigmas:.1f}\u03c3), heated peak "
@@ -2226,15 +2358,26 @@ def register_callbacks(app: Dash) -> None:
         State("sme-window", "value"),
         State("sme-reference", "value"),
         State("sme-scale", "value"),
+        State("sme-shift-air", "value"),
+        State("sme-shift-glycol", "value"),
         prevent_initial_call=True,
     )
-    def run_smectite(_clicks, window, reference, manual_scale):
+    def run_smectite(_clicks, window, reference, manual_scale, shift_air, shift_glycol):
         air = STATE.mounts["air"].subtracted()
         glycol = STATE.mounts["glycol"].subtracted()
         if air is None or glycol is None:
             return no_update, error_message(
                 ValueError("Both the air-dried and the glycolated mount must be loaded.")
             )
+        # A separate with no quartz has no reference line to set the zero error
+        # from, and a pattern displaced as a whole then reads as a shift that is
+        # not there.  These move one mount against the other for this comparison
+        # only; the zero error the fit uses is untouched.
+        shifts = {"air": float(shift_air or 0.0), "glycol": float(shift_glycol or 0.0)}
+        if shifts["air"]:
+            air = apply_zero_error(air, shifts["air"])
+        if shifts["glycol"]:
+            glycol = apply_zero_error(glycol, shifts["glycol"])
         scale = float(manual_scale) if reference == "manual" else None
         try:
             result = smectite_swelling(air, glycol, window=tuple(window), scale=scale)
@@ -2720,10 +2863,13 @@ def register_callbacks(app: Dash) -> None:
         State("fit-air-dried", "value"),
         State("fit-diagnostic", "value"),
         State("fit-lattice", "value"),
+        State("kao-constrain", "value"),
+        State("sme-constrain", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
-                exclusive, use_air_dried, use_diagnostic, lattice):
+                exclusive, use_air_dried, use_diagnostic, lattice,
+                constrain_kaolinite, trust_expandable):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2756,7 +2902,10 @@ def register_callbacks(app: Dash) -> None:
         # expandable layer the specimen can contain without having shown it.
         air_note = ""
         air_state = STATE.mounts.get("air")
-        wanted = bool(use_air_dried) and "on" in (use_air_dried or [])
+        wanted = (
+            bool(use_air_dried) and "on" in (use_air_dried or [])
+            and "on" in (trust_expandable or [])
+        )
         if wanted and mount == "glycol" and air_state is not None and air_state.is_loaded:
             try:
                 evidence = shift_evidence(
@@ -2777,6 +2926,58 @@ def register_callbacks(app: Dash) -> None:
                    if mount == "glycol" else f"{MOUNT_LABELS[mount]} is being fitted.")
             )
         constraints: list = []
+
+        # The kaolinite evidence, as a restriction rather than as a report.
+        # Parallel to the air-dried ceiling on the expandable clays: when the
+        # three mounts cannot establish kaolinite against the chlorite under it,
+        # the kaolinite entries are not offered to the fit.  Off by default,
+        # because whether to believe the evidence is the operator's judgement
+        # and the point of showing it on its own tab first.
+        kaolinite_note = ""
+        if bool(constrain_kaolinite) and "on" in (constrain_kaolinite or []):
+            heated_state = STATE.mounts.get("heated")
+            if air_state is not None and air_state.is_loaded:
+                try:
+                    evidence = kaolinite_evidence(
+                        air_state.subtracted() if use_background
+                        else air_state.corrected(),
+                        (heated_state.subtracted() if use_background
+                         else heated_state.corrected())
+                        if heated_state is not None and heated_state.is_loaded else None,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    kaolinite_note = f"The kaolinite evidence could not be read: {exc}"
+                else:
+                    least, most = evidence.bounds
+                    if evidence.detected:
+                        kaolinite_note = (
+                            f"Kaolinite is established by the three mounts - "
+                            f"{100.0 * least:.0f} to {100.0 * most:.0f}% of the "
+                            f"overlapped intensity - so it is fitted freely."
+                        )
+                    elif evidence.usable:
+                        keep = [
+                            index for index, entry in enumerate(library.entries)
+                            if not entry.phase.startswith("kaolinite")
+                        ]
+                        removed = len(library.entries) - len(keep)
+                        library = _library_subset(library, np.asarray(keep, dtype=int))
+                        kaolinite_note = (
+                            f"The three mounts do not establish kaolinite: at most "
+                            f"{100.0 * most:.0f}% of the overlapped intensity, and a "
+                            f"chlorite accounts for the rest. {removed} kaolinite "
+                            f"entries were left out of the fit."
+                        )
+                    else:
+                        kaolinite_note = (
+                            "Neither kaolinite window holds a reflection above the "
+                            "noise, so there is nothing to restrain."
+                        )
+            else:
+                kaolinite_note = (
+                    "The kaolinite evidence needs the air-dried mount, which is not "
+                    "loaded."
+                )
 
         try:
             selection = None
@@ -2923,6 +3124,15 @@ def register_callbacks(app: Dash) -> None:
                 html.Div(status),
                 html.Div(lattice_note, style={
                     "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
+                }),
+            ])
+        if kaolinite_note:
+            status = html.Div([
+                html.Div(status),
+                html.Div(kaolinite_note, style={
+                    "marginTop": "8px", "padding": "8px",
+                    "background": "#eef6ee", "border": "1px solid #8bbf8b",
+                    "borderRadius": "6px", "fontSize": "0.8rem",
                 }),
             ])
         if diagnostic_note:

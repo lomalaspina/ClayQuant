@@ -47,7 +47,15 @@ __all__ = [
     "smectite_swelling",
     "KAOLINITE_001_WINDOW",
     "EXPANDABLE_001_WINDOW",
+    "CHLORITE_001_ENHANCEMENT",
+    "CHLORITE_001_WINDOW",
     "CHLORITE_002_SURVIVAL",
+    "CHLORITE_003_WINDOW",
+    "CHLORITE_RATIOS",
+    "ChloriteShare",
+    "KAOLINITE_002_WINDOW",
+    "KaoliniteEvidence",
+    "kaolinite_evidence",
     "MINIMUM_SIGMAS",
     "NOISE_SPAN",
     "PEAK_WIDTH",
@@ -550,4 +558,301 @@ def smectite_swelling(
         shift_d=float(shift_d),
         glycol_area_ratio=float(ratio),
         reference_window=reference_window,
+    )
+
+
+# --------------------------------------------------------------------------
+# Separating the chlorite from the kaolinite without heating anything
+# --------------------------------------------------------------------------
+
+KAOLINITE_002_WINDOW = (24.0, 25.8)
+"""2theta window around the kaolinite 002 / chlorite 004 reflection at ~3.58 A."""
+
+CHLORITE_001_WINDOW = (5.6, 6.9)
+"""Around the chlorite 001 at 14.2 A, which no kaolinite reflection reaches."""
+
+CHLORITE_003_WINDOW = (18.1, 19.4)
+"""Around the chlorite 003 at 4.73 A, the other reflection kaolinite cannot reach."""
+
+CHLORITE_RATIOS: dict[tuple[str, str], tuple[float, float]] = {
+    ("7.15", "001"): (1.862, 2.289),
+    ("7.15", "003"): (1.691, 2.360),
+    ("3.58", "001"): (1.133, 1.696),
+    ("3.58", "003"): (1.253, 1.436),
+}
+"""How much a chlorite puts at 7.15 and 3.58 A per unit of its 001 or 003.
+
+Measured on two chlorite standards containing no kaolinite - a clinochloritic
+Chlorite and an iron-rich Prochlorite - as integrated areas of the air-dried
+mounts, on the instrument these samples are measured on.  Each pair is the range
+the two of them span.
+
+This is what makes the kaolinite test possible without heating anything, and it
+is the better test.  Kaolinite has reflections at 12.36 and 24.85 deg and
+chlorite has its 002 at 12.46 and its 004 at 25.06, within a peak width of each
+other, so neither of those windows can be read alone.  But chlorite's 001 at
+6.22 deg and its 003 at 18.73 deg are reflections kaolinite does not have at
+all: measure either, multiply by the ratio, and that is the chlorite's share of
+the overlapped window.  What is left is kaolinite.
+
+The alternative - heating the specimen and reading what disappears - is much
+weaker, because heating does not simply weaken a chlorite.  On these two
+standards 1.5 h at 550 C *enhanced* the chlorite 001 by 2.2 and 3.5 times while
+taking the 002/001 ratio from 1.86 to 0.17 and from 2.29 to 0.75: the hydroxide
+sheet dehydroxylates, so the contrast reflection grows as the sum reflections
+die.  A ratio that moves by a factor of 4.5 between two chlorites cannot bound
+anything, where the air-dried 002/001 moves by 1.23.
+"""
+
+CHLORITE_001_ENHANCEMENT = (2.18, 3.51)
+"""How much heating multiplies a chlorite 001, from the same two standards.
+
+Its own diagnostic, and an unambiguous one: nothing else in a clay separate
+grows several times stronger at 550 C.  A specimen whose 14.2 A reflection does
+not grow on heating has no chlorite, whatever else the 7.15 A peak does.
+"""
+
+
+@dataclass
+class ChloriteShare:
+    """What a chlorite accounts for in an overlapped window, and what is left."""
+
+    window: str
+    reference: str
+    reference_area: float
+    window_area: float
+    chlorite: tuple[float, float]
+    """The chlorite's share of the window, as a range, from the two standards."""
+
+    limited: bool = False
+    """Whether the reference was below the noise, so this is an upper bound only.
+
+    Then the chlorite's share runs from zero - it may be absent altogether - up
+    to what a reflection at the detection limit would have accounted for.
+    """
+
+    @property
+    def kaolinite(self) -> tuple[float, float]:
+        """What is left for kaolinite, as a range, never below zero."""
+        low, high = self.chlorite
+        return (max(0.0, 1.0 - high), max(0.0, 1.0 - low))
+
+    def describe(self) -> str:
+        least, most = self.kaolinite
+        if self.limited:
+            return (
+                f"{self.window} A window: no chlorite {self.reference} above the "
+                f"noise, and one at the detection limit would account for at most "
+                f"{100.0 * (1.0 - least):.0f}% of it, so kaolinite is at least "
+                f"{100.0 * least:.0f}%"
+            )
+        return (
+            f"{self.window} A window against the chlorite {self.reference}: "
+            f"kaolinite is {100.0 * least:.0f} to {100.0 * most:.0f}% of it"
+        )
+
+
+@dataclass
+class KaoliniteEvidence:
+    """Everything the three mounts say about kaolinite, and whether it agrees."""
+
+    windows: dict[str, PeakMetrics]
+    references: dict[str, PeakMetrics]
+    shares: tuple[ChloriteShare, ...]
+    collapse: "KaoliniteResult | None" = None
+
+    @property
+    def usable(self) -> tuple[ChloriteShare, ...]:
+        return tuple(
+            share for share in self.shares
+            if share.reference_area > 0.0 and share.window_area > 0.0
+        )
+
+    @property
+    def measured(self) -> tuple[ChloriteShare, ...]:
+        """Those resting on a chlorite reflection that was actually seen."""
+        return tuple(share for share in self.usable if not share.limited)
+
+    @property
+    def bounds(self) -> tuple[float, float]:
+        """The envelope of every usable estimate, or NaNs if there are none.
+
+        The envelope rather than an average, because the estimates are not
+        repeats of one measurement: each uses a different reflection of the
+        chlorite, and where they disagree the disagreement is the uncertainty.
+        """
+        usable = self.usable
+        if not usable:
+            return float("nan"), float("nan")
+        lows = [share.kaolinite[0] for share in usable]
+        highs = [share.kaolinite[1] for share in usable]
+        return float(min(lows)), float(max(highs))
+
+    @property
+    def references_agree(self) -> bool:
+        """Whether the chlorite 001 and 003 routes overlap for any window.
+
+        They should.  When they do not, one of the two reference reflections is
+        being mismeasured - the 001 sits on the steepest part of the low-angle
+        air scatter, which is the usual culprit - and the answer is the wider
+        bound rather than either of them.
+        """
+        by_reference: dict[str, list[tuple[float, float]]] = {}
+        for share in self.measured:
+            by_reference.setdefault(share.reference, []).append(share.kaolinite)
+        if len(by_reference) < 2:
+            return True
+        spans = [
+            (min(low for low, _ in bounds), max(high for _, high in bounds))
+            for bounds in by_reference.values()
+        ]
+        return min(high for _, high in spans) >= max(low for low, _ in spans)
+
+    @property
+    def detected(self) -> bool:
+        """Kaolinite is there whatever the chlorite under it is doing."""
+        least, _ = self.bounds
+        return bool(least == least and least > 0.1)
+
+    def summary(self) -> str:
+        if not self.usable:
+            present = [name for name, peak in self.windows.items() if peak.is_present]
+            if not present:
+                return (
+                    "Nothing above the background at 7.15 or 3.58 A, so there is no "
+                    "kaolinite and no chlorite 002 to argue about."
+                )
+            return (
+                f"Intensity at {' and '.join(present)} A, but no chlorite 001 or 003 "
+                f"to measure it against, so none of it can be attributed. With no "
+                f"chlorite in the specimen all of it is kaolinite."
+            )
+        least, most = self.bounds
+        lines = [
+            f"Kaolinite is {100.0 * least:.0f} to {100.0 * most:.0f}% of the "
+            f"overlapped intensity, from {len(self.usable)} "
+            f"{'estimate' if len(self.usable) == 1 else 'independent estimates'}:"
+        ]
+        lines.extend("  " + share.describe() + "." for share in self.usable)
+        if not self.references_agree:
+            lines.append(
+                "  The chlorite 001 and 003 routes do not overlap, so one of them is "
+                "being mismeasured - the 001 sits on the steepest part of the "
+                "low-angle air scatter - and the range above is the wider of the two "
+                "rather than a measurement."
+            )
+        if self.collapse is not None and self.collapse.air.is_present:
+            lines.append("  " + self.collapse.summary())
+        return "\n".join(lines)
+
+
+def _detection_limit_area(metrics: PeakMetrics) -> float:
+    """Area of the largest reflection this window could have hidden.
+
+    A peak at the threshold has a matched height of ``minimum_sigmas`` standard
+    errors of that estimate, and a Gaussian of that height and the instrumental
+    width has an area of ``1.064 * height * FWHM``.  It is a bound, not a
+    measurement, and it is what lets "no chlorite reflection here" be turned
+    into a number instead of a shrug.
+    """
+    if metrics.noise <= 0.0 or metrics.averaged_points < 1:
+        return 0.0
+    height = (
+        metrics.minimum_sigmas * metrics.noise / math.sqrt(metrics.averaged_points)
+    )
+    return float(1.064 * height * PEAK_WIDTH)
+
+
+def kaolinite_evidence(
+    air: Pattern,
+    heated: Pattern | None = None,
+    windows: dict[str, tuple[float, float]] | None = None,
+    references: dict[str, tuple[float, float]] | None = None,
+    ratios: dict[tuple[str, str], tuple[float, float]] | None = None,
+    scale: float | None = None,
+    wavelength: float = CU_KA1,
+    minimum_sigmas: float = MINIMUM_SIGMAS,
+) -> KaoliniteEvidence:
+    """How much kaolinite there is, measured against the chlorite's own reflections.
+
+    The two windows kaolinite occupies are both shared with chlorite: its 001 at
+    12.36 deg against the chlorite 002 at 12.46, and its 002 at 24.85 against the
+    chlorite 004 at 25.06.  Neither can be read alone.  What can be read alone is
+    the chlorite's 001 at 6.22 deg and its 003 at 18.73 deg, which kaolinite does
+    not have: each of those, times a ratio measured on chlorite standards
+    (:data:`CHLORITE_RATIOS`), is the chlorite's share of an overlapped window,
+    and the remainder is kaolinite.
+
+    Four estimates follow, two windows times two reference reflections, and they
+    are reported together.  Where they agree the answer is measured; where they
+    disagree the disagreement is the uncertainty and is said so.
+
+    ``heated`` adds the classical collapse test as a fifth line of evidence, but
+    it is no longer what the answer rests on: heating enhances a chlorite 001 by
+    two to three and a half times while collapsing its even orders, so what
+    survives at 7.15 A after heating bounds nothing tightly.
+    """
+    windows = windows or {"7.15": KAOLINITE_001_WINDOW, "3.58": KAOLINITE_002_WINDOW}
+    references = references or {
+        "001": CHLORITE_001_WINDOW, "003": CHLORITE_003_WINDOW
+    }
+    ratios = CHLORITE_RATIOS if ratios is None else ratios
+
+    measured = {
+        name: measure_peak(air, window, wavelength=wavelength,
+                           minimum_sigmas=minimum_sigmas)
+        for name, window in windows.items()
+    }
+    reference_peaks = {
+        name: measure_peak(air, window, wavelength=wavelength,
+                           minimum_sigmas=minimum_sigmas)
+        for name, window in references.items()
+    }
+    shares: list[ChloriteShare] = []
+    for (window_name, reference_name), (low, high) in sorted(ratios.items()):
+        window = measured.get(window_name)
+        reference = reference_peaks.get(reference_name)
+        if window is None or reference is None:
+            continue
+        if not window.is_present:
+            continue
+        window_area = window.area
+        if window_area <= 0.0:
+            continue
+        # A chlorite reflection that did not clear the noise is not absent, it is
+        # smaller than what this measurement could see - so it bounds the
+        # chlorite rather than removing the estimate.  Without this a pure
+        # kaolinite, which has no chlorite reflection at all, gets no answer.
+        if reference.is_present:
+            reference_area = reference.area
+            limited = False
+        else:
+            reference_area = _detection_limit_area(reference)
+            limited = True
+        if reference_area <= 0.0:
+            continue
+        shares.append(
+            ChloriteShare(
+                window=window_name,
+                reference=reference_name,
+                reference_area=reference_area,
+                window_area=window_area,
+                chlorite=(
+                    0.0 if limited else min(1.0, low * reference_area / window_area),
+                    min(1.0, high * reference_area / window_area),
+                ),
+                limited=limited,
+            )
+        )
+    collapse = None
+    if heated is not None:
+        collapse = kaolinite_collapse(
+            air, heated, window=windows.get("7.15", KAOLINITE_001_WINDOW),
+            scale=scale, wavelength=wavelength,
+        )
+    return KaoliniteEvidence(
+        windows=measured,
+        references=reference_peaks,
+        shares=tuple(shares),
+        collapse=collapse,
     )
