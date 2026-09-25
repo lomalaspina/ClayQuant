@@ -97,6 +97,7 @@ from ..nnls import (
     _library_subset,
     screen_diagnostic_peaks,
     select_in_two_stages,
+    select_one_orientation,
     select_with_lattice_scaling,
     clay_families,
     nnls_fit,
@@ -1319,6 +1320,8 @@ def fit_tab() -> html.Div:
                              "value": "composition"},
                             {"label": "One per composition, thickness second",
                              "value": "staged"},
+                            {"label": "One orientation for the whole mount",
+                             "value": "mount"},
                             {"label": "One per phase (as Clayfit)", "value": "phase"},
                             {"label": "Every entry free", "value": "free"},
                         ],
@@ -2797,7 +2800,20 @@ def register_callbacks(app: Dash) -> None:
                     constraints=constraints,
                     treatment=mount,
                 )
-                if exclusive == "staged" and deviation <= 0.0:
+                if exclusive == "mount" and deviation <= 0.0:
+                    selection = select_one_orientation(
+                        state.corrected(), library, families, **arguments,
+                    )
+                    lattice_note = (
+                        f"Every clay fitted at one orientation, r = "
+                        f"{selection.orientation:g}: the clays of one mount settled out "
+                        f"of one suspension onto one plate, and a basal series is "
+                        f"enhanced as r to the power -3, so a fit free to put one clay "
+                        f"at 0.1 and another at 1 differs by a thousand in the mass "
+                        f"behind the same scattering."
+                        if selection.orientation is not None else ""
+                    )
+                elif exclusive == "staged" and deviation <= 0.0:
                     selection = select_in_two_stages(
                         state.corrected(), library, families, **arguments,
                     )
@@ -2886,6 +2902,7 @@ def register_callbacks(app: Dash) -> None:
                     + ("phase" if exclusive == "phase" else "composition")
                     + (", crystallite thickness chosen second"
                        if exclusive == "staged" else "")
+                    + (", all at one orientation" if exclusive == "mount" else "")
                     + ": "
                     f"{len(selection.chosen)} chosen in {selection.evaluations} fits"
                     + (f", {selection.screened_out} families set aside by a screening "

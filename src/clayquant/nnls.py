@@ -53,6 +53,7 @@ __all__ = [
     "orientation_families",
     "screen_diagnostic_peaks",
     "select_in_two_stages",
+    "select_one_orientation",
     "select_one_per_family",
     "select_with_lattice_scaling",
 ]
@@ -587,6 +588,13 @@ class FamilySelection:
     Empty unless the selection came from :func:`select_with_lattice_scaling`.
     A value of 1.004 means the family's patterns were stretched by 0.4 %, so a
     10.02 A spacing was fitted at 10.06 A.
+    """
+
+    orientation: float | None = None
+    """The one orientation every clay was fitted at, or ``None``.
+
+    Set only by :func:`select_one_orientation`.  It is a property of the mount
+    rather than of a phase: how well that particular smear settled.
     """
 
     library: object | None = None
@@ -1710,3 +1718,85 @@ def select_in_two_stages(
     )
     stage_two.evaluations += stage_one.evaluations
     return stage_two
+
+
+# --------------------------------------------------------------------------
+# One orientation for the whole mount
+# --------------------------------------------------------------------------
+
+def select_one_orientation(
+    measured: Pattern,
+    library,
+    families: list[str] | None = None,
+    *,
+    orientations: "list[float] | tuple[float, ...] | None" = None,
+    **selection,
+) -> "FamilySelection":
+    """Choose the composition of every clay, all sharing one orientation.
+
+    The clays of one mount were settled out of one suspension and dried on one
+    glass plate, so they cannot be oriented differently by a factor of a
+    thousand - and a factor of a thousand is what the alternative comes to.  A
+    basal series is enhanced as ``r ** -3``, so an entry at ``r = 0.1`` is
+    calculated to scatter about a thousand times more per gram than the same
+    entry at ``r = 1``, and a fit free to put one clay at each end converts a
+    small share of the scattering into most of the mass.
+
+    That is not a hypothetical.  On a pure chlorite standard the fit put
+    chlorite at ``r = 0.1`` and kaolinite at ``r = 1``, gave the chlorite
+    patterns 82 % of the scattering and the kaolinite 16 %, and reported
+    chlorite as 21 % of the clay and kaolinite as 78 %.  Requiring one
+    orientation reported 90 % chlorite - and fitted *better*, 46.7 % against
+    48.9 %.  On four of five pure standards the restriction moved the answer
+    towards the mineral the specimen is, and on none of them did it cost fit
+    worth having.
+
+    Every distinct orientation in the library is tried; within each, the
+    composition of each family is chosen by :func:`select_one_per_family`, so
+    what this adds is one shared parameter and not a different search.  The
+    winner is the one whose objective is lowest, and the orientation it used is
+    in :attr:`FamilySelection.orientation`.
+
+    ``orientations`` restricts which are tried.  Leaving it out tries them all,
+    including ``r = 1`` - which is a random powder, and which fitted worst on
+    every standard measured, by 15 to 45 points of ``R_wp``.  That is worth
+    seeing rather than forbidding.
+    """
+    labels = list(clay_families(library) if families is None else families)
+    if len(labels) != len(library.entries):
+        raise ValueError("families must give one label per library entry")
+
+    clay = [bool(label) for label in labels]
+    if not any(clay):
+        return select_one_per_family(measured, library, families=labels, **selection)
+    values = sorted({
+        round(float(entry.march_dollase), 6)
+        for entry, is_clay in zip(library.entries, clay) if is_clay
+    })
+    if orientations is not None:
+        wanted = {round(float(value), 6) for value in orientations}
+        values = [value for value in values if value in wanted]
+    if not values:
+        raise ValueError("no clay entry has one of the requested orientations")
+
+    best: "FamilySelection | None" = None
+    evaluations = 0
+    for value in values:
+        keep = [
+            index for index, (entry, is_clay) in enumerate(zip(library.entries, clay))
+            if not is_clay or math.isclose(float(entry.march_dollase), value)
+        ]
+        indices = np.asarray(keep, dtype=int)
+        chosen = select_one_per_family(
+            measured,
+            _library_subset(library, indices),
+            families=[labels[index] for index in keep],
+            **selection,
+        )
+        evaluations += chosen.evaluations
+        chosen.orientation = value
+        if best is None or chosen.objective < best.objective:
+            best = chosen
+    assert best is not None
+    best.evaluations = evaluations
+    return best
