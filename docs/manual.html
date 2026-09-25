@@ -146,6 +146,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-36">A.36 The chlorite after the oven</a>
 <a href="#a-37">A.37 A clay that is not a platelet</a>
 <a href="#a-38">A.38 Weighing the mount</a>
+<a href="#a-39">A.39 Fluorescence on the same mounts</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5387,6 +5388,99 @@ to be one constant. <code>agreement_between</code> reports the spread and each m
 the mean, and for a pure standard that departure is precisely the factor by which its reference
 pattern is wrong &mdash; texture, microabsorption and structural error together, which is what
 &sect;<a href="#s2-13">2.13</a> calls <var>k</var> and has never before been measurable here.</p>
+
+
+<h3 id="a-39">A.39 Fluorescence on the same mounts, and how far it can be read</h3>
+
+<p><strong>Why it was needed.</strong> A basal series constrains a combination of substitutions and
+not either one alone. Removing interlayer potassium lowers an illite's higher basal orders, adding
+octahedral iron lowers them, and the film being thin lowers them
+(&sect;<a href="#a-38">A.38</a>); no diffractogram separates the three. A fluorescence analysis
+measures the elements instead of their joint effect on an intensity ratio, so it breaks the
+degeneracy from outside &mdash; if it is read for what it can say and not for what it prints.</p>
+
+<p><strong>Three things it cannot say.</strong> The instrument normalises to 100&nbsp;%, so there is
+no absolute intensity and a blank cannot be subtracted; what can be done is to treat each
+measurement as a mixture of film and slide and solve for the mixing fraction from an element the
+film has none of. On these mounts that fraction is large &mdash; calcium says the slide is half to
+nine tenths of the signal, because a few milligrams of clay is nearly transparent at these energies.
+And the light elements are not measurable at all: Na, Mg, Al and Si fluoresce between 1.0 and
+1.7&nbsp;keV, which both the film and the air path absorb, so their corrected concentrations come
+out impossible &mdash; 30&nbsp;% potassium in an illite, which is the signature of the method being
+pushed past what it can do rather than of an error.</p>
+
+<p><strong>What survives is a ratio of two heavy elements</strong>, and the reason it survives is
+that both are minor in the slide, so the ratio hardly moves as the mixing fraction moves. On the
+illite mount:</p>
+
+<div class="tablewrap"><table>
+<tr><th>slide share assumed</th><th>K, %</th><th>Fe, %</th><th>Fe/K</th></tr>
+<tr><td class="num">0.00</td><td class="num">16.3</td><td class="num">11.4</td>
+<td class="num">0.699</td></tr>
+<tr><td class="num">0.52 (what calcium says)</td><td class="num">30.6</td><td class="num">23.1</td>
+<td class="num">0.755</td></tr>
+<tr><td class="num">0.85</td><td class="num">91.1</td><td class="num">72.6</td>
+<td class="num">0.797</td></tr>
+</table></div>
+
+<p>The concentrations change fivefold and are nonsense at the bottom of the table; the ratio changes
+by 14&nbsp;%. That envelope is the measurement.</p>
+
+<p><strong>What it gives for the illite.</strong> Per O<sub>10</sub>(OH)<sub>2</sub> an illite has two
+octahedral cations and at most one interlayer potassium, so Fe/K by mass is
+2<var>f</var>M<sub>Fe</sub>/<var>k</var>M<sub>K</sub> and the measured envelope gives</p>
+
+<div class="tablewrap"><table>
+<tr><th>interlayer K</th><th>octahedral Fe implied</th></tr>
+<tr><td class="num">0.9</td><td class="num">0.22 &ndash; 0.25</td></tr>
+<tr><td class="num">0.8</td><td class="num">0.20 &ndash; 0.22</td></tr>
+</table></div>
+
+<p>This is an <em>upper</em> bound, not a measurement: iron in an accessory oxide is counted as
+octahedral and potassium in a feldspar as interlayer. That the illite mount also carries 2.0&nbsp;%
+titanium against the slide's 0.0 settles that accessory oxides are indeed present, so some of the
+iron is not in the illite.</p>
+
+<p><strong>The three measurements agree, which is the result.</strong> Diffraction alone wanted
+0.15 of octahedral iron (&sect;<a href="#a-35">A.35</a>); fluorescence bounds the iron at 0.20 to
+0.25 with some of it in an accessory; and with the composition pinned at the fluorescence value the
+calculated basal series comes out 0.124&nbsp;:&nbsp;0.414 against 0.164&nbsp;:&nbsp;0.477 measured
+&mdash; 13 to 24&nbsp;% weak in the higher orders, against the threefold error the published
+structure carried. An independent measurement landing within a factor of 1.5 of a structural
+inference, in the direction the accessories predict, is as close to closed as this gets.</p>
+
+<p><strong>It also bounds the film.</strong> With the iron at the fluorescence value, the film
+correction of &sect;<a href="#a-38">A.38</a> has to be negligible: any appreciable correction halves
+both ratios and takes the calculation further from the measurement, not nearer. That is a
+quantitative statement about the mount &mdash; an 8&nbsp;mg illite film is effectively thick at
+8.8&nbsp;&deg; only if it dried over about 3&nbsp;cm<sup>2</sup> or less &mdash; and it is
+consistent with the fluorescence itself, which sees the slide through the film at 3.7&nbsp;keV
+while Cu&nbsp;K&alpha; penetrates only some 5&nbsp;&micro;m at that angle. Two measurements that
+know nothing of each other agreeing on the film's thickness is worth more than either.</p>
+
+<p><strong>And it reads the other standards.</strong> Elements well above the slide's own, on mounts
+where the marker leaves room to see them:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Standard</th><th>What the analysis adds</th></tr>
+<tr><td>Illite (10)</td><td>Ti 2.0&nbsp;% &mdash; a titanium oxide accessory; the standard is not
+phase pure</td></tr>
+<tr><td>Dickite (7)</td><td>SO<sub>3</sub> 4.9&nbsp;% and P<sub>2</sub>O<sub>5</sub> 2.7&nbsp;%
+&mdash; a sulfate and a phosphate, neither of them a clay</td></tr>
+<tr><td>Montmorillonite (50)</td><td>K 0.0&nbsp;% against the slide's 3.1 &mdash; no illitic
+component at all</td></tr>
+<tr><td>Montmorillonite (9)</td><td>calcium exchanged, which makes calcium useless as a slide marker
+here: it credits the slide with more potassium than the mount contains</td></tr>
+<tr><td>Chlorite (16) / Prochlorite (15)</td><td>Fe 16.1 against 14.3&nbsp;%, so chlorite 16 is the
+more ferrous of the two</td></tr>
+</table></div>
+
+<p>That last row is a disagreement worth recording. Fitting the two air-dried basal series
+(&sect;<a href="#a-36">A.36</a>) put more iron in prochlorite 15's hydroxide sheet (0.085) than in
+chlorite 16's (0.045), and the fluorescence has the total iron the other way round. The two are not
+strictly comparable &mdash; the diffraction fits the iron of one sheet with the other held at zero,
+while the fluorescence sees all of it &mdash; but it means the sheet-by-sheet split is not yet
+established, and the 2:1 sheet has to be allowed to carry iron before those numbers are quoted.</p>
 
 
 
