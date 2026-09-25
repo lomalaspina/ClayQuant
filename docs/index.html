@@ -153,6 +153,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-33">A.33 Calculated basal intensities</a>
 <a href="#a-34">A.34 Kaolinite against the chlorite</a>
 <a href="#a-35">A.35 The illite is not a muscovite</a>
+<a href="#a-36">A.36 The chlorite after the oven</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5214,6 +5215,56 @@ name implies. What the measurement constrains tightly is the combination; the co
 should be read as the structure that reproduces the pattern, not as an analysis of the specimen.
 A chemical analysis, or the 060 region for the octahedral occupancy, would settle which of the pairs
 is the specimen's own.</p>
+
+<h3 id="a-36">A.36 The chlorite after the oven, calculated rather than assumed</h3>
+
+<p><strong>Why it is worth having.</strong> The heated mount is the one pattern in the set that
+contains no kaolinite at all &mdash; it has become metakaolinite and left the diffractogram &mdash; so
+it is the one place where the 7.15&nbsp;&Aring; window is chlorite and nothing else. Fitting it would
+measure the chlorite directly, instead of inferring it from ratios to its own 001 and 003
+(&sect;<a href="#a-34">A.34</a>). What has stood in the way is that the heated chlorite is not the
+same scatterer as the air-dried one, so the air-dried reference patterns do not describe it.</p>
+
+<p><strong>What heating does, structurally.</strong> The interlayer hydroxide sheet gives up its
+water: 2&nbsp;OH<sup>&minus;</sup> &rarr; O<sup>2&minus;</sup> + H<sub>2</sub>O, so half that
+sheet's oxygen leaves with all of its hydrogen, while the 2:1 layer's own hydroxyl survives to a
+higher temperature. One parameter describes it &mdash; how far the reaction has gone &mdash; and
+<code>chlorite_crystal(..., dehydroxylation=delta)</code> is that parameter, scaling the sheet's
+oxygen occupancies by 1&nbsp;&minus;&nbsp;&delta;/2 and its hydrogen by
+1&nbsp;&minus;&nbsp;&delta;. The cell mass falls by about a tenth, which a weight percent from a
+heated mount has to be corrected for.</p>
+
+<p><strong>Calibration on the two chlorite standards.</strong> The octahedral iron is taken from the
+air-dried pattern and the dehydroxylation from the heated one. Everything in italics below is then a
+check rather than a fit:</p>
+
+<div class="tablewrap"><table>
+<tr><th>&nbsp;</th><th>Chlorite (16)</th><th>Prochlorite (15)</th></tr>
+<tr><td>002/001 air dried, measured</td><td class="num">1.798</td><td class="num">2.245</td></tr>
+<tr><td>hydroxide-sheet iron it implies</td><td class="num">0.045</td><td class="num">0.085</td></tr>
+<tr><td>002/001 heated, measured</td><td class="num">0.169</td><td class="num">0.749</td></tr>
+<tr><td>dehydroxylation it implies</td><td class="num">0.75</td><td class="num">0.30</td></tr>
+<tr><td><em>001 gain, measured</em></td><td class="num">3.42</td><td class="num">2.16</td></tr>
+<tr><td><em>001 gain, calculated</em></td><td class="num">5.05</td><td class="num">2.31</td></tr>
+<tr><td><em>003/001 heated, measured</em></td><td class="num">0.090</td><td class="num">0.454</td></tr>
+<tr><td><em>003/001 heated, calculated</em></td><td class="num">0.220</td><td class="num">0.631</td></tr>
+</table></div>
+
+<p>The collapse of the even orders is reproduced exactly, because that is what was fitted. The 001
+gain is the interesting number: it was not fitted, and on the less altered specimen it comes out at
+2.31 against 2.16 measured &mdash; within 7&nbsp;% &mdash; from the same &delta; that fitted the
+ratio. On the more altered one it is over-predicted by half, and the 003 is over-predicted on both.
+So the model is right about the mechanism and about the first two orders, and optimistic about how
+much of the sheet is still crystalline at &delta;&nbsp;=&nbsp;0.75; a specimen that far through the
+reaction is presumably also losing order, which a site occupancy cannot express. Contracting the
+sheet as it dries was tried and makes every one of these numbers worse, so it is not in the
+model.</p>
+
+<p><strong>And it has to be spanned.</strong> After the same 1.5&nbsp;h at 550&nbsp;&deg;C the two
+standards are at &delta;&nbsp;=&nbsp;0.75 and 0.30. Neither is finished, and they are not at the same
+point, so a heated chlorite is a one-parameter family rather than a second structure to
+tabulate.</p>
+
 
 
 <h3 id="a-13">A.13 Summary</h3>

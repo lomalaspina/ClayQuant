@@ -38,6 +38,7 @@ __all__ = [
     "illite_crystal",
     "chlorite_layer",
     "CHLORITE_OCTAHEDRA",
+    "CHLORITE_HYDROXYL",
     "ILLITE_OCTAHEDRON_TOLERANCE",
     "use_refined_structures",
     "clear_refined_structures",
@@ -230,6 +231,17 @@ will not be the same, is still read correctly or refused outright.
 """
 
 
+CHLORITE_HYDROXYL: dict[str, tuple[str, ...]] = {
+    "oxygen": ("O7", "O8", "O9"),
+    "hydrogen": ("H2", "H3", "H4"),
+}
+"""The hydroxyl groups of the interlayer hydroxide sheet, by site label.
+
+Not the 2:1 layer's own hydroxyl (O6, H1), which sits inside the layer and
+survives to a higher temperature than the interlayer sheet does.
+"""
+
+
 def illite_crystal(potassium: float = 1.0, iron: float = 0.0) -> Crystal:
     """The illite structure with this interlayer potassium and octahedral iron.
 
@@ -299,6 +311,7 @@ def chlorite_crystal(
     iron_2to1: float,
     iron_hydroxide: float,
     octahedral_b: float | None = None,
+    dehydroxylation: float = 0.0,
 ) -> Crystal:
     """The chlorite structure with its octahedral iron set to these fractions.
 
@@ -319,6 +332,31 @@ def chlorite_crystal(
     occupancy that shares the site.  The published structure already pairs them
     this way; this keeps that true of anything derived from it.  ``None`` leaves
     the published values alone.
+
+    ``dehydroxylation`` is how far the *interlayer* hydroxide sheet has lost its
+    water, 0 for the mineral as measured air dried and 1 for a sheet that has
+    given up all of it.  Heating an oriented mount to 550 C is what this is for.
+    The reaction is 2 OH(-) -> O(2-) + H2O, so half the sheet's oxygen leaves
+    with all of its hydrogen, and the occupancies follow that: the oxygen sites
+    of :data:`CHLORITE_HYDROXYL` scale by ``1 - delta/2`` and the hydrogen sites
+    by ``1 - delta``.  The 2:1 layer's own hydroxyl (O6, H1) is untouched, as it
+    is in the mineral at this temperature.
+
+    The consequence for the pattern is large and is the reason heating is worth
+    calculating rather than guessing at.  A chlorite's 001 reflects the
+    *contrast* between the two sheets and its even orders their sum, so emptying
+    the hydroxide sheet raises the 001 several times over while the even orders
+    collapse.  Calculated on the published structure, 002/001 falls from 1.23 to
+    0.07 across the range while the 001 grows by 5.9; measured on two heated
+    chlorite standards, 002/001 is 0.168 and 0.752 against 1.862 and 2.289 air
+    dried, and the 001 grows by 3.51 and 2.18.  Both specimens therefore sit
+    inside this range, at about 0.7 and 0.2, and neither is fully
+    dehydroxylated after 1.5 h - which is why this is a parameter to span and
+    not a second structure.
+
+    The cell mass falls with the water, so a weight percent computed from a
+    heated mount is on the dehydroxylated mass; convert to the mineral as
+    weighed by dividing by the mass ratio the two structures report.
     """
     for name, value in (("iron_2to1", iron_2to1), ("iron_hydroxide", iron_hydroxide)):
         if not 0.0 <= value <= 1.0:
@@ -327,16 +365,31 @@ def chlorite_crystal(
         raise ValueError(
             f"a displacement parameter cannot be negative, and {octahedral_b} is"
         )
+    delta = float(dehydroxylation)
+    if not 0.0 <= delta <= 1.0:
+        raise ValueError(
+            f"dehydroxylation runs from 0 (as measured) to 1 (no water left), not {delta}"
+        )
 
     base = load_crystal("chlorite")
     iron_of = {"2:1": float(iron_2to1), "hydroxide": float(iron_hydroxide)}
     sheet_of = {
         label: sheet for sheet, labels in CHLORITE_OCTAHEDRA.items() for label in labels
     }
+    water = {
+        label: 1.0 - 0.5 * delta for label in CHLORITE_HYDROXYL["oxygen"]
+    } | {
+        label: 1.0 - delta for label in CHLORITE_HYDROXYL["hydrogen"]
+    }
+    if delta and not any(site.label in water for site in base.sites):
+        raise ValueError("the chlorite structure has no interlayer hydroxyl sites")
     sites = []
     for site in base.sites:
         sheet = sheet_of.get(site.label)
         if sheet is None:
+            if delta and site.label in water:
+                site = dataclasses.replace(
+                    site, occupancy=site.occupancy * water[site.label])
             sites.append(site)
             continue
         iron = iron_of[sheet]
@@ -352,19 +405,29 @@ def chlorite_crystal(
     )
     if octahedral_b is not None:
         described += f", octahedral B = {octahedral_b:.3f} A^2 on every such site"
+    if delta:
+        described += (
+            f", interlayer hydroxide sheet {delta:.3f} dehydroxylated "
+            "(2 OH -> O + H2O)"
+        )
     return dataclasses.replace(
         base,
         sites=sites,
-        name=f"chlorite Fe {iron_2to1:.2f}/{iron_hydroxide:.2f}",
+        name=(f"chlorite Fe {iron_2to1:.2f}/{iron_hydroxide:.2f}"
+              + (f" dehydrox {delta:.2f}" if delta else "")),
         source=described,
     )
 
 
 def chlorite_layer(
-    iron_2to1: float, iron_hydroxide: float, octahedral_b: float | None = None
+    iron_2to1: float,
+    iron_hydroxide: float,
+    octahedral_b: float | None = None,
+    dehydroxylation: float = 0.0,
 ) -> LayerModel:
     """One folded layer of :func:`chlorite_crystal`."""
-    crystal = chlorite_crystal(iron_2to1, iron_hydroxide, octahedral_b=octahedral_b)
+    crystal = chlorite_crystal(iron_2to1, iron_hydroxide, octahedral_b=octahedral_b,
+                               dehydroxylation=dehydroxylation)
     return crystal.layer_model(
         layers_per_cell=CIF_SOURCES["chlorite"].layers_per_cell, name=crystal.name
     )
