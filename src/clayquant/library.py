@@ -214,7 +214,7 @@ substitutions.  Sec. A.35 of the manual records the scan and what else was
 ruled out.
 """
 
-ILLITE_SMECTITE_HOST: tuple[float, float] = (1.0, 0.150)
+ILLITE_SMECTITE_HOST: tuple[float, float] = (0.9, 0.150)
 """The illite composition used for the illite/smectite host layer.
 
 One pair, not an axis. The discrete illite is calculated at each of
@@ -230,8 +230,10 @@ What it must not be is the published structure, which is an iron-free muscovite
 and calculates a 5 A order three times too strong (Sec. A.35). The host would
 then be systematically brighter at 5 A than the discrete illite beside it, and
 the split between the two - the one number an illite/smectite analysis is really
-for - would absorb the difference. The default is the composition that
-reproduces a measured illite on this instrument. Pass ``None`` for the published
+for - would absorb the difference.  The default is the member of
+:data:`ILLITE_COMPOSITION` that best reproduces a measured illite on this
+instrument, so that the host and the discrete mineral beside it are the same
+mineral and both are illites rather than micas.  Pass ``None`` for the published
 structure, or another pair measured on your own illite.
 """
 
@@ -1264,11 +1266,24 @@ def main(argv: list[str] | None = None) -> int:
         help="sample points per emission line; >1 reproduces the natural line widths",
     )
     parser.add_argument(
-        "--specimen-length", type=float, default=35.0,
-        help="length of the smear along the beam in mm. It sets where the beam stops "
-             "overflowing the specimen, which for a 0.5 deg slit on a 240 mm goniometer "
-             "is 6.9 deg at 35 mm and 12.0 deg at 20 mm - the chlorite 001 lies between "
-             "them (default: 35, a full smear on a standard slide)"
+        "--specimen-length", type=float, default=25.0,
+        help="size of the mount along the beam in mm, or the diameter of a round one. "
+             "It sets where the beam stops overflowing the specimen, which for a 0.5 deg "
+             "slit on a 240 mm goniometer is 6.9 deg at 35 mm and 12.0 deg at 20 mm - the "
+             "chlorite 001 lies between them, so getting this wrong costs tens of per cent "
+             "in the reflection the chlorite is measured by (default: 25, the glass disc "
+             "an oriented separate is dried on)"
+    )
+    parser.add_argument(
+        "--specimen-shape", choices=("round", "rectangular"), default="round",
+        help="a round mount loses the beam strip's corners before its middle, so it "
+             "intercepts a few per cent less than a rectangle of the same length "
+             "(default: round)"
+    )
+    parser.add_argument(
+        "--beam-width", type=float, default=10.0,
+        help="axial width of the beam at the specimen in mm, the mask setting. Only a "
+             "round mount uses it, and barely (default: 10)"
     )
     parser.add_argument(
         "--goniometer-radius", type=float, default=280.0, help="goniometer radius in mm"
@@ -1445,6 +1460,8 @@ def main(argv: list[str] | None = None) -> int:
             specimen_length=arguments.specimen_length,
             goniometer_radius=arguments.goniometer_radius,
             divergence=arguments.divergence_slit,
+            shape=arguments.specimen_shape,
+            beam_width=arguments.beam_width,
         )
     )
     instrument = Instrument(
@@ -1465,7 +1482,9 @@ def main(argv: list[str] | None = None) -> int:
         pattern = read_pattern(resolve_user_path(arguments.measurement))
         background = clayfit_background(pattern.two_theta, pattern.intensity)
         instrument, note = instrument_from_measurement(
-            pattern, background=background, specimen_length=arguments.specimen_length
+            pattern, background=background,
+            specimen_length=arguments.specimen_length,
+            specimen_shape=arguments.specimen_shape,
         )
         if not arguments.quiet:
             print(f"instrument from {Path(arguments.measurement).name}: {note}")

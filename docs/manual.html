@@ -148,6 +148,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-38">A.38 Weighing the mount</a>
 <a href="#a-39">A.39 Fluorescence on the same mounts</a>
 <a href="#a-40">A.40 The mount is a 25 mm disc</a>
+<a href="#a-41">A.41 The library rebuilt, and nine weighed mounts</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5555,6 +5556,93 @@ makes the film effectively thick at these angles and fits as well as no correcti
 (67.6&nbsp;%). So <code>thin_film_factor</code> stays available and documented and is not applied by
 default: computed from the nominal area it is an upper bound on a correction that these mounts do
 not need.</p>
+
+
+<h3 id="a-41">A.41 The library rebuilt, and what nine weighed mounts say about it</h3>
+
+<p><strong>The rebuild.</strong> 2901 patterns on the corrected geometry &mdash; a round mount
+25&nbsp;mm across (&sect;<a href="#a-40">A.40</a>) &mdash; with the instrumental width taken from a
+corundum scan on the same diffractometer, 0.090&nbsp;&deg; FWHM. Fourteen minutes. The
+illite/smectite host now takes the same composition as the best-fitting member of the discrete
+illite axis, K&nbsp;=&nbsp;0.9 with 0.15 of octahedral iron, so the host and the discrete mineral
+are the same mineral and both are illites.</p>
+
+<p><strong>What the standards come back as.</strong> Each fitted with one orientation shared by all
+the clays of the mount (&sect;<a href="#a-23">A.23</a>), which is the constraint the physics
+requires and without which the weight percent inverts:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Standard</th><th>Largest clay shares, by weight</th><th></th></tr>
+<tr><td>Illite (10)</td><td>illite 89&nbsp;%, C/S 9</td><td><strong>&#10003;</strong></td></tr>
+<tr><td>Prochlorite (15)</td><td>chlorite 88&nbsp;%, I/S 7, illite 5</td>
+<td><strong>&#10003;</strong></td></tr>
+<tr><td>Montmorillonite (50)</td><td>smectite 89&nbsp;%, C/S 11</td>
+<td><strong>&#10003;</strong></td></tr>
+<tr><td>Kaolinite (12)</td><td>kaolinite 74&nbsp;%, I/S 10, illite 9</td>
+<td><strong>&#10003;</strong></td></tr>
+<tr><td>Kaolinite (43)</td><td>kaolinite 57&nbsp;%, I/S 20, illite 18</td>
+<td>&#10003; &mdash; and the fluorescence finds potassium in it too</td></tr>
+<tr><td>Chlorite (16)</td><td>chlorite 33&nbsp;%, C/S 30, I/S 35</td>
+<td>chlorite family 63&nbsp;%</td></tr>
+<tr><td>Dickite (7)</td><td>kaolinite 46&nbsp;%, I/S 39</td>
+<td>the fluorescence finds a sulfate and a phosphate</td></tr>
+<tr><td>Montmorillonite (9)</td><td>illite 58&nbsp;%, smectite 20</td><td>not a single-phase
+standard</td></tr>
+<tr><td>Sepiolite</td><td>I/S 97&nbsp;%</td><td>nonsense; sepiolite is not in the clay library and
+has to be imported as an accompanying mineral (&sect;<a href="#a-37">A.37</a>)</td></tr>
+</table></div>
+
+<p><strong>Then the weighed mounts.</strong> Each mount's fitted mass divided by what it weighs
+should be one constant for all nine (&sect;<a href="#a-38">A.38</a>). The five chlorite and
+kaolinite mounts agree within &plusmn;40&nbsp;%, which is the first absolute check this program has
+ever passed and says their reference patterns are mutually consistent per gram &mdash; the test the
+March&ndash;Dollase weighting had to survive. The illite comes out ten times low and the smectites a
+thousand. Two quite different things are behind that, and only one of them is a fault.</p>
+
+<p><strong>First: the mounts are saturated.</strong> Counts per milligram, measured over 4 to
+38&nbsp;&deg; with no model at all:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th>mg</th><th>counts</th><th>counts / mg</th></tr>
+<tr><td>montmorillonite 9</td><td class="num">2.6</td><td class="num">1.88 &times; 10<sup>4</sup></td>
+<td class="num">7220</td></tr>
+<tr><td>montmorillonite 50</td><td class="num">11.3</td><td class="num">2.01 &times; 10<sup>4</sup></td>
+<td class="num">1780</td></tr>
+<tr><td>kaolinite 43</td><td class="num">2.3</td><td class="num">1.52 &times; 10<sup>4</sup></td>
+<td class="num">6620</td></tr>
+<tr><td>kaolinite 12</td><td class="num">2.6</td><td class="num">1.48 &times; 10<sup>4</sup></td>
+<td class="num">5680</td></tr>
+</table></div>
+
+<p>Four and a third times the material for seven per cent more signal. The two kaolinites, of
+practically the same mass, give practically the same counts. Across all nine mounts the three
+heaviest &mdash; 8, 11.3 and 12&nbsp;mg &mdash; are the three lowest in counts per milligram, in
+order. The mount is optically thick and everything beyond the penetration depth is wasted: the
+factor <var>A</var> = 1&nbsp;&minus;&nbsp;exp(&minus;2<var>&mu;</var><sub>m</sub><var>W</var>/sin
+<var>&theta;</var>) of &sect;<a href="#a-38">A.38</a> is 0.63 at 2.6&nbsp;mg and 0.99 at
+11.3&nbsp;mg, which predicts the fall in counts per milligram to within a third.</p>
+
+<p>So <strong>there is no point loading more than about 3&nbsp;mg onto a 25&nbsp;mm disc</strong>.
+Beyond that the extra material buys nothing, and worse, it makes the mounts incomparable by mass: an
+absolute calibration from a weighed mount only means anything below saturation, or with this factor
+taken out.</p>
+
+<p><strong>Second, and this one is a fault.</strong> Saturation does not account for a factor of a
+thousand, and the smectite's does not come from the measurement: across the nine mounts the measured
+counts per milligram span 21-fold while the fitted constants span 2400-fold, so the rest is in the
+calculated patterns. It has a specific cause. Every interstratified entry is calculated by the
+stacking model and then multiplied by <code>basal_scale_factor</code>, which puts intensity per
+layer onto the intensity-per-unit-cell scale that <code>powder_pattern</code> uses for the discrete
+minerals. The lone pure-smectite entry is calculated the same way and <em>is not given that
+factor</em>, so it sits on the stacking model's own scale while everything it is compared with sits
+on the other. Its weight percent is wrong by whatever that factor is.</p>
+
+<p>The obvious repair &mdash; borrow the scale from another phase &mdash; does not work: it is not a
+property of the method alone but of the structure and the crystallite thickness, running from 0.032
+for kaolinite&nbsp;1M at N&nbsp;=&nbsp;5 to 0.50 for illite at N&nbsp;=&nbsp;50. The repair that
+should work is to calculate the pure smectite as the zero-illite end member of the I/S series, which
+carries a scale by construction, and the weighed montmorillonite mounts are now the way to check
+it.</p>
 
 
 
