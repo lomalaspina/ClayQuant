@@ -149,6 +149,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-39">A.39 Fluorescence on the same mounts</a>
 <a href="#a-40">A.40 The mount is a 25 mm disc</a>
 <a href="#a-41">A.41 The library rebuilt, and nine weighed mounts</a>
+<a href="#a-42">A.42 Two calculations, one scale</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5643,6 +5644,80 @@ for kaolinite&nbsp;1M at N&nbsp;=&nbsp;5 to 0.50 for illite at N&nbsp;=&nbsp;50.
 should work is to calculate the pure smectite as the zero-illite end member of the I/S series, which
 carries a scale by construction, and the weighed montmorillonite mounts are now the way to check
 it.</p>
+
+
+<h3 id="a-42">A.42 Two calculations, one scale</h3>
+
+<p><strong>The two families.</strong> A discrete mineral is calculated by <code>powder_pattern</code>,
+whose unit is one unit cell. An interstratified one is calculated by the stacking model, whose unit
+is one layer. Their weight percents are compared with each other, so the two descriptions have to
+give the same intensity for the same <em>mass</em> &mdash; and a cell is not a layer.
+<code>basal_scale_factor</code> exists to reconcile them, by calculating one host both ways and
+comparing. Weighing the mounts (&sect;<a href="#a-41">A.41</a>) showed it was not doing it.</p>
+
+<p><strong>First fault: the smectite had no scale at all.</strong> Every interstratified entry is
+multiplied by that factor. The lone pure-smectite entry is calculated the same way, by the stacking
+model, and was added without one &mdash; so it sat on the stacking model's own basis while every
+phase its weight percent was compared against sat on the other. Per unit of mass times volume it was
+seventeen times the discrete illite, where the four discrete minerals span a factor of two among
+themselves.</p>
+
+<p>It cannot be given the usual factor, because that needs a three-dimensional cell and the
+glycolated smectite is a one-dimensional layer transcribed from Reynolds (1965). But the
+<em>reference</em> the factor compares against needs only the layer: a periodic stack of one layer of
+thickness <var>d</var> has its 00l at <var>d</var>/<var>l</var>, with the layer's own structure
+factor, and that is the discrete Bragg series a powder calculation would give.
+<code>layer_basal_scale_factor</code> builds it that way. Checked against the crystal route on
+chlorite and kaolinite&nbsp;1M, whose cells hold one layer, it reproduces it to five figures, and a
+pure host calculated through it matches <code>powder_pattern</code> per gram to the same. A smectite
+is modelled as one layer per cell, so this is its scale directly.</p>
+
+<p><strong>Second fault, found on the way: a missing divisor.</strong> Equating the <em>areas</em> of
+the two calculations equates a layer with a cell. An illite cell holds two layers, so every
+illite/smectite entry came out twice as bright per gram as the discrete illite beside it &mdash; and
+its weight percent half what it should be. A chlorite cell holds one layer, so the
+chlorite/smectite series was never affected, which is exactly why the error hid: it moved the I/S
+series against the illite and left C/S alone. <code>basal_scale_factor</code> now divides by
+<code>layers_per_cell</code>, after which a pure host calculated both ways agrees per gram to four
+figures for every one of the four minerals.</p>
+
+<p><strong>What it did to the library.</strong> Intensity per unit of mass times volume, relative to
+kaolinite&nbsp;1M:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Entry</th><th>before</th><th>after</th></tr>
+<tr><td>smectite (EG)</td><td class="num">&times;17</td><td class="num">&times;1.37</td></tr>
+<tr><td>chlorite</td><td class="num">&times;1.19</td><td class="num">&times;1.19</td></tr>
+<tr><td>kaolinite 2M</td><td class="num">&times;1.01</td><td class="num">&times;1.01</td></tr>
+<tr><td>illite</td><td class="num">&times;0.61</td><td class="num">&times;0.61</td></tr>
+</table></div>
+
+<p><strong>And to the standards.</strong> Refitted on the rebuilt library:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Standard</th><th>before</th><th>after</th></tr>
+<tr><td>Montmorillonite (50)</td><td>smectite 89&nbsp;%</td><td>smectite <strong>98&nbsp;%</strong></td></tr>
+<tr><td>Montmorillonite (9)</td><td>illite 58&nbsp;%, smectite 20</td>
+<td><strong>smectite 55&nbsp;%</strong>, illite 37</td></tr>
+<tr><td>Illite (10)</td><td>illite 89&nbsp;%</td><td>illite <strong>94&nbsp;%</strong></td></tr>
+<tr><td>Prochlorite (15)</td><td>chlorite 88&nbsp;%</td><td>chlorite 80&nbsp;%</td></tr>
+</table></div>
+
+<p>Montmorillonite&nbsp;9 is the one worth pausing on. It had been coming back as more illite than
+smectite, which was never credible for a montmorillonite standard; it now comes back as more
+smectite than illite, and the illite it still finds is real &mdash; the specimen has an illite 001
+and is not single phase.</p>
+
+<p><strong>What is still wrong.</strong> The absolute constant from a weighed mount has not come
+right. Across the nine mounts it still spans 390-fold, and the pattern in it is now legible: a mount
+whose fit lands on <code>powder_pattern</code> entries gives a high constant (kaolinite&nbsp;12,
+&times;1.51) and one that lands on stacking-model entries gives a low one (illite&nbsp;10,
+&times;0.26, whose winning entry is an I/S end member). The leading suspect is the continuum strip
+of <code>PatternLibrary.add</code>: a stacking-model pattern of a thin crystallite scatters a large
+diffuse continuum and loses a correspondingly large, thickness-dependent share of its area to that
+strip, while a powder pattern is a sum of sharp peaks and loses almost nothing. Nothing in the mass
+bookkeeping accounts for the difference. That is the next thing to take apart, and it is not claimed
+to be fixed here.</p>
 
 
 

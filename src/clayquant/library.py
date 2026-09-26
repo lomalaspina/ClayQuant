@@ -47,6 +47,7 @@ from .pattern import (
     Pattern,
     basal_pattern,
     basal_scale_factor,
+    layer_basal_scale_factor,
     mixed_layer_pattern,
     powder_pattern,
     reflections,
@@ -1036,22 +1037,43 @@ def build_library(
         None if air_dried_thickness is None
         else air_dried_smectite_layer(float(air_dried_thickness))
     )
-    announce(f"smectite_EG: 1 pattern at r = {smectite_orientation:g}")
+    # On the same scale as everything else, which took finding.  The stacking
+    # model returns intensity per layer on its own normalisation; every
+    # interstratified entry is multiplied by ``basal_scale_factor`` to put it on
+    # the intensity-per-unit-cell scale ``powder_pattern`` uses for the discrete
+    # minerals, and this entry used to be added with no such factor at all.  It
+    # therefore sat on one basis while every phase its weight percent was
+    # compared against sat on the other, and a weighed montmorillonite mount
+    # showed it: the fitted mass per gram came out a thousandfold from the
+    # kaolinite and chlorite mounts, which agree among themselves to 40 per cent
+    # (Sec. A.41).  ``basal_scale_factor`` cannot be used here because it needs a
+    # three-dimensional cell and this smectite has none, so the reference is
+    # built from the layer instead; see :func:`layer_basal_scale_factor` for
+    # what that was checked against.
+    smectite_scale = layer_basal_scale_factor(smectite, extended, instrument, csds)
+    air_scale = (None if air_smectite is None
+                 else layer_basal_scale_factor(air_smectite, extended, instrument, csds))
+    announce(f"smectite_EG: 1 pattern at r = {smectite_orientation:g}, "
+             f"basal scale {smectite_scale:.4g}")
+
+    def scaled(pattern, scale):
+        return replace(pattern, intensity=np.asarray(pattern.intensity) * scale)
+
     library.add(
-        basal_pattern(
+        scaled(basal_pattern(
             MixedLayerStack(smectite, smectite, 1.0, csds=csds, name="smectite_EG"),
             extended,
             instrument,
             r_march_dollase=smectite_orientation,
             name="smectite_EG",
-        ),
-        air_pattern=None if air_smectite is None else basal_pattern(
+        ), smectite_scale),
+        air_pattern=None if air_smectite is None else scaled(basal_pattern(
             MixedLayerStack(air_smectite, air_smectite, 1.0, csds=csds, name="smectite_air"),
             extended,
             instrument,
             r_march_dollase=smectite_orientation,
             name="smectite_EG air",
-        ),
+        ), air_scale),
         phase="smectite_EG",
         march_dollase=smectite_orientation,
         fraction=0.0,

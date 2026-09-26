@@ -28,7 +28,7 @@ from dataclasses import dataclass, field, replace
 
 import numpy as np
 
-from .crystal import Crystal
+from .crystal import Crystal, LayerModel
 from .emission import CU_KA_5LINE, EmissionProfile
 from .mixed_layer import MixedLayerStack
 from .optics import Divergence, lorentz_polarization, march_dollase
@@ -43,6 +43,8 @@ __all__ = [
     "basal_pattern",
     "mixed_layer_pattern",
     "basal_scale_factor",
+    "layer_basal_scale_factor",
+    "MAXIMUM_BASAL_ORDER",
     "two_theta_grid",
 ]
 
@@ -387,6 +389,10 @@ def basal_pattern(
     )
 
 
+MAXIMUM_BASAL_ORDER = 200
+"""How many 00l orders to consider; far more than any of them reaches."""
+
+
 def basal_scale_factor(
     host: Crystal,
     layers_per_cell: int,
@@ -401,8 +407,22 @@ def basal_scale_factor(
     structure.  Rather than tracking the normalisation analytically - which is
     awkward for multi-layer polytypes, where the layers of a cell interfere -
     the two are compared for the pure host: the same structure, calculated both
-    ways, must give the same basal series.  The ratio of integrated basal
-    intensity is that scale.
+    ways, must give the same basal series *per gram*.  The ratio of integrated
+    basal intensity is that scale, divided by the number of layers in a cell.
+
+    That divisor is the part it is easy to leave out, and leaving it out costs a
+    factor of ``layers_per_cell`` in every weight percent the phase takes.  The
+    stacking model's unit is one layer and ``powder_pattern``'s is one cell, so
+    equating their *areas* equates a layer with a cell; an illite cell holds two
+    layers, so its interstratified entries came out twice as bright per gram as
+    the discrete illite beside them, and their weight percent half what it
+    should have been.  A chlorite cell holds one layer and was never affected,
+    which is why the error hid: it moved the illite/smectite series against the
+    illite and left the chlorite/smectite series alone.
+
+    Checked by calculating a pure host both ways and dividing by the mass of the
+    unit each way: with the divisor the two agree to five figures, for a
+    one-layer cell and a two-layer one alike.
     """
     layer = host.layer_model(layers_per_cell=layers_per_cell)
     pure = MixedLayerStack(layer, layer, fraction_a=1.0, csds=csds)
@@ -418,7 +438,65 @@ def basal_scale_factor(
     reference_area = float(np.trapezoid(reference, grid))
     if model_area <= 0.0:
         return 0.0
-    return reference_area / model_area
+    return reference_area / model_area / float(layers_per_cell)
+
+
+def layer_basal_scale_factor(
+    layer: "LayerModel",
+    grid: np.ndarray,
+    instrument: "Instrument",
+    csds,
+) -> float:
+    """The basal scale for a phase that has no three-dimensional structure.
+
+    :func:`basal_scale_factor` puts the stacking model's intensity onto the
+    intensity-per-unit-cell scale that :func:`powder_pattern` uses, by
+    calculating one host both ways and comparing.  That needs a ``Crystal``, and
+    the glycolated smectite has not got one: it is a one-dimensional layer
+    transcribed from Reynolds (1965), with no cell to compute ``hkl`` from.
+    Without a scale its pattern sits on the stacking model's own basis while
+    every phase it is compared with sits on the other, and its weight percent is
+    wrong by whatever that factor is.
+
+    The reference the other function builds needs only the layer, though.  A
+    periodic stack of one layer of thickness ``d`` has its 00l at ``d/l``, with
+    the layer's own structure factor, and that is the discrete Bragg series a
+    powder calculation would give.  Built that way and compared with the
+    stacking model, exactly as before, the ratio is the scale.
+
+    Checked against :func:`basal_scale_factor` on the four minerals that have
+    both descriptions, at three crystallite thicknesses each: the two agree to
+    five figures once the other function's ``layers_per_cell`` divisor is
+    accounted for, and the pure host calculated through this scale matches
+    ``powder_pattern`` per gram to five figures for chlorite and kaolinite 1M,
+    whose cells hold one layer.  A smectite is modelled as one layer per cell,
+    so this is its scale directly.
+    """
+    wavelengths, _ = instrument.sample_emission()
+    d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
+    orders = [order for order in range(1, MAXIMUM_BASAL_ORDER + 1)
+              if layer.thickness / order >= d_min]
+    if not orders:
+        return 0.0
+    centred = layer.centered()
+    spacings = np.array([layer.thickness / order for order in orders], dtype=float)
+    amplitude = centred.structure_factor(1.0 / spacings)
+    f_squared = np.abs(amplitude) ** 2
+    # Both members of every Friedel pair, as reflections() enumerates them.
+    reference = Reflections(
+        hkl=np.array([[0, 0, order] for order in orders]
+                     + [[0, 0, -order] for order in orders]),
+        d=np.concatenate([spacings, spacings]),
+        f_squared=np.concatenate([f_squared, f_squared]),
+        alpha=np.concatenate([np.zeros(len(orders)), np.full(len(orders), math.pi)]),
+    )
+    built = _build_from_reflections(reference, grid, instrument, 1.0)
+    pure = MixedLayerStack(layer, layer, fraction_a=1.0, csds=csds)
+    model = basal_pattern(pure, grid, instrument, r_march_dollase=1.0)
+    model_area = float(np.trapezoid(model.intensity, grid))
+    if model_area <= 0.0:
+        return 0.0
+    return float(np.trapezoid(built, grid)) / model_area
 
 
 def mixed_layer_pattern(
