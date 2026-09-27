@@ -161,6 +161,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-41">A.41 The library rebuilt, and nine weighed mounts</a>
 <a href="#a-42">A.42 Two calculations, one scale</a>
 <a href="#a-43">A.43 The spread was the orientation</a>
+<a href="#a-44">A.44 Calibrating on weighed standards</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5801,6 +5802,49 @@ reports <code>comparable_constant</code> with it divided out; comparing raw cons
 old <code>agreement_between</code> did and it is no longer possible to do by accident.
 <code>calibration_from_weighed_mounts</code> turns mounts of known single phases into a
 :class:`Calibration`, normalised so the factors average one, since only their ratios matter.</p>
+
+
+<h3 id="a-44">A.44 Calibrating on weighed standards, as a command</h3>
+
+<p><strong>What it does.</strong> <code>clayquant-standards</code> takes a table of weighed mounts
+of known minerals, fits each one, and reports the per-phase factors they imply:</p>
+
+<pre><code>clayquant-standards standards.csv -o calibration.json</code></pre>
+
+<p>The table is a CSV with columns <code>name</code>, <code>file</code>, <code>mass (mg)</code>,
+<code>phase</code> and optionally <code>area (cm2)</code>; blank lines and lines beginning with
+<code>#</code> are skipped, because it is a table kept by hand beside a balance.
+<code>examples/standards.csv</code> is the one these factors were measured from.</p>
+
+<p><strong>What it does for you rather than leaving to you.</strong> Two things have to be right
+before constants from different mounts can be compared at all, and both are easy to forget.</p>
+
+<p>Every clay of one mount is fitted at <em>one</em> orientation. They settled out of one suspension
+onto one plate, so they share a texture, and a fit free to put one clay at
+<var>r</var>&nbsp;=&nbsp;0.1 and another at 1 differs by a thousand in the mass behind the same
+scattering.</p>
+
+<p>The constants are then compared with that orientation divided out
+(&sect;<a href="#a-43">A.43</a>). The report prints both, and says what the spread was before and
+after, because the difference between them is the whole reason the correction exists.</p>
+
+<p><strong>Leaving a standard out.</strong> A mount whose <code>phase</code> is empty is fitted and
+reported but not calibrated on. That is for a standard that is not single phase &mdash; the dickite
+carrying a sulfate and a phosphate, the montmorillonite carrying an illite
+(&sect;<a href="#a-39">A.39</a>) &mdash; because an impure standard puts its impurity into its own
+factor. Better to have no factor for a phase than a wrong one.</p>
+
+<p><strong>How to mount them.</strong> Keep the masses within about a factor of two of each other.
+A film of a few milligrams on a 25&nbsp;mm disc is already optically thick at low angle, so counts
+stop rising with mass &mdash; four times the material for seven per cent more signal, on the two
+montmorillonite mounts (&sect;<a href="#a-41">A.41</a>) &mdash; and a heavy mount is not comparable
+with a light one however well each is fitted. Matching them is what makes the saturation divide out
+rather than something that has to be corrected; 2 to 3&nbsp;mg is the band the factors below were
+measured in, and the two mounts outside it are the two whose factors are weakest.</p>
+
+<p><strong>And two mounts per phase.</strong> Their agreement is that phase's uncertainty, and
+nothing else measures it. Of the four phases here only chlorite and kaolinite have two, and they are
+the two to trust: the chlorites agree to 1.5&nbsp;%, the kaolinites to 33&nbsp;%.</p>
 
 
 

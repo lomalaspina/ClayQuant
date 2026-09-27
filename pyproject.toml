@@ -29,6 +29,7 @@ dev = ["pytest>=7.4", "pyflakes>=3.0"]
 clayquant-build-library = "clayquant.library:main"
 clayquant-import-structures = "clayquant.bern:main"
 clayquant-gui = "clayquant.gui.app:main"
+clayquant-standards = "clayquant.standards:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,24 @@
+# Weighed mounts of known minerals, for clayquant-standards.
+#
+# name   what to call the mount in the report
+# file   its glycolated scan, relative to this file unless absolute
+# mass   what the mount carries, in mg: loaded plate minus empty plate
+# phase  the library phase it is a standard of, or empty where the mount is
+#        not single phase.  An impure standard puts its impurity into its own
+#        factor, so it is fitted and reported but left out of the calibration.
+# area   the area the suspension dried over, in cm2.  A 25 mm disc is 4.91.
+#
+# Keep the masses within about a factor of two of each other.  A film of a few
+# milligrams on a 25 mm disc is already optically thick at low angle, so a
+# heavy mount is not comparable with a light one however well each is fitted;
+# matching them is what makes the saturation divide out.  2 to 3 mg is the band
+# the published factors were measured in.
+name,file,mass (mg),phase,area (cm2)
+Kaolinite_12,Kaolinite_12_eg.xrdml,2.6,kaolinite_1M,4.91
+Kaolinite_43,Kaolinite_43_eg.xrdml,2.3,kaolinite_1M,4.91
+Chlorite_16,Chlorite_16_eg.xrdml,1.7,chlorite,4.91
+Prochlorite_15,Prochlorite_15_eg.xrdml,1.4,chlorite,4.91
+Illite_10,Illite_10_eg.xrdml,8.0,illite,4.91
+Montmorillonite_50,Montmorillonite_50_eg.xrdml,11.3,smectite_EG,4.91
+Dickite_7,Dickite_7_eg.xrdml,2.6,,4.91
+Montmorillonite_9,Montmorillonite_9_eg.xrdml,2.6,,4.91
