@@ -160,6 +160,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-40">A.40 The mount is a 25 mm disc</a>
 <a href="#a-41">A.41 The library rebuilt, and nine weighed mounts</a>
 <a href="#a-42">A.42 Two calculations, one scale</a>
+<a href="#a-43">A.43 The spread was the orientation</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5722,12 +5723,84 @@ and is not single phase.</p>
 right. Across the nine mounts it still spans 390-fold, and the pattern in it is now legible: a mount
 whose fit lands on <code>powder_pattern</code> entries gives a high constant (kaolinite&nbsp;12,
 &times;1.51) and one that lands on stacking-model entries gives a low one (illite&nbsp;10,
-&times;0.26, whose winning entry is an I/S end member). The leading suspect is the continuum strip
-of <code>PatternLibrary.add</code>: a stacking-model pattern of a thin crystallite scatters a large
-diffuse continuum and loses a correspondingly large, thickness-dependent share of its area to that
-strip, while a powder pattern is a sum of sharp peaks and loses almost nothing. Nothing in the mass
-bookkeeping accounts for the difference. That is the next thing to take apart, and it is not claimed
-to be fixed here.</p>
+&times;0.26, whose winning entry is an I/S end member). The continuum strip of
+<code>PatternLibrary.add</code> was the suspect when this section was written, and it was the wrong
+one: &sect;<a href="#a-43">A.43</a> shows the bookkeeping round-tripping a known mixture exactly, and
+finds the spread in the orientation instead.</p>
+
+
+<h3 id="a-43">A.43 The spread in the weighed constant was the orientation</h3>
+
+<p><strong>A retraction first.</strong> &sect;<a href="#a-42">A.42</a> named the continuum strip of
+<code>PatternLibrary.add</code> as the suspect for the 390-fold spread in the constant from a
+weighed mount, on the reasoning that a stacking-model pattern loses a large share of its area to
+that strip and a powder pattern loses almost none. That was wrong, and the test that settles it is
+simple enough that it should have been run first: build a synthetic mixture out of library entries
+in a known mass ratio, fit it, and see what comes back.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Put in</th><th>Got out</th></tr>
+<tr><td>illite 89.8&nbsp;%, kaolinite 10.2</td><td>illite 89.8&nbsp;%, kaolinite 10.2</td></tr>
+<tr><td>smectite 82.1&nbsp;%, kaolinite 17.9</td><td>smectite 82.1&nbsp;%, kaolinite 17.9</td></tr>
+<tr><td>chlorite 81.9&nbsp;%, kaolinite 18.1</td><td>chlorite 81.9&nbsp;%, kaolinite 18.1</td></tr>
+<tr><td>I/S 80.2&nbsp;%, kaolinite 19.8</td><td>I/S 80.2&nbsp;%, kaolinite 19.8</td></tr>
+</table></div>
+
+<p>Exact, to every digit, across both families of entry. The strip cancels, and the algebra says why:
+the stored column is the stripped pattern over its own maximum, the fitted coefficient is the
+phase's scale times that maximum, and the maximum divides out of
+<code>coefficient / normalization &times; (ZMV)</code>. The bookkeeping was never the problem.</p>
+
+<p><strong>What it was.</strong> The orientation. A basal series is enhanced by <var>r</var> to the
+power &minus;3, so the mass behind a given measured intensity goes as <var>r</var> cubed, and the
+nine mounts were fitted at orientations from 0.1 to 0.5 &mdash; a factor of 125 between the ends
+before anything about the minerals is considered. Dividing it out:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Mount</th><th>mg</th><th><var>r</var></th><th>constant</th><th>on one <var>r</var></th></tr>
+<tr><td>Kaolinite (12)</td><td class="num">2.6</td><td class="num">0.40</td>
+<td class="num">8.13 &times; 10<sup>4</sup></td><td class="num">1.27 &times; 10<sup>6</sup></td></tr>
+<tr><td>Kaolinite (43)</td><td class="num">2.3</td><td class="num">0.40</td>
+<td class="num">1.08 &times; 10<sup>5</sup></td><td class="num">1.69 &times; 10<sup>6</sup></td></tr>
+<tr><td>Chlorite (16)</td><td class="num">1.7</td><td class="num">0.20</td>
+<td class="num">3.36 &times; 10<sup>4</sup></td><td class="num">4.199 &times; 10<sup>6</sup></td></tr>
+<tr><td>Prochlorite (15)</td><td class="num">1.4</td><td class="num">0.30</td>
+<td class="num">1.15 &times; 10<sup>5</sup></td><td class="num">4.262 &times; 10<sup>6</sup></td></tr>
+<tr><td>Illite (10)</td><td class="num">8.0</td><td class="num">0.20</td>
+<td class="num">1.41 &times; 10<sup>4</sup></td><td class="num">1.77 &times; 10<sup>6</sup></td></tr>
+<tr><td>Montmorillonite (50)</td><td class="num">11.3</td><td class="num">0.10</td>
+<td class="num">2.93 &times; 10<sup>2</sup></td><td class="num">2.93 &times; 10<sup>5</sup></td></tr>
+</table></div>
+
+<p>393-fold becomes 15. And the two chlorite mounts, different minerals of the family measured on
+different days at different orientations and different masses, agree to <strong>1.5&nbsp;%</strong>.
+That is not a coincidence surviving a wrong correction.</p>
+
+<p><strong>What the fifteen is.</strong> Not an error but the measurement. One constant has to serve
+every mount, so a phase whose mounts sit consistently above or below the rest is a phase whose
+calculated pattern misdescribes the real mineral, by that ratio &mdash; the factor
+&sect;<a href="#s2-13">2.13</a> calls <var>k</var>, texture and microabsorption and structural error
+together, which nothing inside a single analysis can measure. Weighed standards measure it:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th>mounts</th><th><var>k</var></th></tr>
+<tr><td>smectite (EG)</td><td class="num">1</td><td class="num">6.64</td></tr>
+<tr><td>kaolinite 1M</td><td class="num">2</td><td class="num">1.31</td></tr>
+<tr><td>illite</td><td class="num">1</td><td class="num">1.10</td></tr>
+<tr><td>chlorite</td><td class="num">2</td><td class="num">0.46</td></tr>
+</table></div>
+
+<p>Read as ratios, which is all they are: the calculated chlorite delivers about two and a half times
+the intensity per gram that it should, and the glycolated smectite about a sixth. Kaolinite and
+illite sit within 20&nbsp;% of each other. The two phases with two mounts each are the ones to
+trust - chlorite's agree to 1.5&nbsp;%, the kaolinites' to 33&nbsp;% - and the smectite's single
+mount is the most saturated in the set, so its factor is the weakest of the four.</p>
+
+<p><strong>In the code.</strong> <code>WeighedMount</code> records the orientation the fit chose and
+reports <code>comparable_constant</code> with it divided out; comparing raw constants is what the
+old <code>agreement_between</code> did and it is no longer possible to do by accident.
+<code>calibration_from_weighed_mounts</code> turns mounts of known single phases into a
+:class:`Calibration`, normalised so the factors average one, since only their ratios matter.</p>
 
 
 

@@ -136,3 +136,106 @@ def test_a_bad_coefficient_or_angle_is_refused():
         thin_film_factor(0.0, 45.0, 0.001)
     with pytest.raises(ValueError):
         mass_per_area(0.0, 1.0)
+
+
+# --------------------------------------------------------------------------- #
+# The orientation, without which two mounts are not on one scale
+# --------------------------------------------------------------------------- #
+
+
+def oriented_fit(masses: dict[str, float], r: float) -> FitResult:
+    result = fit(masses)
+    result.march_dollase = np.full(len(masses), r)
+    return result
+
+
+def test_the_orientation_is_taken_from_the_fit():
+    mount = WeighedMount.from_fit(oriented_fit({"illite": 4.0}, 0.3), mass=0.005)
+    assert mount.orientation == pytest.approx(0.3)
+
+
+def test_an_orientation_can_be_given_instead():
+    mount = WeighedMount.from_fit(fit({"illite": 4.0}), mass=0.005, orientation=0.2)
+    assert mount.orientation == pytest.approx(0.2)
+
+
+def test_the_comparable_constant_divides_the_orientation_out():
+    """A basal series is enhanced by r^-3, so the mass behind a given measured
+    intensity goes as r^3 and two mounts at different r are not on one scale."""
+    mount = WeighedMount.from_fit(oriented_fit({"illite": 4.0}, 0.5), mass=0.005)
+    assert mount.comparable_constant == pytest.approx(mount.constant / 0.125)
+
+
+def test_without_an_orientation_nothing_is_corrected():
+    """A caller that did not record it gets what it asked for, not a guess."""
+    mount = WeighedMount.from_fit(fit({"illite": 4.0}), mass=0.005)
+    assert mount.orientation is None
+    assert mount.comparable_constant == pytest.approx(mount.constant)
+
+
+def test_two_mounts_at_different_orientations_agree_once_corrected():
+    """The 393-fold spread over nine standards was mostly this."""
+    one = WeighedMount(constant=1.0 * 0.1**3, mass=0.003, orientation=0.1,
+                       measurement="a")
+    other = WeighedMount(constant=1.0 * 0.5**3, mass=0.003, orientation=0.5,
+                         measurement="b")
+    raw = max(one.constant, other.constant) / min(one.constant, other.constant)
+    assert raw == pytest.approx(125.0)
+    assert agreement_between([one, other])["ratio_max_to_min"] == pytest.approx(1.0)
+
+
+# --------------------------------------------------------------------------- #
+# What is left once the orientation is out: the per-phase factor
+# --------------------------------------------------------------------------- #
+
+
+def test_a_phase_that_sits_low_gets_a_factor_above_one():
+    from clayquant.quantification import calibration_from_weighed_mounts
+
+    mounts = [
+        (WeighedMount(constant=2.0, mass=0.003, orientation=1.0, measurement="k1"),
+         "kaolinite_1M"),
+        (WeighedMount(constant=2.0, mass=0.003, orientation=1.0, measurement="k2"),
+         "kaolinite_1M"),
+        (WeighedMount(constant=0.5, mass=0.003, orientation=1.0, measurement="s"),
+         "smectite_EG"),
+    ]
+    calibration = calibration_from_weighed_mounts(mounts)
+    assert calibration.factors["smectite_EG"] > 1.0
+    assert calibration.factors["kaolinite_1M"] < 1.0
+    # the ratio is what the mounts measured, four to one
+    assert (calibration.factors["smectite_EG"]
+            / calibration.factors["kaolinite_1M"]) == pytest.approx(4.0)
+
+
+def test_the_factors_average_one_because_only_ratios_matter():
+    from clayquant.quantification import calibration_from_weighed_mounts
+
+    mounts = [
+        (WeighedMount(constant=c, mass=0.003, orientation=1.0, measurement=name), phase)
+        for c, name, phase in ((3.0, "a", "chlorite"), (1.0, "b", "illite"),
+                               (2.0, "c", "kaolinite_1M"))
+    ]
+    factors = calibration_from_weighed_mounts(mounts).factors
+    assert sum(1.0 / f for f in factors.values()) / len(factors) == pytest.approx(1.0)
+
+
+def test_repeat_mounts_of_one_phase_are_averaged():
+    from clayquant.quantification import calibration_from_weighed_mounts
+
+    mounts = [
+        (WeighedMount(constant=1.0, mass=0.003, orientation=1.0, measurement="a"), "chlorite"),
+        (WeighedMount(constant=3.0, mass=0.003, orientation=1.0, measurement="b"), "chlorite"),
+        (WeighedMount(constant=2.0, mass=0.003, orientation=1.0, measurement="c"), "illite"),
+    ]
+    calibration = calibration_from_weighed_mounts(mounts)
+    assert calibration.factors["chlorite"] == pytest.approx(calibration.factors["illite"])
+    assert "chlorite (2)" in calibration.source
+
+
+def test_a_calibration_needs_a_mount_with_something_in_it():
+    from clayquant.quantification import calibration_from_weighed_mounts
+
+    with pytest.raises(ValueError):
+        calibration_from_weighed_mounts(
+            [(WeighedMount(constant=0.0, mass=0.003), "illite")])

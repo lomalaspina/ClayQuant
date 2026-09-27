@@ -55,6 +55,7 @@ __all__ = [
     "calibration_factor",
     "WeighedMount",
     "agreement_between",
+    "calibration_from_weighed_mounts",
     "Quantification",
     "Calibration",
     "quantify",
@@ -376,7 +377,11 @@ class WeighedMount:
     """
 
     constant: float
-    """Fitted relative mass per gram of material on the mount."""
+    """Fitted relative mass per gram of material on the mount.
+
+    On the orientation the fit chose, which is not a scale anything else is on:
+    see :attr:`orientation` and :attr:`comparable_constant`.
+    """
 
     mass: float
     """What the mount carried, in grams."""
@@ -384,8 +389,31 @@ class WeighedMount:
     area: float | None = None
     """The area it dried over, in cm^2; ``None`` if it was not measured."""
 
+    orientation: float | None = None
+    """The March-Dollase parameter the fit gave this mount's clays.
+
+    Without it two mounts cannot be compared, and the error is not small.  A
+    basal series is enhanced by ``r`` to the power -3, so the mass behind a
+    given measured intensity goes as ``r`` cubed: a mount fitted at 0.1 and one
+    at 0.5 differ by 125 before anything about the minerals is considered.  On
+    nine weighed standards, dividing it out took the spread in the constant from
+    393-fold to 15 (Sec. A.43).
+    """
+
     measurement: str = ""
     phases: tuple[str, ...] = ()
+
+    @property
+    def comparable_constant(self) -> float:
+        """The constant on one orientation, which is what may be compared.
+
+        ``None`` orientation leaves it as it is, and says so by being the same
+        number: a caller that did not record the orientation gets what it asked
+        for rather than a correction it cannot check.
+        """
+        if not self.orientation:
+            return self.constant
+        return self.constant / float(self.orientation) ** 3
 
     @property
     def mass_per_area(self) -> float | None:
@@ -399,6 +427,7 @@ class WeighedMount:
         mass: float,
         area: float | None = None,
         phases: Sequence[str] | None = None,
+        orientation: float | None = None,
     ) -> "WeighedMount":
         """The constant from one fit of one weighed mount.
 
@@ -426,10 +455,15 @@ class WeighedMount:
             raise ValueError(
                 "the fit gives this mount no mass at all, so there is no constant in it"
             )
+        if orientation is None:
+            chosen = [float(value) for value in getattr(result, "march_dollase", [])
+                      if value and value > 0.0]
+            orientation = min(chosen) if chosen else None
         return cls(
             constant=total / mass,
             mass=float(mass),
             area=None if area is None else float(area),
+            orientation=None if not orientation else float(orientation),
             measurement=str(result.metadata.get("measurement", "")),
             phases=tuple(found),
         )
@@ -437,6 +471,48 @@ class WeighedMount:
     def mass_of(self, result: FitResult, phase: str) -> float:
         """What this fit says a phase weighs, in grams, on this constant."""
         return _fitted_mass(result, phase) / self.constant
+
+
+def calibration_from_weighed_mounts(
+    mounts: "Sequence[tuple[WeighedMount, str]]", source: str = ""
+) -> "Calibration":
+    """Per-phase factors from weighed mounts of known single phases.
+
+    Each pair is a mount and the phase it is a standard of.  One constant has to
+    serve every mount measured through the same optics, so where a phase's
+    mounts sit consistently above or below the others, that ratio is the factor
+    by which its calculated pattern misdescribes the real mineral - the ``k`` of
+    :class:`Calibration`, texture and microabsorption and structural error
+    together, which nothing inside a single analysis can measure.
+
+    The constants are compared on one orientation
+    (:attr:`WeighedMount.comparable_constant`), because a mount fitted at
+    ``r = 0.1`` and one at ``r = 0.5`` differ by 125 before any mineralogy is
+    considered.  Factors come out normalised so they average 1, as
+    :meth:`Calibration.from_known_composition` does, since only their ratios
+    matter.
+
+    Two mounts of one phase are worth more than one: their agreement is the
+    uncertainty of that phase's factor, and where they disagree the factor
+    should not be used.  A phase whose standard is not single phase - a
+    montmorillonite carrying illite, a dickite carrying a sulfate - contributes
+    the impurity to its own factor, so use a pure mount or none.
+    """
+    per_phase: dict[str, list[float]] = {}
+    for mount, phase in mounts:
+        value = mount.comparable_constant
+        if value > 0.0:
+            per_phase.setdefault(phase, []).append(value)
+    if not per_phase:
+        raise ValueError("no weighed mount has a positive constant")
+    means = {phase: sum(values) / len(values) for phase, values in per_phase.items()}
+    average = sum(means.values()) / len(means)
+    factors = {phase: average / value for phase, value in means.items() if value > 0.0}
+    counted = ", ".join(f"{phase} ({len(per_phase[phase])})" for phase in sorted(per_phase))
+    return Calibration(
+        factors=factors,
+        source=source or f"weighed mounts on one orientation: {counted}",
+    )
 
 
 def agreement_between(mounts: Sequence[WeighedMount]) -> dict:
@@ -452,16 +528,25 @@ def agreement_between(mounts: Sequence[WeighedMount]) -> dict:
     mean as a factor - which for a pure standard is exactly the factor by which
     its reference pattern is wrong.
     """
-    values = [mount.constant for mount in mounts if mount.constant > 0.0]
+    values = [mount.comparable_constant for mount in mounts
+              if mount.comparable_constant > 0.0]
     if not values:
         raise ValueError("no mount has a positive constant")
     mean = sum(values) / len(values)
     departures = {
-        (mount.measurement or f"mount {index + 1}"): mount.constant / mean
+        (mount.measurement or f"mount {index + 1}"): mount.comparable_constant / mean
         for index, mount in enumerate(mounts)
     }
     spread = max(values) / min(values) if min(values) > 0.0 else float("inf")
-    return {"mean": mean, "ratio_max_to_min": spread, "departures": departures}
+    return {
+        "mean": mean,
+        "ratio_max_to_min": spread,
+        "departures": departures,
+        "orientations": {
+            (mount.measurement or f"mount {index + 1}"): mount.orientation
+            for index, mount in enumerate(mounts)
+        },
+    }
 
 
 def calibration_factor(
