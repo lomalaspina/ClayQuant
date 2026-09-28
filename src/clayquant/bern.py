@@ -950,6 +950,8 @@ def load_phase_database(path: str | Path) -> dict[str, Crystal]:
             ],
             symops=record["symops"],
             name=record["name"],
+            # A zero pole is what TOPAS writes for a phase whose preferred
+            # orientation macro carries no axis; Crystal turns it into None.
             po_axis=(tuple(record["po_hkl"]) if record.get("po_hkl") else None),
             source=(
                 f"{record['name']}"

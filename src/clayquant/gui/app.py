@@ -605,6 +605,30 @@ HABIT_ORIENTATIONS: tuple[float, ...] = (0.3, 0.5, 0.7, 1.0)
 """March-Dollase values spanned for an accompanying mineral that has a habit."""
 
 
+def habit_of(name: str, crystal) -> tuple[float, float, float] | None:
+    """The pole to span this accompanying mineral's orientation about, if any.
+
+    Only a mineral named in :data:`clayquant.models.MINERAL_HABIT` gets one, and
+    that is the point of the check.  A TOPAS structure library records a
+    preferred-orientation axis for most of its phases - 131 of the 205 in the
+    one this was written against, quartz and the feldspars among them - because
+    a refinement commonly switches a PO correction on.  That says which axis the
+    correction was about; it does not say the mineral is lath-shaped.  Taking it
+    as a habit would span four orientations for every accompanying mineral in
+    the fit and let an equant quartz grain be fitted at r = 0.3, which is not
+    what a quartz grain does in a sedimented clay mount.
+
+    The database's own axis is preferred where the mineral has one, since it
+    comes from the structure that was refined; the table supplies it otherwise.
+    """
+    from ..models import MINERAL_HABIT
+
+    pole = MINERAL_HABIT.get(name.strip().lower())
+    if pole is None:
+        return None
+    return crystal.po_axis if crystal.po_axis is not None else tuple(float(v) for v in pole)
+
+
 def _with_main_minerals(library):
     """Return the library with the confirmed main minerals appended.
 
@@ -618,7 +642,9 @@ def _with_main_minerals(library):
     own pole and the fit chooses, exactly as it chooses among clay orientations.
     Sepiolite and palygorskite are the case this exists for - laths that settle
     on a side face - and forcing a lath to be a random powder misplaces every
-    line it has (Sec. A.37).
+    line it has (Sec. A.37).  Which minerals those are is a question of habit
+    and is answered by name, not by whether the structure database happens to
+    carry an axis; see :func:`habit_of`.
     """
     if not STATE.selected_main or not STATE.phase_database:
         return library, 0
@@ -636,13 +662,13 @@ def _with_main_minerals(library):
         crystal = STATE.phase_database.get(name)
         if crystal is None:
             continue
-        pole = crystal.po_axis
-        orientations = HABIT_ORIENTATIONS if pole else (1.0,)
+        pole = habit_of(name, crystal)
+        orientations = HABIT_ORIENTATIONS if pole is not None else (1.0,)
         for r in orientations:
             pattern = powder_pattern(
                 crystal, library.two_theta, instrument, r_march_dollase=r,
-                po_axis=pole or (0.0, 0.0, 1.0),
-                name=name if r == 1.0 and not pole else f"{name} PO={r:g}",
+                po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
+                name=name if pole is None else f"{name} PO={r:g}",
             )
             if float(np.max(pattern.intensity)) <= 0.0:
                 continue

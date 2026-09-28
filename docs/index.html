@@ -5326,6 +5326,23 @@ middle of that range rather than at <var>r</var>&nbsp;=&nbsp;1, because a lath p
 intensity into one reflection and a random-powder column spreads it over many, which can miss the
 mineral altogether.</p>
 
+<p><strong>Which minerals those are is answered by name, and that took a correction.</strong> The
+phase database carries an axis of its own, and the first version of this took it as the habit. It is
+not one. A TOPAS structure library records a preferred-orientation axis for most of its phases
+&mdash; 131 of the 205 in the one this was written against, quartz and the feldspars among them
+&mdash; because a refinement commonly switches a PO correction on, and that says which axis the
+correction was about, not that the crystallites are laths. Taken as a habit it would have spanned
+four orientations for every accompanying mineral in every fit, and let an equant quartz grain be
+fitted at <var>r</var>&nbsp;=&nbsp;0.3. So only a mineral named in
+<code>clayquant.models.MINERAL_HABIT</code> is spanned, and the database's axis is used for it when
+it has one.</p>
+
+<p>The same library also writes <code>0 0 0</code> for a phase whose macro carries no axis &mdash; 72
+of those 205 &mdash; and a zero vector is not a direction. It reached the geometry and stopped a fit
+with <em>"is not a direction"</em>, which is a poor way to learn that a field is optional.
+<code>Crystal</code> now turns a zero pole into no pole as it is constructed, so a database written
+before any of this still loads and no reader has to remember.</p>
+
 <p><strong>What this does not fix.</strong> The sepiolite standard still fits badly &mdash;
 R<sub>wp</sub> 93.5&nbsp;% at best, with the crystallite size and the zero error free. Its 110 is one
 very broad peak running from 11.4 to 13.5&nbsp;&Aring; with a tail beyond 15, and essentially nothing

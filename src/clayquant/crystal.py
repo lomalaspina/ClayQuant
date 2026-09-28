@@ -304,6 +304,14 @@ class Crystal:
     flattened on 001 and so has ``(0, 0, 1)``, which is also what the clay
     library assumes throughout; a lath-shaped mineral does not, and saying so is
     the only way its pattern can be described at all (Sec. A.37).
+
+    ``(0, 0, 0)`` becomes ``None``, because it is not a direction.  A TOPAS
+    structure library writes exactly that for a phase whose preferred-orientation
+    macro carries no axis - 72 of the 205 phases in the one this was found on -
+    and it means the phase has no habit recorded, not that it has a habit of
+    zero.  Normalising it here rather than at each reader is what keeps a
+    truthiness test on an empty direction from reaching the geometry, where it
+    surfaces as a refusal in the middle of a fit.
     """
 
     def __post_init__(self) -> None:
@@ -311,6 +319,13 @@ class Crystal:
             replace(site, b_iso=self.default_b_iso) if math.isnan(site.b_iso) else site
             for site in self.sites
         ]
+        if self.po_axis is not None:
+            axis = tuple(float(value) for value in self.po_axis)
+            if len(axis) != 3:
+                raise ValueError(
+                    f"a preferred-orientation pole has three indices, not {len(axis)}"
+                )
+            self.po_axis = None if not any(axis) else axis
 
     # -- metric ---------------------------------------------------------------
     @property

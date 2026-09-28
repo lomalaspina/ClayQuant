@@ -71,6 +71,7 @@ from .background import snip_baseline
 from .bern import is_clay_phase
 from .calibration import QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
 from .crystal import Crystal
+from .models import MINERAL_HABIT
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
 __all__ = [
@@ -669,11 +670,15 @@ def screen_phases(
             # fit would span for it, not as a random powder: a lath lying on a
             # side face puts most of its intensity into one reflection, and a
             # random-powder column spreads it over many and can miss it
-            # altogether.  Equant minerals keep r = 1, which is what they are.
-            pole = crystal.po_axis
+            # altogether.  Equant minerals keep r = 1, which is what they are,
+            # and which of the two a mineral is comes from MINERAL_HABIT rather
+            # than from whether the structure database carries an axis - a
+            # refined PO correction is not a statement about crystal habit.
+            pole = (crystal.po_axis if MINERAL_HABIT.get(name.strip().lower()) else None)
             one = powder_pattern(crystal, grid, reference,
-                                 r_march_dollase=0.5 if pole else 1.0,
-                                 po_axis=pole or (0.0, 0.0, 1.0), name=name)
+                                 r_march_dollase=0.5 if pole is not None else 1.0,
+                                 po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
+                                 name=name)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the screen
             continue
         if float(np.max(one.intensity)) <= 0.0:
