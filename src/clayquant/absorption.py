@@ -250,8 +250,8 @@ class FilmAbsorption:
 
     which carries ``1 / sin(theta)`` and so keeps more of the film's low-angle
     intensity than of its high-angle intensity.  On the weighed standards it is
-    the difference between a calculated basal ratio 57-66 % too high and one
-    right to 5-11 % (Sec. A.46).
+    what removes a bias that leaves every weighed standard's calculated basal
+    ratio 32-104 % too high, and 60 % too high on average (Sec. A.46).
 
     The coefficient is the **mixture's**, not each phase's, and that is the
     whole of why this is one object for a mount rather than a property of an

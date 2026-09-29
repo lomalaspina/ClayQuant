@@ -1630,7 +1630,7 @@ def fit_tab() -> html.Div:
                         options=[
                             {"label": "As published (recommended)", "value": "0"},
                             {"label": "Scale up to \u00b10.5 %", "value": "0.005"},
-                            {"label": "Scale up to \u00b11 %", "value": "0.01"},
+                            {"label": "Scale up to \u00b11 % (usually worse)", "value": "0.01"},
                         ],
                         value="0",
                         clearable=False,
@@ -1654,6 +1654,17 @@ def fit_tab() -> html.Div:
                         "with the one it chose, and the zero error should be calibrated "
                         "first \u2014 a cell scale and a zero error trade against each "
                         "other over a narrow range of angles.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    html.Div(
+                        "Wider is not better. The variants are offered in one fit, so a "
+                        "wider span is also a coarser one and gives the phases more room "
+                        "to trade into a wrong combination. On a real separate \u00b10.5 % "
+                        "gave Rwp 0.440 with sekaninaite at \u00d71.005 and albite lying "
+                        "down; \u00b11 % gave 0.465, put sekaninaite on the \u00d71.01 "
+                        "boundary, stood the albite back up and dropped the rutile "
+                        "altogether. Use the smallest span that reaches the line you are "
+                        "trying to fit, and read the chosen values rather than Rwp alone.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Restrict orientation parameters"),

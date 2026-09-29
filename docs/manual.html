@@ -5955,10 +5955,19 @@ experiment rather than of this program.</p>
 one at any orientation, and the discrepancy was the same shape on every weighed standard:</p>
 
 <div class="tablewrap"><table>
-<tr><th>standard</th><th>measured 002/001</th><th>thick plate</th><th>&times; film factor</th></tr>
-<tr><td>Kaolinite_12, 2.6&nbsp;mg</td><td>0.401</td><td>0.666 (+66&nbsp;%)</td><td>0.357</td></tr>
-<tr><td>Illite_10, 3.1&nbsp;mg</td><td>0.144</td><td>0.226 (+57&nbsp;%)</td><td>0.137</td></tr>
+<tr><th>standard</th><th>mass</th><th>measured 002/001</th><th>thick plate</th><th>&times; film factor</th></tr>
+<tr><td>Kaolinite_12</td><td>2.6&nbsp;mg</td><td>0.401</td><td>0.666 (+66&nbsp;%)</td><td>0.357 (&minus;11&nbsp;%)</td></tr>
+<tr><td>Kaolinite_43</td><td>2.3&nbsp;mg</td><td>0.505</td><td>0.666 (+32&nbsp;%)</td><td>0.355 (&minus;30&nbsp;%)</td></tr>
+<tr><td>Illite_10</td><td>8.0&nbsp;mg</td><td>0.144</td><td>0.226 (+57&nbsp;%)</td><td>0.169 (+18&nbsp;%)</td></tr>
+<tr><td>Chlorite_16</td><td>1.7&nbsp;mg</td><td>1.888</td><td>2.702 (+43&nbsp;%)</td><td>1.470 (&minus;22&nbsp;%)</td></tr>
+<tr><td>Prochlorite_15</td><td>1.4&nbsp;mg</td><td>2.285</td><td>4.661 (+104&nbsp;%)</td><td>2.539 (+11&nbsp;%)</td></tr>
 </table></div>
+
+<p>The masses are the weighed ones. What the correction removes is a <em>bias</em>: uncorrected,
+every standard's calculated ratio is too high, by +32 to +104&nbsp;% and by 60&nbsp;% on average,
+which is the signature of a systematic rather than of scatter. Corrected, the errors straddle zero
+at &minus;30 to +18&nbsp;%, averaging 18&nbsp;% in magnitude. That is a real improvement and not an
+exact one, and the residual is not yet accounted for.</p>
 
 <p>Every pattern ClayQuant calculates is for a flat plate thick enough to absorb the beam
 completely &mdash; that is what the Debye&ndash;Scherrer Lorentz factor and the beam-overflow
