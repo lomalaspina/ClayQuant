@@ -6061,6 +6061,32 @@ series at 0.99 and the chlorite series at 0.95. The discrete phases are the entr
 illite and a pure chlorite, and they are the better-founded of the two, being three-dimensional
 patterns with <var>hkl</var> reflections where the series computes 00<var>l</var> alone.</p>
 
+<p><strong>Why the entry was removed rather than merged in the report.</strong> The obvious
+cheaper fix is to keep both entries and add them up under one heading, which would also keep the
+crystallite-thickness spanning that removal costs. It does not work, and it fails for a reason
+worth stating because the intuition behind it is nearly right. Collinear columns have an unstable
+split but a stable <em>sum</em> &mdash; of scattering. Mass is not scattering. The discrete chlorite
+enters the <var>S</var>(<var>ZMV</var>) relation as a unit cell with its own mass and volume; the
+series end member enters it as one average <em>layer</em> of a stacking model. The same scattering,
+divided differently between them, converts to a different mass, and adding the two afterwards
+cannot undo a difference introduced in the conversion.</p>
+
+<p>Measured on the same separate, with five noise realisations of the kind a repeat measurement
+would produce:</p>
+
+<div class="tablewrap"><table>
+<tr><th>reported chlorite</th><th>mean</th><th>s.d.</th><th>range</th></tr>
+<tr><td>kept and merged</td><td>18.70&nbsp;%</td><td>5.90</td><td>15.66</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;of which the discrete entry</td><td>6.02&nbsp;%</td><td>0.33</td><td>0.76</td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp;of which the 1.00 entry</td><td>12.68&nbsp;%</td><td>5.66</td><td>15.03</td></tr>
+<tr><td>end member dropped</td><td>28.77&nbsp;%</td><td>0.46</td><td>1.28</td></tr>
+</table></div>
+
+<p>Merging is thirteen times less reproducible. The whole of the instability sits on the redundant
+entry, the discrete one being steady to a third of a per cent throughout, and the two treatments do
+not even converge on the same answer &mdash; which they would if the difference were presentational.
+Reproducibility, not the readability of the table, is the reason the entry is gone.</p>
+
 <p><strong>What that costs, and the argument it overturns.</strong> These axes were extended to
 1.00 deliberately, and for a good reason: without the end member the closest a pure illite can be
 described as is 0.99, so a fit of one piles its coefficient there and reports 1&nbsp;% of a smectite
