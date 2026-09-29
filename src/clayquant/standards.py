@@ -299,11 +299,32 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.out and calibration is not None:
         import json
 
+        from .quantification import InstrumentConstant
+
+        # The per-phase counts per gram go out alongside the k factors, because
+        # they are what lets an unweighed mount be corrected at all: a fit gives
+        # a relative mass, this turns it into grams, and grams are what the film
+        # absorption needs.  Only mounts that were weighed contribute one.
+        weighed = [
+            (item.mount, item.standard.phase)
+            for item in results
+            if item.mount is not None and getattr(item.standard, "phase", "")
+        ]
+        constants = InstrumentConstant.from_weighed_mounts(
+            weighed, source=calibration.source
+        ) if weighed else None
+
         arguments.out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"source": calibration.source, "factors": calibration.factors}
+        if constants is not None:
+            payload["counts_per_gram"] = constants.per_phase
         with arguments.out.open("w") as handle:
-            json.dump({"source": calibration.source, "factors": calibration.factors},
-                      handle, indent=1)
+            json.dump(payload, handle, indent=1)
         print(f"\nwritten to {arguments.out}")
+        if constants is not None:
+            print("  counts per gram (at r = 1), for inferring an unweighed mount's mass:")
+            for phase, value in sorted(constants.per_phase.items()):
+                print(f"    {phase:<16s} {value:.4g}")
     return 0
 
 

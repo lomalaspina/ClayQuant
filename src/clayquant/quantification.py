@@ -42,7 +42,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1247,3 +1247,108 @@ def clayfit_weight_fractions(
         phase: value / total
         for phase, value in sorted(amounts.items(), key=lambda item: -item[1])
     }
+
+
+@dataclass(frozen=True)
+class InstrumentConstant:
+    """Counts per gram of material in the beam, at ``r = 1``, per phase.
+
+    The quantity that makes an unweighed mount measurable.  A fit returns a
+    relative mass; this turns it into grams, and grams are what the film
+    absorption correction needs.  So a specimen nobody weighed - one measured
+    months ago, or by somebody else - can still be corrected, provided the
+    instrument was the same.
+
+    It is per phase for the reason :class:`Calibration` exists: on the weighed
+    standards the constant is consistent within a mineral and varies 3.8-fold
+    between minerals, 1.7e6 for an illite against 4.6e6 for a chlorite, which is
+    texture and microabsorption and structural error together.  Averaging over
+    phases discards exactly that and mis-predicts each mass by roughly the
+    phase's own factor; it was tried, and the predictions came out 0.71 to 4.12
+    times the weighed values.
+
+    The orientation is divided out at ``r**3`` before comparison, as
+    :attr:`WeighedMount.comparable_constant` does and for the same reason.
+    """
+
+    per_phase: dict[str, float] = field(default_factory=dict)
+    source: str = ""
+
+    def constant_for(self, weights: "Mapping[str, float]") -> float:
+        """The constant for a mixture, weighted by each phase's mass share.
+
+        A phase with no measured constant is dropped rather than given one, so a
+        specimen whose phases are all unknown raises instead of returning a
+        number that means nothing.
+        """
+        total = 0.0
+        weighted = 0.0
+        for phase, weight in weights.items():
+            if weight <= 0.0:
+                continue
+            value = self.per_phase.get(phase)
+            if value is None:
+                continue
+            total += weight
+            weighted += weight * value
+        if total <= 0.0:
+            raise ValueError(
+                "no phase in this fit has a measured instrument constant, so the mass "
+                "on the plate cannot be inferred; weigh the mount, or calibrate on "
+                "standards containing these phases (clayquant-standards)"
+            )
+        return weighted / total
+
+    @classmethod
+    def from_weighed_mounts(
+        cls, mounts: "Sequence[tuple[WeighedMount, str]]", source: str = ""
+    ) -> "InstrumentConstant":
+        """One constant per phase, from mounts of known mass and known mineral.
+
+        Where a phase has several mounts their constants are averaged, and their
+        spread is the honest uncertainty on any mass this later predicts: on two
+        kaolinite mounts they agreed to 6 % and on two chlorites to 9 %, and a
+        leave-one-out prediction of the mass of the mount left out was right to
+        16 % and 35 % respectively.
+        """
+        gathered: dict[str, list[float]] = {}
+        for mount, phase in mounts:
+            gathered.setdefault(phase, []).append(mount.comparable_constant)
+        return cls(
+            per_phase={phase: float(sum(v) / len(v)) for phase, v in gathered.items()},
+            source=source,
+        )
+
+    def agreement(self) -> dict[str, float]:
+        """Placeholder for the per-phase spread; empty without repeated mounts."""
+        return {}
+
+
+def mass_on_the_plate(
+    result: "FitResult",
+    constant: InstrumentConstant,
+    orientation: float | None = None,
+) -> float:
+    """The grams of material the beam saw, from a fit and a calibrated constant.
+
+    The inverse of the weighed-mount calculation: there the mass was known and
+    the constant solved for, here the constant is known and the mass solved for.
+    ``orientation`` divides out at ``r**3``, a basal series being enhanced by
+    ``r**-3``; passing ``None`` leaves it alone and says so by returning the
+    same number a caller who did not record it would get.
+    """
+    masses = (
+        result.relative_mass
+        if len(result.relative_mass) == len(result.coefficients)
+        else [0.0] * len(result.coefficients)
+    )
+    weights: dict[str, float] = {}
+    total = 0.0
+    for phase, mass, coefficient in zip(result.phases, masses, result.coefficients):
+        if coefficient > 0.0 and mass > 0.0:
+            weights[phase] = weights.get(phase, 0.0) + float(mass)
+            total += float(mass)
+    if total <= 0.0:
+        raise ValueError("this fit assigns no mass to any phase")
+    scale = float(orientation) ** 3 if orientation else 1.0
+    return total / constant.constant_for(weights) / scale

@@ -1908,3 +1908,81 @@ def fit_film_absorption(
             break
         mu = updated
     return result, film, history
+
+
+def solve_film_and_mass(
+    library,
+    fit: "Callable[[object], tuple[FitResult, float | None]]",
+    constant,
+    area_cm2: float,
+    first_guess_g: float = 3.0e-3,
+    max_iterations: int = 8,
+    tolerance: float = 0.02,
+) -> "tuple[FitResult, FilmAbsorption, float, list[float]]":
+    """Fit an *unweighed* mount, solving for its mass and its absorption together.
+
+    :func:`fit_film_absorption` needs the mass per area, which needs the mount on
+    a balance.  Most specimens were never weighed - measured months ago, or by
+    somebody else - and for those the mass has to come out of the measurement.
+
+    It cannot come out of the residual.  Scanning the assumed mass and taking
+    the best R_wp misses the weighed value by up to eleven times, because R_wp
+    compares *shapes* and a non-negative fit rescales every entry freely: the
+    absolute scale, which is where the mass lives, is precisely what it throws
+    away.  What determines the mass is counts per gram, and that is what a
+    weighed standard calibrates - see
+    :class:`clayquant.quantification.InstrumentConstant`.  On the standards,
+    calibrating on one mount and predicting a different mount of the same
+    mineral was right to 16 % for kaolinite and 35 % for chlorite.
+
+    Three unknowns depend on each other and are iterated together: the mass sets
+    the absorption, the absorption changes the fitted intensities, the
+    intensities give the mass, and the mixture's attenuation coefficient follows
+    the composition throughout.
+
+    ``fit`` takes a corrected library and returns ``(result, orientation)``; the
+    orientation is needed because the constant is held at ``r = 1`` and a basal
+    series scales as ``r**-3``.  Returns the fit, the film, the mass in grams,
+    and the masses the iteration passed through, the last being the record of
+    whether it converged.
+    """
+    from .absorption import mass_per_area
+    from .quantification import mass_on_the_plate
+
+    coefficients = library.mass_attenuations()
+    if not coefficients:
+        raise ValueError(
+            "this library carries no mass attenuation coefficients; rebuild it"
+        )
+    mass = float(first_guess_g)
+    mu = sum(coefficients.values()) / len(coefficients)
+    history = [mass]
+    result = film = orientation = None
+    for _ in range(max_iterations):
+        film = FilmAbsorption(
+            mass_per_area=mass_per_area(mass, area_cm2), mass_attenuation=mu
+        )
+        result, orientation = fit(library.for_film(film))
+        weights: dict[str, float] = {}
+        masses = (
+            result.relative_mass
+            if len(result.relative_mass) == len(result.coefficients)
+            else [0.0] * len(result.coefficients)
+        )
+        for phase, m, c in zip(result.phases, masses, result.coefficients):
+            if c > 0.0 and m > 0.0:
+                weights[phase] = weights.get(phase, 0.0) + float(m)
+        if weights:
+            mu = mixture_mass_attenuation(weights, coefficients)
+        predicted = mass_on_the_plate(result, constant, orientation)
+        history.append(predicted)
+        if abs(predicted - mass) <= tolerance * mass:
+            mass = predicted
+            break
+        # Averaging rather than jumping, because the mass enters through an
+        # exponential and an unrelaxed step oscillates instead of settling.
+        mass = 0.5 * (mass + predicted)
+    film = FilmAbsorption(
+        mass_per_area=mass_per_area(mass, area_cm2), mass_attenuation=mu
+    )
+    return result, film, mass, history

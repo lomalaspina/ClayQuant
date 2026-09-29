@@ -6016,6 +6016,79 @@ stands rather than argued away.</p>
 part of; the iron content it reports is therefore due to be re-derived against corrected patterns,
 and until that is done it should be read as a parameter that fits, not as a composition.</p>
 
+<p><strong>It has to be weighed, and it cannot be fitted.</strong> The obvious hope, for the
+historical mounts and for anything measured by somebody else, is to fit the film's mass as one more
+parameter: it is a single scalar and its signature, <var>1</var>/sin&nbsp;<var>&theta;</var> inside
+an exponential, is distinctive. It does not work. Scanned over 0.4 to 25&nbsp;mg against the five
+weighed standards, the best-fitting mass missed the weighed one by 1.4 to 10.9 times, and three of
+the five ran to the top of the range without an interior minimum at all &mdash; that is, the fit
+preferred no correction, since a large mass drives <var>A</var> to 1. Across a sixtyfold range of
+mass, <var>R</var><sub>wp</sub> moved by 0.019 to 0.071.</p>
+
+<p>That is not evidence against the correction, and the distinction matters. The basal-ratio
+comparison above involves no fit: it is five weighed specimens, five measured peak-area ratios, all
+biased the same way and by the amount predicted. What the flat <var>R</var><sub>wp</sub> shows is
+something about the fit rather than about the physics &mdash; a library of some three thousand
+columns spanning orientation, composition, spacing and crystallite size is over-complete enough to
+absorb a smooth angular tilt by reshuffling which entries it selects. A systematic plainly visible
+in one measured peak ratio can therefore cost almost nothing in the residual, which is a caution
+about reading <var>R</var><sub>wp</sub> generally and not only here.</p>
+
+<p>Nor may the mass be assumed. On one unweighed separate, varying the assumed mass over the
+plausible range moved the quartz from 4.5&nbsp;% to 21.9&nbsp;% and the illite from 21.5&nbsp;% to
+41.5&nbsp;%, while <var>R</var><sub>wp</sub> stayed within 0.01 from end to end. An assumed mass
+buys any answer with no means of telling it is wrong.</p>
+
+<p><strong>It can, however, be measured &mdash; from the absolute intensity.</strong> That the
+residual cannot find the mass is a statement about the residual, and taking it for a statement about
+the measurement was an error. <var>R</var><sub>wp</sub> compares <em>shapes</em>, and a non-negative
+fit rescales every entry freely, so the absolute scale &mdash; which is exactly where the mass lives
+&mdash; is the one thing it discards. What determines the mass is counts per gram, and that is what
+a weighed standard calibrates. The standards exist for this.</p>
+
+<p>The constant has to be per phase. On the five weighed standards it is consistent within a mineral
+and varies 3.8-fold between them:</p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th>weighed</th><th>counts per gram at <var>r</var> = 1</th></tr>
+<tr><td>Kaolinite_12</td><td>2.6&nbsp;mg</td><td>1.68&times;10<sup>6</sup></td></tr>
+<tr><td>Kaolinite_43</td><td>2.3&nbsp;mg</td><td>1.79&times;10<sup>6</sup></td></tr>
+<tr><td>Illite_10</td><td>8.0&nbsp;mg</td><td>1.20&times;10<sup>6</sup></td></tr>
+<tr><td>Chlorite_16</td><td>1.7&nbsp;mg</td><td>4.57&times;10<sup>6</sup></td></tr>
+<tr><td>Prochlorite_15</td><td>1.4&nbsp;mg</td><td>4.19&times;10<sup>6</sup></td></tr>
+</table></div>
+
+<p>The two kaolinites agree to 6&nbsp;% and the two chlorites to 9&nbsp;%, while chlorite sits
+3.8&nbsp;times above illite &mdash; which is the per-phase factor of
+&sect;<a href="#a-44">A.44</a>, texture and microabsorption and structural error together. Averaging
+over phases discards precisely that, and doing so mis-predicted every standard's mass by 0.71 to
+4.12 times.</p>
+
+<p><strong>Validated by leaving one out.</strong> Calibrating on one mount and predicting the mass
+of a <em>different</em> mount of the same mineral, which the constant never saw:</p>
+
+<div class="tablewrap"><table>
+<tr><th>calibrated on</th><th>predicted</th><th>weighed</th><th>predicted</th><th>ratio</th></tr>
+<tr><td>Kaolinite_12</td><td>Kaolinite_43</td><td>2.30&nbsp;mg</td><td>2.66&nbsp;mg</td><td>1.16</td></tr>
+<tr><td>Kaolinite_43</td><td>Kaolinite_12</td><td>2.60&nbsp;mg</td><td>2.23&nbsp;mg</td><td>0.86</td></tr>
+<tr><td>Chlorite_16</td><td>Prochlorite_15</td><td>1.40&nbsp;mg</td><td>1.90&nbsp;mg</td><td>1.35</td></tr>
+<tr><td>Prochlorite_15</td><td>Chlorite_16</td><td>1.70&nbsp;mg</td><td>1.25&nbsp;mg</td><td>0.74</td></tr>
+</table></div>
+
+<p>16&nbsp;% for kaolinite and 35&nbsp;% for chlorite, against the elevenfold error of the
+<var>R</var><sub>wp</sub> scan, and tight enough to be worth having: the sensitivity above spans a
+far wider range than that. Three quantities depend on each other &mdash; the mass sets the
+absorption, the absorption changes the fitted intensities, the intensities give the mass &mdash; and
+<code>solve_film_and_mass</code> iterates them together, with the mixture's attenuation coefficient
+following the composition throughout.</p>
+
+<p>So an unweighed mount is corrigible after all, provided the instrument was calibrated on weighed
+standards through the same optics. <code>clayquant-standards</code> writes the counts per gram
+beside the <var>k</var> factors, and naming that file on the fit panel infers the mass where none
+was entered. What it returns is an inference of that stated accuracy and not a weighing, and it is
+reported as such. With neither a mass nor a calibration, the field stays empty and no correction is
+applied, which puts every such specimen on one basis.</p>
+
 <p><strong>Applying it.</strong> The mount's mass and the area the suspension dried over are entered
 on the fit panel; the area is what the suspension covered, not the area of the glass, and the
 default is the 4.91&nbsp;cm<sup>2</sup> of a 2.5&nbsp;cm round mount. Leaving the mass empty applies
@@ -6109,7 +6182,7 @@ pure illite and the discrete phase is its entry.</p>
 
 <p>The second cost is real and is accepted rather than dismissed. The discrete entries broaden by
 microstrain; the interstratified ones carry the crystallite thickness distribution of
-&sect;<a href="#s-2-6">2.6</a>, which is what actually sets a basal width. A pure illite can no
+&sect;2.6, which is what actually sets a basal width. A pure illite can no
 longer be fitted with its thickness spanned, only with its strain spanned. An approximate width on
 one phase is the smaller error of the two.</p>
 

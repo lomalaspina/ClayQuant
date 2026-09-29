@@ -25,6 +25,7 @@ Start it with ``clayquant-gui`` or ``python -m clayquant.gui.app``.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import socket
 import subprocess
@@ -111,6 +112,7 @@ from ..nnls import (
     best_variant_per_phase,
     screen_diagnostic_peaks,
     select_in_two_stages,
+    solve_film_and_mass,
     select_one_orientation,
     select_with_lattice_scaling,
     clay_families,
@@ -1607,6 +1609,13 @@ def fit_tab() -> html.Div:
                         ],
                         style={"display": "flex", "marginBottom": "2px"},
                     ),
+                    dcc.Input(
+                        id="film-constants",
+                        type="text",
+                        placeholder="counts-per-gram file (optional, infers an unweighed mass)",
+                        debounce=True,
+                        style={"width": "100%", "marginTop": "4px"},
+                    ),
                     html.Div(
                         "Every calculated pattern is for a plate thick enough to absorb "
                         "the beam; a few milligrams on a glass slide is not one, and it "
@@ -3101,12 +3110,14 @@ def register_callbacks(app: Dash) -> None:
         State("fit-accompanying-po", "value"),
         State("film-mass", "value"),
         State("film-area", "value"),
+        State("film-constants", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
                 exclusive, use_air_dried, use_diagnostic, lattice,
                 constrain_kaolinite, trust_expandable,
-                accompanying_cell, accompanying_po, film_mass, film_area):
+                accompanying_cell, accompanying_po, film_mass, film_area,
+                film_constants):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -3362,6 +3373,51 @@ def register_callbacks(app: Dash) -> None:
                     f"{'pass' if passes == 1 else 'passes'}). The mount delivers "
                     f"{float(film.factor(6.2)):.2f} of a thick plate at 6.2\u00b0 and "
                     f"{float(film.factor(24.9)):.2f} at 24.9\u00b0."
+                )
+            elif film_constants and str(film_constants).strip() and film_area \
+                    and float(film_area) > 0.0:
+                # No mass was weighed, but the instrument was calibrated, so the
+                # mass is inferred instead of assumed.  It cannot be assumed:
+                # over a plausible range the quartz on one separate ran from
+                # 4.5 % to 21.9 % while Rwp stayed within 0.01, so a guessed
+                # mass buys any answer with no way to see it is wrong.
+                from ..quantification import InstrumentConstant
+
+                path = resolve_user_path(str(film_constants).strip())
+                with open(path) as handle:
+                    payload = json.load(handle)
+                per_phase = payload.get("counts_per_gram") or {}
+                if not per_phase:
+                    raise ValueError(
+                        f"{path} carries no counts_per_gram, so a mass cannot be "
+                        "inferred from it. Regenerate it with clayquant-standards, "
+                        "which writes them from the weighed mounts."
+                    )
+                constant = InstrumentConstant(
+                    per_phase={str(k): float(v) for k, v in per_phase.items()},
+                    source=str(payload.get("source", path)),
+                )
+
+                def _fit_and_orientation(lib):
+                    nonlocal result, selection, lattice_note
+                    result, selection, lattice_note, fitted = _run_one(lib)
+                    orientation = getattr(selection, "orientation", None)
+                    return result, orientation
+
+                result, film, grams, history = solve_film_and_mass(
+                    library, _fit_and_orientation, constant, float(film_area),
+                )
+                library = library.for_film(film)
+                film_note = (
+                    f"Mass inferred, not weighed: {1e3 * grams:.2f} mg over "
+                    f"{float(film_area):.2f} cm\u00b2, from counts per gram "
+                    f"calibrated on {constant.source or 'weighed standards'} "
+                    f"({len(history)} passes). On the standards this route "
+                    f"predicted a held-out mount's mass to 16 % for kaolinite and "
+                    f"35 % for chlorite; treat it as that, not as a weighing. The "
+                    f"mount delivers {float(film.factor(6.2)):.2f} of a thick "
+                    f"plate at 6.2\u00b0 and {float(film.factor(24.9)):.2f} at "
+                    f"24.9\u00b0."
                 )
             else:
                 result, selection, lattice_note, library = _run_one(library)
