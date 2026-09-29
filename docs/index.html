@@ -162,6 +162,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-42">A.42 Two calculations, one scale</a>
 <a href="#a-43">A.43 The spread was the orientation</a>
 <a href="#a-44">A.44 Calibrating on weighed standards</a>
+<a href="#a-45">A.45 A cell and a texture for the accompanying minerals</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5862,6 +5863,77 @@ measured in, and the two mounts outside it are the two whose factors are weakest
 <p><strong>And two mounts per phase.</strong> Their agreement is that phase's uncertainty, and
 nothing else measures it. Of the four phases here only chlorite and kaolinite have two, and they are
 the two to trust: the chlorites agree to 1.5&nbsp;%, the kaolinites to 33&nbsp;%.</p>
+
+
+<h3 id="a-45">A.45 Giving the accompanying minerals a cell and a texture</h3>
+
+<p><strong>What they had.</strong> Every clay in the fit chooses among orientations, crystallite
+thicknesses, layer spacings and compositions. Every accompanying mineral had exactly one column:
+the published cell, a random powder, no freedom at all. Two peaks on a real separate ran into that
+&mdash; a sekaninaite line at 8.4&nbsp;&Aring; and an albite line at 6.4 &mdash; and the failure is
+worth stating precisely, because it does not look like a missing phase.</p>
+
+<p>The sekaninaite line sat 0.05&nbsp;&deg; from where the structure library put it, after the zero
+error was corrected. That is half a peak width: raising the phase to match would put intensity where
+there is none, so a least-squares fit leaves the line 37&nbsp;% short instead and spends the mineral
+elsewhere. Sekaninaite is the iron end of the cordierite series and its cell tracks the Fe/Mg ratio,
+so a specimen-specific cell is expected rather than an error in the library.</p>
+
+<p><strong>The cell.</strong> One scale on <var>a</var>, <var>b</var> and <var>c</var> together,
+spanned symmetrically about no change, with the variants offered once and the winner refitted. On
+that separate sekaninaite chose &times;1.005 &mdash; the value a hand calculation from the peak
+position predicts &mdash; and its line went from 37&nbsp;% short to 30. Nothing else moved: quartz,
+albite and rutile all chose 1.</p>
+
+<p>A uniform scale shifts a line by an amount proportional to tan&nbsp;<var>&theta;</var> while a
+zero error shifts it by a constant, so the two are separable across a scan and trade against each
+other within a narrow window. Calibrate the zero error first, and give the cell the smallest span
+that closes the lines rather than the largest that lowers R<sub>wp</sub>.</p>
+
+<p><strong>The texture, and the trap in it.</strong> Letting <em>every</em> accompanying mineral
+orient does close the albite line, and lowers R<sub>wp</sub>, and is wrong:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Accompanying minerals</th><th>R<sub>wp</sub></th><th>8.4 &Aring; short</th>
+<th>6.4 &Aring; short</th><th>Quartz</th></tr>
+<tr><td>as published, powder</td><td class="num">0.364</td><td class="num">37 %</td>
+<td class="num">53 %</td><td class="num">40.6 %</td></tr>
+<tr><td>cell &plusmn;0.5 %</td><td class="num">0.363</td><td class="num">30 %</td>
+<td class="num">53 %</td><td class="num">40.5 %</td></tr>
+<tr><td><em>every mineral may orient</em></td><td class="num"><em>0.353</em></td>
+<td class="num"><em>26 %</em></td><td class="num"><em>13 %</em></td>
+<td class="num"><em>63.7 %</em></td></tr>
+<tr><td>cell + only what cleaves</td><td class="num">0.360</td><td class="num">26 %</td>
+<td class="num">12 %</td><td class="num">34.3 %</td></tr>
+</table></div>
+
+<p>The third row is the trap. Offered a texture, quartz took <var>r</var>&nbsp;=&nbsp;0.3; a basal
+series is enhanced as <var>r</var><sup>&minus;3</sup>, so that is 37 times the mass for the same
+scattering, and quartz went from a third of the specimen to two thirds &mdash; at the
+<em>lowest</em> R<sub>wp</sub> of the four. Quartz has no cleavage and its grains in a clay separate
+are equant. The fit was not measuring a texture; it was spending a parameter, and the residual
+happened to reward it.</p>
+
+<p>So the offer is restricted to minerals that actually cleave:
+<code>clayquant.models.MINERAL_CLEAVAGE</code> holds the feldspars on (001), the carbonates on
+(104), the non-clay sheet minerals and the cleaving sulphates, with the pole each would lie down on.
+That is a different list from <code>MINERAL_HABIT</code>, and the difference is the point: a
+sepiolite crystallite <em>is</em> a lath and is oriented whether or not anyone asks, while a feldspar
+is equant until it breaks and then breaks on (001), so whether its flakes have settled flat is a
+question about the mount and is offered rather than assumed. Restricted this way, albite chose
+<var>r</var>&nbsp;=&nbsp;0.5, its line closed from 53&nbsp;% short to 12, and quartz stayed where it
+was.</p>
+
+<p><strong>One mineral, one variant.</strong> A mineral offered several cells and orientations is
+still one mineral. Left alone a non-negative fit will divide it between two neighbouring cells and
+call the pair a broadened line, which describes the specimen worse than either alone and inflates
+the phase's share. So the variants are offered once, <code>best_variant_per_phase</code> reads off
+which one took the scattering, and the fit that counts is run again with one variant each. Two
+passes rather than a family constraint, because a family here means a clay sharing the mount's one
+texture and an accompanying mineral does not share it.</p>
+
+<p><strong>Both are off by default</strong>, and the fourth row above is why they are worth having
+and the third is why they are not defaults.</p>
 
 
 

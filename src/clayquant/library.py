@@ -70,6 +70,9 @@ __all__ = [
     "ILLITE_SMECTITE_HOST",
     "describe_instrument_mismatch",
     "instrument_from_measurement",
+    "accompanying_patterns",
+    "ACCOMPANYING_CELL_SCALES",
+    "ACCOMPANYING_ORIENTATIONS",
     "CONTINUUM_WINDOW",
     "scaled_to_d001",
     "NORMALIZATION_FLOOR",
@@ -1543,6 +1546,86 @@ def main(argv: list[str] | None = None) -> int:
 
 DEFAULT_PEAK_SHAPE = PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0)
 """Width model used when there is no measurement to take one from."""
+
+
+ACCOMPANYING_CELL_SCALES: tuple[float, ...] = (1.0,)
+"""Cell scales spanned for an accompanying mineral.  One means no freedom.
+
+A published cell is some other specimen's.  A sekaninaite is the iron end of the
+cordierite series and its cell tracks the Fe/Mg ratio; a plagioclase's tracks the
+anorthite content; a carbonate's tracks its magnesium.  On a real separate the
+sekaninaite line at 8.4 A sat 0.05 deg from where the structure library put it,
+which is half a peak width - enough that raising the phase to match would put
+intensity where there is none, so the fit leaves the line short instead.
+
+The scale multiplies a, b and c together, which moves every reflection by the
+same *relative* amount.  That is the honest one-parameter version: an
+anisotropic difference needs one scale per axis and three times the columns, and
+nothing measured here asks for it yet.
+
+It is not free of consequence.  A uniform scale shifts a line by an amount
+proportional to tan(theta) while a zero error shifts it by a constant, so the
+two are distinguishable across a range of angles but trade against each other
+within a narrow one.  Calibrate the zero error first and give the cell the
+smallest span that closes the lines, not the largest that lowers R_wp.
+"""
+
+ACCOMPANYING_ORIENTATIONS: tuple[float, ...] = (1.0,)
+"""March-Dollase values spanned for an accompanying mineral.  One is a powder.
+
+Most of what survives a clay separation is equant and belongs at ``r = 1``:
+quartz, the carbonates, the oxides.  Some is not.  A feldspar cleaves on (001)
+and (010) and its flakes can lie down in a sedimented mount like anything else
+platy, and on a real separate letting albite's orientation be fitted took its
+6.4 A line from 64 per cent short to 51.
+
+The pole is the phase's own where the structure database carries one - a TOPAS
+library records the axis its preferred-orientation correction was refined about,
+which is the right axis to offer even though it is not a statement that the
+mineral is platy (Sec. A.37) - and ``c*`` otherwise.
+"""
+
+
+def accompanying_patterns(
+    name: str,
+    crystal: Crystal,
+    grid: np.ndarray,
+    instrument: Instrument,
+    cell_scales: tuple[float, ...] = ACCOMPANYING_CELL_SCALES,
+    orientations: tuple[float, ...] = ACCOMPANYING_ORIENTATIONS,
+    pole: tuple[float, float, float] | None = None,
+) -> list[tuple[Pattern, float, float, Crystal]]:
+    """Every variant of one accompanying mineral, as ``(pattern, r, scale, crystal)``.
+
+    The crystal comes back with each pattern because its mass and volume change
+    with the cell scale, and a weight percent computed from the unscaled ones
+    would be wrong by the cube of the scale.
+
+    A single scale and a single orientation - the default - give exactly one
+    pattern, which is what this did before it could do anything else.
+    """
+    for value in cell_scales:
+        if value <= 0.0:
+            raise ValueError(f"a cell scale must be positive, not {value}")
+    if not cell_scales or not orientations:
+        raise ValueError("a mineral needs at least one cell scale and one orientation")
+    axis = (0.0, 0.0, 1.0) if pole is None else tuple(float(v) for v in pole)
+
+    out: list[tuple[Pattern, float, float, Crystal]] = []
+    for scale in cell_scales:
+        scaled = (crystal if scale == 1.0 else replace(
+            crystal, a=crystal.a * scale, b=crystal.b * scale, c=crystal.c * scale,
+            source=f"{crystal.source}, cell scaled by {scale:.4f}"))
+        for r in orientations:
+            tags = ""
+            if len(orientations) > 1:
+                tags += f" PO={r:g}"
+            if len(cell_scales) > 1:
+                tags += f" cell={scale:g}"
+            pattern = powder_pattern(scaled, grid, instrument, r_march_dollase=r,
+                                     po_axis=axis, name=f"{name}{tags}")
+            out.append((pattern, float(r), float(scale), scaled))
+    return out
 
 
 def instrument_from_measurement(

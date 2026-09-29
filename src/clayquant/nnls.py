@@ -54,6 +54,7 @@ __all__ = [
     "screen_diagnostic_peaks",
     "select_in_two_stages",
     "select_one_orientation",
+    "best_variant_per_phase",
     "select_one_per_family",
     "select_with_lattice_scaling",
 ]
@@ -1723,6 +1724,39 @@ def select_in_two_stages(
 # --------------------------------------------------------------------------
 # One orientation for the whole mount
 # --------------------------------------------------------------------------
+
+def best_variant_per_phase(result: "FitResult", phases: "set[str] | None" = None
+                           ) -> dict[str, str]:
+    """Which entry each accompanying mineral put most of its scattering on.
+
+    A mineral offered several cells and orientations is one mineral, not
+    several.  Left to itself a non-negative fit will happily divide it between
+    two neighbouring cells and call the pair a broadened line, which is a worse
+    description of the specimen than either alone and inflates the phase's share
+    besides.  So the variants are offered once, the winner is read off here, and
+    the fit is run again with one variant per mineral.
+
+    Two passes rather than a family constraint because the family machinery
+    means something else: a labelled family is a clay sharing the mount's one
+    texture (:func:`select_one_orientation`), and an accompanying mineral does
+    not share it - a quartz grain is equant whatever the clays are doing.
+
+    Returns ``{phase: entry name}`` for the phases asked about that took any
+    scattering at all.
+    """
+    best: dict[str, tuple[float, str]] = {}
+    for name, phase, coefficient, share in zip(
+        result.names, result.phases, result.coefficients, result.scattering_fraction
+    ):
+        if phases is not None and phase not in phases:
+            continue
+        if coefficient <= 0.0:
+            continue
+        current = best.get(phase)
+        if current is None or float(share) > current[0]:
+            best[phase] = (float(share), name)
+    return {phase: name for phase, (_, name) in best.items()}
+
 
 def select_one_orientation(
     measured: Pattern,

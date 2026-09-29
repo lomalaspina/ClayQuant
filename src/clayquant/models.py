@@ -40,6 +40,7 @@ __all__ = [
     "CHLORITE_OCTAHEDRA",
     "CHLORITE_HYDROXYL",
     "MINERAL_HABIT",
+    "MINERAL_CLEAVAGE",
     "ILLITE_OCTAHEDRON_TOLERANCE",
     "use_refined_structures",
     "clear_refined_structures",
@@ -250,6 +251,39 @@ Measured on the sepiolite standard, no orientation about c* improves the fit
 at all - every value below 1 makes it worse, which is what "this is not a
 platelet" looks like - while orientation about the 110 pole does improve it
 (Sec. A.37).
+"""
+
+
+MINERAL_CLEAVAGE: dict[str, tuple[int, int, int]] = {
+    # Feldspars: perfect on (001), good on (010).
+    "albite": (0, 0, 1), "anorthite": (0, 0, 1), "labradorite": (0, 0, 1),
+    "microcline": (0, 0, 1), "orthoclase": (0, 0, 1), "sanidine": (0, 0, 1),
+    # Carbonates, on the rhombohedron.
+    "calcite": (1, 0, 4), "dolomite": (1, 0, 4), "ankerite": (1, 0, 4),
+    "magnesite": (1, 0, 4), "siderite": (1, 0, 4),
+    # Sheet minerals that are not clays, and sulphates that cleave as well.
+    "muscovite": (0, 0, 1), "biotite": (0, 0, 1), "phlogopite": (0, 0, 1),
+    "talc": (0, 0, 1), "pyrophyllite": (0, 0, 1), "graphite": (0, 0, 1),
+    "gibbsite": (0, 0, 1), "brucite": (0, 0, 1), "boehmite": (0, 2, 0),
+    "gypsum": (0, 1, 0), "barite": (0, 0, 1),
+}
+"""Accompanying minerals that cleave, and the pole they would lie down on.
+
+Distinct from :data:`MINERAL_HABIT`, and the difference matters.  A sepiolite
+crystallite *is* a lath and is oriented whether anyone asks or not.  A feldspar
+is equant until it is broken, and then it breaks on (001); whether the flakes in
+a particular mount have settled flat is a question about that mount, so it is
+offered rather than assumed.
+
+Offered, and not to everything, because giving an equant mineral an orientation
+it does not have is not a harmless extra parameter.  On a real separate,
+allowing every accompanying mineral to orient let quartz be fitted at r = 0.3 -
+a basal series is enhanced as r^-3, so that is 37 times the mass for the same
+scattering - and quartz went from 17 per cent of the specimen to 64, at a
+R_wp *better* by 0.007.  Quartz has no cleavage and its grains in a clay
+separate are equant; the fit was not measuring a texture but spending a
+parameter.  Restricting the offer to minerals that actually cleave leaves quartz
+where it was and still closes the albite line (Sec. A.45).
 """
 
 

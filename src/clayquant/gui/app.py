@@ -92,6 +92,7 @@ from ..library import (
     DEFAULT_PEAK_SHAPE,
     PREFERRED_ORIENTATIONS,
     PatternLibrary,
+    accompanying_patterns,
     build_library,
     describe_instrument_mismatch,
     instrument_from_measurement,
@@ -100,6 +101,7 @@ from ..mixed_layer import MixedLayerStack, lognormal_csds, markov_transition, ra
 from ..models import CIF_SOURCES, available_phases, eg_smectite_layer, load_crystal, load_layer
 from ..nnls import (
     _library_subset,
+    best_variant_per_phase,
     screen_diagnostic_peaks,
     select_in_two_stages,
     select_one_orientation,
@@ -653,7 +655,38 @@ def habit_of(name: str, crystal) -> tuple[float, float, float] | None:
     return crystal.po_axis if crystal.po_axis is not None else tuple(float(v) for v in pole)
 
 
-def _with_main_minerals(library):
+def may_orient(name: str, crystal) -> tuple[float, float, float] | None:
+    """The pole an accompanying mineral would lie down on, if it cleaves.
+
+    Separate from :func:`habit_of`, which is about minerals that are oriented
+    whether or not anyone asks.  This one is offered only when the fit is told
+    to, because an equant mineral given an orientation it does not have will
+    take the parameter and the mass with it; see
+    :data:`clayquant.models.MINERAL_CLEAVAGE`.
+
+    The structure database's own axis wins where it has one, since it comes
+    from the structure that was refined.
+    """
+    from ..models import MINERAL_CLEAVAGE
+
+    pole = MINERAL_CLEAVAGE.get(name.strip().lower())
+    if pole is None:
+        return None
+    if crystal.po_axis is not None:
+        return crystal.po_axis
+    return tuple(float(value) for value in pole)
+
+
+def cell_scales_for(allowance: float, steps: int = 2) -> tuple[float, ...]:
+    """A symmetric span of cell scales, or just 1 where nothing is allowed."""
+    if allowance <= 0.0:
+        return (1.0,)
+    return tuple(round(1.0 + allowance * k / steps, 6)
+                 for k in range(-steps, steps + 1))
+
+
+def _with_main_minerals(library, cell_allowance: float = 0.0,
+                        fit_orientation: bool = False, keep: dict | None = None):
     """Return the library with the confirmed main minerals appended.
 
     Most are calculated as one entry without preferred orientation, and that is
@@ -686,18 +719,23 @@ def _with_main_minerals(library):
         crystal = STATE.phase_database.get(name)
         if crystal is None:
             continue
-        pole = habit_of(name, crystal)
+        habit = habit_of(name, crystal)
+        cleaves = may_orient(name, crystal) if fit_orientation else None
+        pole = habit if habit is not None else cleaves
         orientations = HABIT_ORIENTATIONS if pole is not None else (1.0,)
-        for r in orientations:
-            pattern = powder_pattern(
-                crystal, library.two_theta, instrument, r_march_dollase=r,
-                po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
-                name=name if pole is None else f"{name} PO={r:g}",
-            )
+        variants = accompanying_patterns(
+            name, crystal, library.two_theta, instrument,
+            cell_scales=cell_scales_for(cell_allowance),
+            orientations=orientations, pole=pole,
+        )
+        for pattern, r, _scale, scaled in variants:
+            # On the second pass only the variant the first one chose.
+            if keep is not None and keep.get(name, pattern.name) != pattern.name:
+                continue
             if float(np.max(pattern.intensity)) <= 0.0:
                 continue
             extended.add(pattern, phase=name, march_dollase=r,
-                         unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
+                         unit_mass=scaled.cell_mass, unit_volume=scaled.volume)
             added += 1
     return extended, added
 
@@ -1534,6 +1572,38 @@ def fit_tab() -> html.Div:
                         "moved. A specimen whose 001 did not move on glycolation has no "
                         "expandable clay, and the size of the movement it could have "
                         "hidden puts a ceiling on how much it may carry.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    label("Accompanying minerals: cell"),
+                    dcc.Dropdown(
+                        id="fit-accompanying-cell",
+                        options=[
+                            {"label": "As published (recommended)", "value": "0"},
+                            {"label": "Scale up to \u00b10.5 %", "value": "0.005"},
+                            {"label": "Scale up to \u00b11 %", "value": "0.01"},
+                        ],
+                        value="0",
+                        clearable=False,
+                    ),
+                    dcc.Checklist(
+                        id="fit-accompanying-po",
+                        options=[{"label": " and let the ones that cleave lie down",
+                                  "value": "on"}],
+                        value=[],
+                        style={"marginTop": "6px"},
+                    ),
+                    html.Div(
+                        "A published cell is some other specimen's, and a sekaninaite or "
+                        "a plagioclase carries its own: on a real separate the "
+                        "sekaninaite line at 8.4 \u00c5 sat half a peak width from where "
+                        "the structure library put it, so the fit left it short rather "
+                        "than put intensity where there is none. Most of what survives a "
+                        "separation is equant and belongs at a random powder, but a "
+                        "feldspar cleaves and its flakes can lie down. Both are off by "
+                        "default, each mineral is offered its variants once and refitted "
+                        "with the one it chose, and the zero error should be calibrated "
+                        "first \u2014 a cell scale and a zero error trade against each "
+                        "other over a narrow range of angles.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Restrict orientation parameters"),
@@ -2966,11 +3036,14 @@ def register_callbacks(app: Dash) -> None:
         State("fit-lattice", "value"),
         State("kao-constrain", "value"),
         State("sme-constrain", "value"),
+        State("fit-accompanying-cell", "value"),
+        State("fit-accompanying-po", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
                 exclusive, use_air_dried, use_diagnostic, lattice,
-                constrain_kaolinite, trust_expandable):
+                constrain_kaolinite, trust_expandable,
+                accompanying_cell, accompanying_po):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -2988,12 +3061,44 @@ def register_callbacks(app: Dash) -> None:
                         ValueError("No library entries match the selected orientation parameters.")
                     ),
                 )
+        cell_allowance = float(accompanying_cell or 0.0)
+        fit_orientation = bool(accompanying_po) and "on" in (accompanying_po or [])
+        clays_only = library
         try:
-            library, added = _with_main_minerals(library)
+            library, added = _with_main_minerals(library, cell_allowance, fit_orientation)
         except Exception as exc:  # noqa: BLE001
             return (*blank, error_message(exc))
 
         use_background = bool(subtract) and "on" in subtract
+
+        # An accompanying mineral offered several cells and orientations is one
+        # mineral, not several, and a non-negative fit will divide it between
+        # two neighbouring cells if allowed to.  So the variants are offered
+        # once, the winner read off, and the library rebuilt with one variant
+        # each before the fit that counts.
+        accompanying_note = ""
+        if added and (cell_allowance > 0.0 or fit_orientation):
+            try:
+                first = nnls_fit(
+                    state.corrected(), library,
+                    background=state.background_fit if use_background else None,
+                    range_two_theta=tuple(fit_range),
+                )
+                winners = best_variant_per_phase(first, set(STATE.selected_main))
+                library, added = _with_main_minerals(
+                    clays_only, cell_allowance, fit_orientation, keep=winners)
+            except Exception as exc:  # noqa: BLE001
+                return (*blank, error_message(exc))
+            offered = []
+            if cell_allowance:
+                offered.append(f"a cell up to \u00b1{100 * cell_allowance:.1f} %")
+            if fit_orientation:
+                offered.append("their own orientation")
+            chosen = ", ".join(sorted(winners.values()))
+            accompanying_note = (
+                "Accompanying minerals offered " + " and ".join(offered)
+                + "; the fit chose " + (chosen or "none of them") + "."
+            )
 
         # The air-dried mount is evidence, not a second pattern to fit: its
         # smectite interlayer may hold zero to three layers of water depending
@@ -3224,6 +3329,13 @@ def register_callbacks(app: Dash) -> None:
             status = html.Div([
                 html.Div(status),
                 html.Div(lattice_note, style={
+                    "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
+                }),
+            ])
+        if accompanying_note:
+            status = html.Div([
+                html.Div(status),
+                html.Div(accompanying_note, style={
                     "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
                 }),
             ])
