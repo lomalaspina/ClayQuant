@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
+from collections.abc import Callable
 from itertools import product
 
 import re
@@ -31,6 +32,7 @@ import re
 import numpy as np
 from scipy.optimize import nnls
 
+from .absorption import FilmAbsorption, mixture_mass_attenuation
 from .background import BackgroundFit
 from .pattern import Pattern
 
@@ -1834,3 +1836,75 @@ def select_one_orientation(
     assert best is not None
     best.evaluations = evaluations
     return best
+
+
+def fit_film_absorption(
+    library,
+    mass_per_area: float,
+    fit: "Callable[[object], FitResult]",
+    mass_attenuation: float | None = None,
+    max_iterations: int = 8,
+    tolerance: float = 0.005,
+) -> "tuple[FitResult, FilmAbsorption, list[float]]":
+    """Fit a weighed film, solving for the absorption and the composition together.
+
+    The film correction needs the *mixture's* mass attenuation coefficient, and
+    the mixture is what the fit is for: a clay film's coefficient runs from about
+    30 cm^2/g for a pure kaolinite to over 50 for a ferrous illite, which is far
+    too wide a range to fix in advance.  So it is iterated.  A first fit with a
+    provisional coefficient gives weights; the weights give a coefficient; that
+    gives a better fit.  It converges in two or three passes because the factor
+    depends on the coefficient only through ``exp(-2 mu W / sin theta)`` with
+    ``2 mu W`` around 0.03 - the correction is large but its sensitivity to the
+    coefficient is not.
+
+    ``fit`` is a callable taking a corrected library and returning a
+    :class:`FitResult`.  It is a callable rather than a set of arguments so that
+    whatever selection machinery a caller uses - two-stage selection, lattice
+    scaling, one orientation per family - is applied to the corrected library
+    without this function needing to know about any of it.
+
+    The correction is always applied to the library as passed, never to an
+    already-corrected one, which is what keeps the factor from being squared
+    across iterations.
+
+    Returns the final fit, the film it was fitted with, and the coefficients the
+    iteration passed through - the last of which is the record that says whether
+    it converged or ran out of passes.
+    """
+    coefficients = library.mass_attenuations()
+    if not coefficients:
+        raise ValueError(
+            "this library carries no mass attenuation coefficients, so the mixture's "
+            "cannot be averaged - it was built before the film correction existed. "
+            "Rebuild it, or pass mass_attenuation explicitly."
+        )
+    mu = float(mass_attenuation) if mass_attenuation else float(
+        sum(coefficients.values()) / len(coefficients)
+    )
+    history = [mu]
+    result = None
+    film = None
+    for _ in range(max_iterations):
+        film = FilmAbsorption(mass_per_area=mass_per_area, mass_attenuation=mu)
+        result = fit(library.for_film(film))
+        weights: dict[str, float] = {}
+        masses = (
+            result.relative_mass
+            if len(result.relative_mass) == len(result.coefficients)
+            else [0.0] * len(result.coefficients)
+        )
+        for phase, mass, coefficient in zip(result.phases, masses, result.coefficients):
+            if coefficient > 0.0 and mass > 0.0:
+                weights[phase] = weights.get(phase, 0.0) + float(mass)
+        if not weights:
+            break
+        updated = mixture_mass_attenuation(weights, coefficients)
+        history.append(updated)
+        if abs(updated - mu) <= tolerance * mu:
+            mu = updated
+            film = FilmAbsorption(mass_per_area=mass_per_area, mass_attenuation=mu)
+            result = fit(library.for_film(film))
+            break
+        mu = updated
+    return result, film, history

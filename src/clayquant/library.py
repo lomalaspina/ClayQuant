@@ -26,6 +26,12 @@ from pathlib import Path
 import numpy as np
 
 from .background import snip_baseline
+from .absorption import (
+    FilmAbsorption,
+    mass_attenuation_of,
+    mass_attenuation_of_layer,
+    mixture_mass_attenuation,
+)
 from .crystal import Crystal
 from .emission import CU_KA_5LINE
 from .mixed_layer import MixedLayerStack, lognormal_csds
@@ -136,6 +142,9 @@ CHLORITE_IRON: tuple[tuple[float, float], ...] = (
     (0.0, 0.025),
     (0.0, 0.035),
     (0.0, 0.050),
+    (0.0, 0.065),
+    (0.0, 0.085),
+    (0.0, 0.110),
 )
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
 
@@ -173,6 +182,12 @@ against 1.874 / 0.791 / 1.142 measured on a clinochloritic chlorite and 2.298 /
 1.357 / 1.701 on an iron-rich prochlorite.  The prochlorite's three higher orders
 are matched together to within 15 % at 0.035; the chlorite's 002 and 004 at
 0.006, its 003 by nothing here, which is left standing rather than tuned away.
+
+The axis used to stop at 0.050, and that was too soon: offered the values above
+the prochlorite takes 0.085, and where the axis ended at 0.050 it took the
+boundary value and its 7.15 A intensity was left 26 % short.  A fit that lands on
+the end of an axis has not chosen that value, it has run out of room, and the
+three further values exist so that it can.
 
 Whether the parameter is literally iron, or the hydroxide sheet's height, or its
 occupancy, is not settled by this: it is one number that moves the sum of the two
@@ -388,6 +403,16 @@ class LibraryEntry:
     six times over-weighted against albite at 664.
     """
 
+    mass_attenuation: float | None = None
+    """Cu K-alpha mass attenuation coefficient of the phase, in cm^2/g.
+
+    Not used to correct this entry - absorption in a film is by the mixture the
+    entry sits in, not by the entry (:class:`clayquant.absorption.FilmAbsorption`)
+    - but to let the mixture's coefficient be averaged from the fitted weights.
+    ``None`` where the phase was built without a structure to take it from, and
+    such a phase is dropped from the average rather than guessed at.
+    """
+
     metadata: dict = field(default_factory=dict)
 
 
@@ -427,6 +452,7 @@ class PatternLibrary:
         strain: float = 0.0,
         unit_mass: float | None = None,
         unit_volume: float | None = None,
+        mass_attenuation: float | None = None,
         normalization_floor: float = NORMALIZATION_FLOOR,
         strip_continuum: bool = True,
         air_pattern: "Pattern | None" = None,
@@ -486,6 +512,7 @@ class PatternLibrary:
                 normalization=scale,
                 unit_mass=unit_mass,
                 unit_volume=unit_volume,
+                mass_attenuation=mass_attenuation,
                 metadata=pattern.metadata,
             )
         )
@@ -586,6 +613,61 @@ class PatternLibrary:
             f"unknown treatment {treatment!r}; ClayQuant fits the glycolated mount"
         )
 
+    def for_film(self, film: "FilmAbsorption | None") -> "PatternLibrary":
+        """The library as a weighed film of that mass per area would diffract it.
+
+        Each stored pattern is multiplied by ``A(theta)``, and the normalisation
+        is deliberately left alone.  That is what keeps the weight percent right:
+        with ``I`` stored as the absolute pattern over ``normalization``, fitting
+        ``A I`` returns a coefficient that is still ``units x normalization``, so
+        ``coefficient / normalization`` means what it meant before.  Rescaling the
+        corrected pattern back to unit maximum would break exactly that.
+
+        The patterns stop being unit-maximum, which is only a conditioning
+        matter and a mild one - ``A`` runs over about 0.1 to 0.5 across a clay
+        scan, so the columns stay within a decade of each other.
+
+        ``None`` returns the library unchanged, which is the honest behaviour for
+        a mount that was not weighed: there is no correction to apply and none is
+        invented.
+        """
+        if film is None:
+            return self
+        if "film_absorption" in self.metadata:
+            raise ValueError(
+                "this library already carries a film correction "
+                f"({self.metadata['film_absorption']}); correcting it again would "
+                "square the factor. Apply for_film to the library as built."
+            )
+        factor = np.asarray(film.factor(self.two_theta), dtype=float)
+        entries = [
+            replace(
+                entry,
+                intensity=entry.intensity * factor,
+                air_intensity=(None if entry.air_intensity is None
+                               else entry.air_intensity * factor),
+            )
+            for entry in self.entries
+        ]
+        metadata = dict(self.metadata)
+        metadata["film_absorption"] = {
+            "mass_per_area": film.mass_per_area,
+            "mass_attenuation": film.mass_attenuation,
+        }
+        return PatternLibrary(two_theta=self.two_theta, entries=entries, metadata=metadata)
+
+    def mass_attenuations(self) -> dict[str, float]:
+        """Each phase's coefficient, for averaging the mixture's from fitted weights.
+
+        Phases whose entries carry none are absent rather than present with a
+        guess; :func:`clayquant.absorption.mixture_mass_attenuation` drops them.
+        """
+        found: dict[str, float] = {}
+        for entry in self.entries:
+            if entry.mass_attenuation is not None and entry.phase not in found:
+                found[entry.phase] = float(entry.mass_attenuation)
+        return found
+
     def spanned(self) -> dict[str, list[float]]:
         """The distinct values of each parameter this library samples, per phase.
 
@@ -671,6 +753,10 @@ class PatternLibrary:
                 [np.nan if entry.unit_volume is None else entry.unit_volume
                  for entry in self.entries]
             ),
+            mass_attenuation=np.array(
+                [np.nan if entry.mass_attenuation is None else entry.mass_attenuation
+                 for entry in self.entries]
+            ),
             entry_metadata=json.dumps([entry.metadata for entry in self.entries], default=str),
             library_metadata=json.dumps(self.metadata, default=str),
         )
@@ -707,6 +793,13 @@ class PatternLibrary:
                 data["unit_volume"] if "unit_volume" in data.files
                 else np.full(len(fractions), np.nan)
             )
+            # Libraries written before the film correction existed carry no
+            # coefficients; a fit still runs, and a film correction asked for on
+            # such a library says so rather than averaging over nothing.
+            attenuations = (
+                data["mass_attenuation"] if "mass_attenuation" in data.files
+                else np.full(len(fractions), np.nan)
+            )
             # Libraries written before the air-dried mount could restrain the
             # expandable clays carry no counterparts at all.
             air = (
@@ -728,10 +821,11 @@ class PatternLibrary:
                     normalization=float(scale),
                     unit_mass=None if np.isnan(mass) else float(mass),
                     unit_volume=None if np.isnan(volume) else float(volume),
+                    mass_attenuation=None if np.isnan(attenuation) else float(attenuation),
                     metadata=metadata,
                 )
                 for (name, phase, row, air_row, orientation, fraction, size, spacing,
-                     strain, scale, mass, volume, metadata) in zip(
+                     strain, scale, mass, volume, attenuation, metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -744,6 +838,7 @@ class PatternLibrary:
                     scales,
                     masses,
                     volumes,
+                    attenuations,
                     entry_metadata,
                 )
             ]
@@ -1008,7 +1103,8 @@ def build_library(
                         )
                         library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
                                     strain=float(strain),
-                                    unit_mass=crystal.cell_mass, unit_volume=crystal.volume)
+                                    unit_mass=crystal.cell_mass, unit_volume=crystal.volume,
+                                    mass_attenuation=mass_attenuation_of(crystal))
 
     # Pure glycolated smectite.  One entry, and the reason is worth setting out
     # because the consequence is not obvious.  Every reflection of this phase is
@@ -1081,6 +1177,7 @@ def build_library(
         march_dollase=smectite_orientation,
         fraction=0.0,
         unit_mass=smectite.mass,
+        mass_attenuation=mass_attenuation_of_layer(smectite),
         # A layer occupies the area of the (001) face of the host cell times its
         # own thickness; the smectite layer is modelled on the same footprint.
         unit_volume=_layer_footprint(load_crystal("illite")) * smectite.thickness,
@@ -1179,6 +1276,15 @@ def build_library(
                             # is what a scale factor here counts.
                             unit_mass=(fraction * host_layer.mass
                                        + (1.0 - fraction) * smectite.mass),
+                            # The average layer's coefficient, weighted by the
+                            # mass each kind of layer contributes to it - which
+                            # is not `fraction`, that being a count of layers.
+                            mass_attenuation=mixture_mass_attenuation(
+                                {"host": fraction * host_layer.mass,
+                                 "smectite": (1.0 - fraction) * smectite.mass},
+                                {"host": mass_attenuation_of_layer(host_layer),
+                                 "smectite": mass_attenuation_of_layer(smectite)},
+                            ),
                             unit_volume=_layer_footprint(host) * (
                                 fraction * host_layer.thickness
                                 + (1.0 - fraction) * smectite.thickness

@@ -25,6 +25,7 @@ Start it with ``clayquant-gui`` or ``python -m clayquant.gui.app``.
 from __future__ import annotations
 
 import argparse
+import math
 import socket
 import subprocess
 import sys
@@ -39,6 +40,12 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, dcc, html, no_update
 from dash.exceptions import PreventUpdate
 
+from ..absorption import (
+    FilmAbsorption,
+    mass_attenuation_of,
+    mass_per_area,
+    mixture_mass_attenuation,
+)
 from ..background import (
     CLAYFIT_ANCHOR_RADIUS,
     CLAYFIT_ANCHOR_STRIDE,
@@ -735,7 +742,8 @@ def _with_main_minerals(library, cell_allowance: float = 0.0,
             if float(np.max(pattern.intensity)) <= 0.0:
                 continue
             extended.add(pattern, phase=name, march_dollase=r,
-                         unit_mass=scaled.cell_mass, unit_volume=scaled.volume)
+                         unit_mass=scaled.cell_mass, unit_volume=scaled.volume,
+                         mass_attenuation=mass_attenuation_of(scaled))
             added += 1
     return extended, added
 
@@ -1572,6 +1580,48 @@ def fit_tab() -> html.Div:
                         "moved. A specimen whose 001 did not move on glycolation has no "
                         "expandable clay, and the size of the movement it could have "
                         "hidden puts a ceiling on how much it may carry.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    label("Weighed mount: mass and area"),
+                    html.Div(
+                        [
+                            dcc.Input(
+                                id="film-mass",
+                                type="number",
+                                placeholder="mass (mg)",
+                                min=0,
+                                step=0.1,
+                                debounce=True,
+                                style={"width": "48%", "marginRight": "4%"},
+                            ),
+                            dcc.Input(
+                                id="film-area",
+                                type="number",
+                                placeholder="area (cm2)",
+                                value=round(math.pi * 1.25 ** 2, 2),
+                                min=0,
+                                step=0.01,
+                                debounce=True,
+                                style={"width": "48%"},
+                            ),
+                        ],
+                        style={"display": "flex", "marginBottom": "2px"},
+                    ),
+                    html.Div(
+                        "Every calculated pattern is for a plate thick enough to absorb "
+                        "the beam; a few milligrams on a glass slide is not one, and it "
+                        "delivers 1 - exp(-2 mu W / sin(theta)) of what such a plate "
+                        "would. That carries 1/sin(theta), so a film keeps more of its "
+                        "low-angle intensity than of its high-angle intensity - on a "
+                        "2.6 mg mount, 0.44 at the chlorite 001 against 0.25 at the "
+                        "kaolinite 001. Uncorrected, the chlorite scale set at 6.2 deg "
+                        "over-predicts its own 002 under the 7.15 A peak and starves the "
+                        "kaolinite of it. The mixture's absorption is what governs this, "
+                        "not each phase's, so it is solved for together with the "
+                        "composition. Area is what the suspension dried over, not the "
+                        "area of the glass; the default is a 2.5 cm round mount. Leave "
+                        "the mass empty and no correction is applied \u2014 an unweighed "
+                        "mount has none to apply (Sec. A.46).",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     label("Accompanying minerals: cell"),
@@ -3038,12 +3088,14 @@ def register_callbacks(app: Dash) -> None:
         State("sme-constrain", "value"),
         State("fit-accompanying-cell", "value"),
         State("fit-accompanying-po", "value"),
+        State("film-mass", "value"),
+        State("film-area", "value"),
         prevent_initial_call=True,
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
                 exclusive, use_air_dried, use_diagnostic, lattice,
                 constrain_kaolinite, trust_expandable,
-                accompanying_cell, accompanying_po):
+                accompanying_cell, accompanying_po, film_mass, film_area):
         blank = (no_update,) * 5
         if STATE.library is None:
             return (*blank, error_message(ValueError("Load or build a library first.")))
@@ -3185,7 +3237,11 @@ def register_callbacks(app: Dash) -> None:
                     "loaded."
                 )
 
-        try:
+        # One fit of one library, so that the film correction can be iterated
+        # over it: the correction needs the mixture's absorption and the mixture
+        # is what the fit is for, so the two are solved for together.  Whatever
+        # selection the user asked for is inside here and applies unchanged.
+        def _run_one(library):
             selection = None
             lattice_note = ""
             if exclusive == "free":
@@ -3242,6 +3298,62 @@ def register_callbacks(app: Dash) -> None:
                         state.corrected(), library, families=families, **arguments,
                     )
                 result = selection.result
+            return result, selection, lattice_note, library
+
+        try:
+            film = None
+            film_note = ""
+            if film_mass and float(film_mass) > 0.0 and film_area and float(film_area) > 0.0:
+                coefficients = library.mass_attenuations()
+                if not coefficients:
+                    raise ValueError(
+                        "This library was built before the film correction existed, so "
+                        "it carries no mass attenuation coefficients and the mixture's "
+                        "cannot be averaged. Rebuild the library, or clear the mass to "
+                        "fit without the correction."
+                    )
+                weight_per_area = mass_per_area(
+                    float(film_mass) * 1e-3, float(film_area)
+                )
+                mu = sum(coefficients.values()) / len(coefficients)
+                passes = 0
+                for passes in range(1, 5):
+                    film = FilmAbsorption(
+                        mass_per_area=weight_per_area, mass_attenuation=mu
+                    )
+                    result, selection, lattice_note, fitted = _run_one(
+                        library.for_film(film)
+                    )
+                    masses = (
+                        result.relative_mass
+                        if len(result.relative_mass) == len(result.coefficients)
+                        else [0.0] * len(result.coefficients)
+                    )
+                    weights = {}
+                    for phase, mass, coefficient in zip(
+                        result.phases, masses, result.coefficients
+                    ):
+                        if coefficient > 0.0 and mass > 0.0:
+                            weights[phase] = weights.get(phase, 0.0) + float(mass)
+                    if not weights:
+                        break
+                    updated = mixture_mass_attenuation(weights, coefficients)
+                    if abs(updated - mu) <= 0.005 * mu:
+                        mu = updated
+                        break
+                    mu = updated
+                library = fitted
+                film_note = (
+                    f"Film correction applied: {float(film_mass):.2f} mg over "
+                    f"{float(film_area):.2f} cm\u00b2 is "
+                    f"{1e3 * weight_per_area:.2f} mg/cm\u00b2, and the fitted mixture "
+                    f"absorbs {mu:.1f} cm\u00b2/g (converged in {passes} "
+                    f"{'pass' if passes == 1 else 'passes'}). The mount delivers "
+                    f"{float(film.factor(6.2)):.2f} of a thick plate at 6.2\u00b0 and "
+                    f"{float(film.factor(24.9)):.2f} at 24.9\u00b0."
+                )
+            else:
+                result, selection, lattice_note, library = _run_one(library)
             # Every expandable entry in the fit now has to justify the
             # reflection that identifies it, which is a thing the residual
             # cannot ask for itself.
@@ -3336,6 +3448,13 @@ def register_callbacks(app: Dash) -> None:
             status = html.Div([
                 html.Div(status),
                 html.Div(accompanying_note, style={
+                    "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
+                }),
+            ])
+        if film_note:
+            status = html.Div([
+                html.Div(status),
+                html.Div(film_note, style={
                     "marginTop": "8px", "fontSize": "0.8rem", "color": "#555",
                 }),
             ])

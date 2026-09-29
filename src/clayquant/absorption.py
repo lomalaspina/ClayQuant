@@ -33,6 +33,8 @@ absorb little.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -110,6 +112,25 @@ def mass_attenuation_of(crystal: Crystal) -> float:
         weighted += mass * mass_attenuation(site.species)
     if total_mass <= 0.0:
         raise ValueError(f"{crystal.name or 'this structure'} has no mass to weight by")
+    return weighted / total_mass
+
+
+def mass_attenuation_of_layer(layer) -> float:
+    """The coefficient of a :class:`clayquant.crystal.LayerModel`.
+
+    The same mass-fraction weighting as :func:`mass_attenuation_of`, over a
+    layer's sites rather than a cell's.  An interstratified entry has no unit
+    cell to take a composition from - its unit is one average layer - so this is
+    how a mixed-layer phase gets a coefficient at all.
+    """
+    total_mass = 0.0
+    weighted = 0.0
+    for species, occupancy in zip(layer.species, layer.occupancy):
+        mass = float(occupancy) * atomic_weight(species)
+        total_mass += mass
+        weighted += mass * mass_attenuation(species)
+    if total_mass <= 0.0:
+        raise ValueError(f"{layer.name or 'this layer'} has no mass to weight by")
     return weighted / total_mass
 
 
@@ -215,3 +236,92 @@ def thin_film_factor(
     if np.any(sine <= 0.0):
         raise ValueError("every two-theta must lie strictly between 0 and 180 degrees")
     return 1.0 - np.exp(-2.0 * mass_attenuation_coefficient * film_mass_per_area / sine)
+
+
+@dataclass(frozen=True)
+class FilmAbsorption:
+    """What a weighed film of known mass per area delivers, angle by angle.
+
+    Every pattern ClayQuant calculates is for a plate thick enough to absorb the
+    beam completely.  A clay film smeared on a glass slide is not that plate, and
+    the difference is not a scale factor: it is
+
+        A(theta) = 1 - exp(-2 mu_m W / sin(theta))
+
+    which carries ``1 / sin(theta)`` and so keeps more of the film's low-angle
+    intensity than of its high-angle intensity.  On the weighed standards it is
+    the difference between a calculated basal ratio 57-66 % too high and one
+    right to 5-11 % (Sec. A.46).
+
+    The coefficient is the **mixture's**, not each phase's, and that is the
+    whole of why this is one object for a mount rather than a property of an
+    entry.  A photon on its way to a kaolinite crystallite buried in an illite
+    film is attenuated by the illite it passes through, so what governs the
+    correction is the average composition of the film, which is what the fit is
+    trying to find.  :func:`fit_film_absorption` closes that loop.
+
+    ``mass_per_area`` is in g/cm^2 and needs the area the suspension dried over,
+    which has to be measured: two mounts of the same weight spread over different
+    areas absorb differently.  On a 2.5 cm round mount the area is 4.91 cm^2.
+    """
+
+    mass_per_area: float
+    mass_attenuation: float
+
+    def __post_init__(self) -> None:
+        if self.mass_per_area <= 0.0:
+            raise ValueError(
+                f"a film's mass per area must be positive, not {self.mass_per_area}; "
+                "a mount that was not weighed has no film correction, and None is how "
+                "that is said"
+            )
+        if self.mass_attenuation <= 0.0:
+            raise ValueError(
+                f"a mass attenuation coefficient must be positive, not "
+                f"{self.mass_attenuation}"
+            )
+
+    def factor(self, two_theta: np.ndarray | float) -> np.ndarray:
+        """The fraction of a thick specimen's intensity this film delivers."""
+        return thin_film_factor(two_theta, self.mass_attenuation, self.mass_per_area)
+
+    @property
+    def opacity(self) -> float:
+        """``2 mu_m W``, the exponent's numerator - how thick the film is, in effect.
+
+        Small against ``sin(theta)`` everywhere means a film so thin that the
+        factor is ``2 mu_m W / sin(theta)`` and the correction is at its most
+        severe; large everywhere means a film already thick enough that there is
+        no correction to make.  On these mounts it is 0.03-0.07, which is the
+        awkward middle: the correction is large and it varies across the scan.
+        """
+        return 2.0 * self.mass_attenuation * self.mass_per_area
+
+
+def mixture_mass_attenuation(weights: Mapping[str, float],
+                             coefficients: Mapping[str, float]) -> float:
+    """The coefficient of a mixture, weighted by mass fraction.
+
+    A mass attenuation coefficient is additive in mass fraction - that is the
+    property that makes it the useful one - so a mixture's follows from its
+    phases' and their weight fractions.  Phases absent from ``coefficients`` are
+    dropped from both sums rather than assigned a guess, because a wrong
+    coefficient propagates straight into a weight percent; if that empties the
+    sum, there is nothing to average and the caller is told so.
+    """
+    total = 0.0
+    weighted = 0.0
+    for phase, weight in weights.items():
+        if weight <= 0.0:
+            continue
+        coefficient = coefficients.get(phase)
+        if coefficient is None:
+            continue
+        total += weight
+        weighted += weight * coefficient
+    if total <= 0.0:
+        raise ValueError(
+            "no phase with a known mass attenuation coefficient carries any weight, so "
+            "the mixture's coefficient cannot be averaged; pass one explicitly"
+        )
+    return weighted / total

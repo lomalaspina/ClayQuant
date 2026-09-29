@@ -163,6 +163,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-43">A.43 The spread was the orientation</a>
 <a href="#a-44">A.44 Calibrating on weighed standards</a>
 <a href="#a-45">A.45 A cell and a texture for the accompanying minerals</a>
+<a href="#a-46">A.46 A weighed film is not a thick plate</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -5934,6 +5935,84 @@ texture and an accompanying mineral does not share it.</p>
 
 <p><strong>Both are off by default</strong>, and the fourth row above is why they are worth having
 and the third is why they are not defaults.</p>
+
+
+
+<h3 id="a-46">A.46 A weighed film is not a thick plate</h3>
+
+<p><strong>Where it came from.</strong> A separate was fitting its kaolinite at 0.6&nbsp;wt&nbsp;%
+against an independent refinement's 11.7, and the shared clay orientation was the suspect: forcing
+the kaolinite to <var>r</var>&nbsp;=&nbsp;0.3 gave 0.58&nbsp;%, releasing it to 0.8 gave 10.5. The
+test proposed was to fit a pure kaolinite standard and see what orientation it took on its own.
+Two were in hand, both weighed.</p>
+
+<p><strong>The test could not work, and the calculation says why.</strong> The kaolinite
+002/001 ratio does not depend on the orientation:</p>
+
+<div class="tablewrap"><table>
+<tr><th><var>r</var></th><th>0.2</th><th>0.3</th><th>0.5</th><th>1.0</th></tr>
+<tr><td>kaolinite 1<i>M</i>, 002/001</td><td>0.666</td><td>0.666</td><td>0.667</td><td>0.673</td></tr>
+</table></div>
+
+<p>March&ndash;Dollase is a function of the angle between a reflection's normal and the texture
+pole, and along a basal series that angle is zero for every order. So the factor is one constant
+down the whole series and the series carries no orientation information. Both standards duly gave a
+<var>R</var><sub>wp</sub> flat to within 1&nbsp;% from <var>r</var>&nbsp;=&nbsp;0.1 to 0.5. An
+oriented mount of a single clay cannot determine its own orientation, and that is a property of the
+experiment rather than of this program.</p>
+
+<p><strong>What the test did find.</strong> The measured basal ratio did not match the calculated
+one at any orientation, and the discrepancy was the same shape on every weighed standard:</p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th>measured 002/001</th><th>thick plate</th><th>&times; film factor</th></tr>
+<tr><td>Kaolinite_12, 2.6&nbsp;mg</td><td>0.401</td><td>0.666 (+66&nbsp;%)</td><td>0.357</td></tr>
+<tr><td>Illite_10, 3.1&nbsp;mg</td><td>0.144</td><td>0.226 (+57&nbsp;%)</td><td>0.137</td></tr>
+</table></div>
+
+<p>Every pattern ClayQuant calculates is for a flat plate thick enough to absorb the beam
+completely &mdash; that is what the Debye&ndash;Scherrer Lorentz factor and the beam-overflow
+correction describe between them, with the specimen's 1/2<var>&mu;</var> folded into the scale
+factor. A few milligrams smeared on a glass slide is not that plate. It delivers</p>
+
+<p class="eq"><var>A</var>(<var>&theta;</var>) = 1 &minus; exp(&minus;2 <var>&mu;</var><sub>m</sub>
+<var>W</var> / sin&nbsp;<var>&theta;</var>)</p>
+
+<p>of it, with <var>W</var> the film's mass per area. The exponent carries
+1/sin&nbsp;<var>&theta;</var>, so a film keeps more of its low-angle intensity than of its
+high-angle intensity, and the correction is a reweighting rather than a rescaling. On a 2.6&nbsp;mg
+mount over a 2.5&nbsp;cm disc it is 0.44 at the chlorite 001 and 0.25 at the kaolinite 001 &mdash; a
+factor of 1.74 between exactly the two reflections that compete for the 7.15&nbsp;&Aring; peak.
+Uncorrected, a chlorite whose scale is set by its strong 001 at 6.2&nbsp;&deg; over-predicts its own
+002 at 12.4&nbsp;&deg;, which sits under that peak, and the kaolinite is left with what remains.</p>
+
+<p><strong>The coefficient is the mixture's, not the phase's.</strong> A photon on its way to a
+kaolinite crystallite buried in an illite film is attenuated by the illite it passes through, so
+what governs the correction is the average composition of the film. That is the composition the fit
+is trying to find, and the range is too wide to fix in advance: about 30&nbsp;cm<sup>2</sup>/g for a
+pure kaolinite against over 50 for a ferrous illite. So it is iterated &mdash; a first fit with a
+provisional coefficient gives weights, the weights give a coefficient, that gives a better fit. It
+settles in two or three passes, because the correction depends on the coefficient only through an
+exponential whose argument is around 0.03.</p>
+
+<p><strong>What it does not fix.</strong> The illite third order goes the wrong way: measured 0.469,
+thick plate 0.602, corrected 0.260. That window contains the quartz 101 at 26.640&nbsp;&deg;,
+0.08&nbsp;&deg; from the illite 003, so on a natural illite separate the measured third order is an
+upper bound rather than a value and cannot be used as a check either way. It is recorded here as it
+stands rather than argued away.</p>
+
+<p>The correction also revises an earlier result rather than adding to it. The octahedral iron of
+&sect;<a href="#a-35">A.35</a> was fitted to a basal series that this correction now explains a large
+part of; the iron content it reports is therefore due to be re-derived against corrected patterns,
+and until that is done it should be read as a parameter that fits, not as a composition.</p>
+
+<p><strong>Applying it.</strong> The mount's mass and the area the suspension dried over are entered
+on the fit panel; the area is what the suspension covered, not the area of the glass, and the
+default is the 4.91&nbsp;cm<sup>2</sup> of a 2.5&nbsp;cm round mount. Leaving the mass empty applies
+no correction, which is the honest behaviour for a mount that was not weighed: there is nothing to
+apply and nothing is invented. The library records each phase's mass attenuation coefficient so the
+mixture's can be averaged; a library built before this existed carries none, and asking for the
+correction on one says so rather than guessing.</p>
 
 
 
