@@ -164,6 +164,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-44">A.44 Calibrating on weighed standards</a>
 <a href="#a-45">A.45 A cell and a texture for the accompanying minerals</a>
 <a href="#a-46">A.46 A weighed film is not a thick plate</a>
+<a href="#a-47">A.47 One mineral under two names</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6022,6 +6023,69 @@ no correction, which is the honest behaviour for a mount that was not weighed: t
 apply and nothing is invented. The library records each phase's mass attenuation coefficient so the
 mixture's can be averaged; a library built before this existed carries none, and asking for the
 correction on one says so rather than guessing.</p>
+
+
+
+<h3 id="a-47">A.47 One mineral under two names</h3>
+
+<p><strong>What was seen.</strong> A contributing-patterns table for a real separate held both of
+these, among nineteen rows:</p>
+
+<div class="tablewrap"><table>
+<tr><th>pattern</th><th>scattering&nbsp;%</th></tr>
+<tr><td>C/S 1.00/0.00 PO=0.1 N=49.9221 d=14.15</td><td>12.45</td></tr>
+<tr><td>C/S 1.00/0.00 PO=0.6 N=49.9221 d=14.25</td><td>5.91</td></tr>
+<tr><td>C/S 1.00/0.00 PO=0.1 N=14.9787 d=14.35</td><td>3.08</td></tr>
+<tr><td>C/S 1.00/0.00 PO=0.1 N=49.9221 d=14.35</td><td>0.85</td></tr>
+<tr><td>chlorite Fe=0/0.05 PO=0.2 d=14.15</td><td>1.04</td></tr>
+</table></div>
+
+<p>A host fraction of 1.00 is no smectite at all, so every one of those rows is a pure chlorite.
+The mineral was therefore reported as 1&nbsp;% under the name <code>chlorite</code> and 22&nbsp;%
+under the name <code>C/S</code>, and a reader of the table has no way to know they are the same
+thing. The illite behaved identically through <code>I/S 1.00/0.00</code>.</p>
+
+<p><strong>Why the fit does it.</strong> The two representations are near-duplicates. Comparing
+every series end member against every discrete entry, the closest pair agree to a cosine of 0.980
+for chlorite and 0.963 for illite. Non-negative least squares has no principle for dividing
+collinear columns &mdash; any split that sums correctly fits equally well &mdash; so the division is
+arbitrary and moves with the noise.</p>
+
+<p>No family rule can repair it. A family groups entries <em>within</em> a phase, and these carry
+different phase names: <code>C/S</code> and <code>chlorite</code> are never in one family however
+the label is built. That is what made removing the entry the fix rather than relabelling it.</p>
+
+<p><strong>The same defect also let the orientation loose.</strong> Under &ldquo;one orientation per
+composition&rdquo; the family is the phase, the host fraction, the crystallite thickness
+<em>and</em> the layer spacing &mdash; only orientation and microstrain are collapsed. So the four
+rows above are four different families, because their <var>d</var> and <var>N</var> differ, and
+each was free to choose its own <var>r</var>. Two of them chose 0.1 and one 0.6. Mass per unit
+measured intensity goes as <var>r</var><sup>3</sup>, so those differ by 216 per gram, and the
+reported chlorite is a blend of two orientations &mdash; which is the very error the family rule
+exists to prevent, arriving through the spacing axis. Fitting one orientation for the whole mount
+closes that route; it is the physically right constraint in any case, one suspension having dried
+onto one plate.</p>
+
+<p><strong>What was changed.</strong> Both series now stop short of their end member: the illite
+series at 0.99 and the chlorite series at 0.95. The discrete phases are the entries for a pure
+illite and a pure chlorite, and they are the better-founded of the two, being three-dimensional
+patterns with <var>hkl</var> reflections where the series computes 00<var>l</var> alone.</p>
+
+<p><strong>What that costs, and the argument it overturns.</strong> These axes were extended to
+1.00 deliberately, and for a good reason: without the end member the closest a pure illite can be
+described as is 0.99, so a fit of one piles its coefficient there and reports 1&nbsp;% of a smectite
+the specimen does not contain &mdash; a bound presented as a measurement. That reasoning was right
+about the failure and wrong about the remedy, because the cure introduced a worse error than the
+disease. The bound is now <em>detected</em> rather than designed around: 0.99 is the top of the
+spanned range, so a fit collecting there is flagged by
+<code>parameters_at_an_edge</code>, and the honest reading of the flag is that the specimen is a
+pure illite and the discrete phase is its entry.</p>
+
+<p>The second cost is real and is accepted rather than dismissed. The discrete entries broaden by
+microstrain; the interstratified ones carry the crystallite thickness distribution of
+&sect;<a href="#s-2-6">2.6</a>, which is what actually sets a basal width. A pure illite can no
+longer be fitted with its thickness spanned, only with its strain spanned. An approximate width on
+one phase is the smaller error of the two.</p>
 
 
 

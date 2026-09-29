@@ -119,12 +119,28 @@ def test_the_fit_records_it_without_being_asked(library):
     assert result.metadata["parameters_at_an_edge"] == parameters_at_an_edge(result, library)
 
 
-def test_the_illite_series_reaches_its_pure_end_member():
-    """The gap a measured pure illite standard exposed."""
+def test_the_series_stop_short_of_their_pure_end_members():
+    """Reversing an earlier decision, and recording why.
+
+    These axes used to reach 1.00 so that a measured pure illite would not be
+    forced onto 0.99 and reported as carrying 1 % of a smectite it does not
+    have.  That reasoning was sound about the bound and wrong about the remedy:
+    a 1.00 entry is a *second* pure illite, the discrete ``illite`` phase being
+    the first, and the two agree to a cosine of 0.963 (0.980 for chlorite).  A
+    non-negative fit divides collinear columns arbitrarily, and since the two
+    carry different phase names no family rule can merge them - families group
+    within a phase.  On a real separate that reported one chlorite as 1 % under
+    ``chlorite`` and 22 % under ``C/S 1.00/0.00``.
+
+    The bound the old test guarded against is now detected instead of designed
+    around: 0.99 is the top of the spanned range, so a fit collecting there is
+    flagged by :func:`parameters_at_an_edge`, and the reading is "this is a pure
+    illite, use the discrete phase".  See tests/test_end_member_duplication.py.
+    """
     from clayquant.library import CHLORITE_SMECTITE_FRACTIONS, ILLITE_SMECTITE_FRACTIONS
 
-    assert max(ILLITE_SMECTITE_FRACTIONS) == 1.00
-    assert max(CHLORITE_SMECTITE_FRACTIONS) == 1.00
+    assert max(ILLITE_SMECTITE_FRACTIONS) == 0.99
+    assert max(CHLORITE_SMECTITE_FRACTIONS) == 0.95
 
 
 def test_the_end_member_really_is_the_pure_phase(library):

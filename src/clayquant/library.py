@@ -110,29 +110,50 @@ ILLITE_SMECTITE_FRACTIONS: tuple[float, ...] = (
     0.97,
     0.98,
     0.99,
-    1.00,
 )
 """Illite fraction of the illite/smectite series.
 
-The series reaches 1.00, the pure illite end member, and that matters more than
-it looks.  Without it the closest a pure illite can be described as is 0.99, and
-a fit of one piles its whole coefficient onto that entry - which reports 1 % of
-smectite the specimen does not have, and, worse, reports a *bound* as though it
-were a measurement.  A measured pure illite standard is what showed this: the
-fit put 94 % of its illite on the 0.99 entry, the end of the range.
+The series stops at 0.99 and no longer reaches the pure illite end member,
+because a 1.00 entry is a second pure illite.  The library already holds one, as
+the discrete ``illite`` phase, and the two are near-duplicates: the closest pair
+agree to a cosine of 0.963, and for chlorite 0.980.  A non-negative fit splits
+collinear columns arbitrarily between them, and because they carry *different
+phase names* no family rule can merge them again - families group within a
+phase.  The result on a real separate was a chlorite reported as 1 % under
+``chlorite`` while 22 % of the same mineral sat under ``C/S 1.00/0.00``.  A
+quantification that reports one mineral as two is wrong in the way that matters
+most, whatever the residual says.
 
-The end member is not redundant with the discrete ``illite`` entries either.
-Those are three-dimensional powder patterns whose basal widths come from the
-instrumental profile; the interstratified entries carry the crystallite
-thickness distribution of Sec. 2.6, which is what actually sets a basal width.
-Only through this series can a pure illite be fitted with its thickness spanned.
+This axis used to reach 1.00, and the argument for it is worth keeping because
+it says what to watch.  Without the end member the closest a pure illite can be
+described as is 0.99, and a fit of one piles its coefficient there - reporting
+1 % of smectite the specimen does not have, and reporting a *bound* as though it
+were a measurement.  That failure is now detected rather than designed around:
+0.99 is the top of the spanned range, so
+:func:`clayquant.nnls.parameters_at_an_edge` flags a fit that collects there,
+and the honest reading of the flag is "this is a pure illite, and the discrete
+phase is the entry for it".
+
+What is genuinely lost is that the discrete entries broaden by microstrain while
+the interstratified ones carry the crystallite thickness distribution of
+Sec. 2.6, which is what actually sets a basal width.  A pure illite can no
+longer be fitted with its thickness spanned, only with its strain spanned.  That
+is a real cost, accepted deliberately: an approximate width on one phase is a
+smaller error than the same mineral counted under two names.
 """
 
-CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (1.00, 0.95, 0.90, 0.85)
+CHLORITE_SMECTITE_FRACTIONS: tuple[float, ...] = (0.95, 0.90, 0.85)
 """Chlorite fraction of the chlorite/smectite series.
 
-Reaching 1.00 for the same reason as the illite series: a chlorite with no
-expandable component has to be describable without one.
+Stopping at 0.95 for the same reason the illite series stops at 0.99: a 1.00
+entry is a second pure chlorite, the discrete ``chlorite`` phase is the first,
+and the two agree to a cosine of 0.980 - close enough that a non-negative fit
+divides one mineral between two phase names.  See
+:data:`ILLITE_SMECTITE_FRACTIONS` for the whole argument and for what it costs.
+
+The gap to 1.00 is wider here than the illite series' 0.01, so a chlorite with a
+little expandable component is described more coarsely; that is the existing
+spacing of this axis rather than anything new.
 """
 
 CHLORITE_IRON: tuple[tuple[float, float], ...] = (
