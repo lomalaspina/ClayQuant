@@ -296,6 +296,30 @@ def phases_to_tick(findings, screened: bool, tick_above: float,
     ]
 
 
+ZERO_ERROR_RELOADS_ON = ("zero-mount", "load-status")
+"""Which controls mean "show me this mount" rather than "set this mount"."""
+
+
+def zero_error_exchange(triggered: str | None, stored: float, slider: float):
+    """Which way the zero error moves between a mount and the shared slider.
+
+    Returns ``(store on the mount, send to the slider)``, the second being
+    ``no_update`` where the slider is already right.
+
+    Each mount keeps its own zero error, because each was mounted and measured
+    separately - the heated one is displaced by its own amount, and on a real
+    specimen air and glycol agreeing while heat differs is the normal case.
+    The slider, though, is one control for all three.  So when the mount
+    selection changes, the slider still holds the *previous* mount's value, and
+    writing it in overwrites the zero error of the mount just selected with the
+    one before it.  That is the direction this function exists to get right:
+    a mount change reads, a slider move writes.
+    """
+    if triggered in ZERO_ERROR_RELOADS_ON:
+        return stored, (no_update if stored == slider else stored)
+    return slider, no_update
+
+
 def instrument_strip():
     """The instrument in use and the one the library holds, side by side.
 
@@ -1997,18 +2021,40 @@ def register_callbacks(app: Dash) -> None:
     @app.callback(
         Output("zero-graph", "figure"),
         Output("zero-status", "children"),
+        Output("zero-slider", "value", allow_duplicate=True),
         Input("zero-slider", "value"),
         Input("zero-mount", "value"),
         Input("zero-reference", "value"),
         # As for the background tab: the layout is built once, so the view has
         # to be told that patterns have since been loaded.
         Input("load-status", "children"),
+        prevent_initial_call=True,
     )
     def update_zero(shift, mount, reference, _loaded):
+        """Show the selected mount's zero error, and store what the slider says.
+
+        Which of those two happens depends on what moved, and getting that the
+        wrong way round is a data-losing bug rather than a cosmetic one.  Each
+        mount keeps its own zero error, because each was mounted and measured
+        separately and the heated one in particular is displaced by its own
+        amount.  But the slider is one control shared by all three, so when the
+        mount selection changes the slider still holds the *previous* mount's
+        value - and writing that in would silently overwrite the zero error of
+        the mount just selected with the one before it.  That is what used to
+        happen: calibrating the heated mount and then clicking back to air gave
+        air the heated mount's shift.
+
+        So: when the mount changes, or the loaded set does, the slider is
+        reloaded *from* the mount.  Only when the slider itself moves is the
+        value written *to* it.
+        """
         state = STATE.mounts[mount]
         if state.raw is None:
-            return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
-        state.zero_error = float(shift or 0.0)
+            return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), "", no_update
+        # Returning a value to the slider fires this callback again; that pass
+        # stores the same number in the same mount and stops.
+        state.zero_error, reload_slider = zero_error_exchange(
+            callback_context.triggered_id, float(state.zero_error), float(shift or 0.0))
         target = _reference_angle(reference)
         corrected = state.corrected()
 
@@ -2034,10 +2080,23 @@ def register_callbacks(app: Dash) -> None:
             yaxis="y",
         )
         best = float(shifts[int(np.argmax(merit))])
-        return figure, html.Div(
-            f"Slider at {state.zero_error:+.2f}°. Merit curve peaks at {best:+.2f}°. "
-            f"Applies to {MOUNT_LABELS[mount]} only — each mount has its own displacement."
+        others = ", ".join(
+            f"{MOUNT_LABELS[key]} {other.zero_error:+.2f}°"
+            for key, other in STATE.mounts.items()
+            if key != mount and other.is_loaded
         )
+        return figure, html.Div([
+            html.Span(
+                f"Slider at {state.zero_error:+.2f}°. Merit curve peaks at {best:+.2f}°. "
+                f"Applies to {MOUNT_LABELS[mount]} only — each mount has its own "
+                f"displacement. "
+            ),
+            # Worth showing, because the slider is one control for three mounts
+            # and the only way to see that the other two kept their own values
+            # is to read them here or to click back and forth.
+            html.Span(f"The others are set to: {others}." if others else "",
+                      style={"color": "#666"}),
+        ]), reload_slider
 
     @app.callback(
         Output("bg-order-box", "style"),
