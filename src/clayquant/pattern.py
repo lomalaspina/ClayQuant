@@ -289,8 +289,16 @@ def peak_list(
     instrument: Instrument | None = None,
     r_march_dollase: float = 1.0,
     merge_within: float = 0.06,
+    po_axis: "Sequence[float]" = (0.0, 0.0, 1.0),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merged reflection positions and relative intensities of a crystal.
+
+    ``po_axis`` is the texture pole the March-Dollase factor is measured from,
+    and it matters here for the same reason it matters in a pattern: a prismatic
+    mineral lying on a side face puts its intensity into one family of
+    reflections and shows almost nothing of the rest, so a peak list computed
+    for a random powder looks for lines the specimen does not have and concludes
+    the mineral is absent.
 
     Reflections closer together than ``merge_within`` degrees are combined into
     one entry at their intensity-weighted position, which turns the raw
@@ -303,7 +311,7 @@ def peak_list(
     low, high = float(two_theta_range[0]), float(two_theta_range[1])
     wavelength = instrument.emission.principal_wavelength
     d_min = wavelength / (2.0 * math.sin(math.radians(high / 2.0)))
-    found = reflections(crystal, d_min)
+    found = reflections(crystal, d_min, po_axis=po_axis)
 
     argument = wavelength / (2.0 * found.d)
     visible = argument < 1.0

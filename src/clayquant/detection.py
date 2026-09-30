@@ -71,7 +71,7 @@ from .background import snip_baseline
 from .bern import is_clay_phase
 from .calibration import QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
 from .crystal import Crystal
-from .models import MINERAL_HABIT
+from .models import MINERAL_HABIT, habit_pole
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
 __all__ = [
@@ -370,6 +370,25 @@ def _proportionality(expected: np.ndarray, measured: np.ndarray) -> float:
     return float(np.clip(np.quantile(ratios, 0.2) / median, 0.0, 1.0))
 
 
+
+
+def _habit_peak_list(name, crystal, two_theta_range, instrument):
+    """``peak_list`` for a phase, at its habit's pole where it has one.
+
+    A prismatic mineral is listed at the middle of the range the fit would span
+    for it rather than as a random powder.  Listing it as a random powder asks
+    for lines an oriented specimen does not show, and the coverage and score
+    tests then reject the mineral for not having them - which is how an
+    amphibole plainly present at 9592 counts went undetected, its 8.4 A (110)
+    being the only line of it the mount showed (Sec. A.48).
+    """
+    pole = habit_pole(name, crystal)
+    return peak_list(
+        crystal, two_theta_range, instrument,
+        r_march_dollase=0.5 if pole is not None else 1.0,
+        po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
+    )
+
 def detect_phases(
     pattern: Pattern,
     crystals: dict[str, Crystal],
@@ -444,7 +463,7 @@ def detect_phases(
         if clay and not include_clays:
             continue
         try:
-            positions, heights = peak_list(crystal, two_theta_range, instrument)
+            positions, heights = _habit_peak_list(name, crystal, two_theta_range, instrument)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the scan
             continue
         if len(positions) == 0:
@@ -674,7 +693,11 @@ def screen_phases(
             # and which of the two a mineral is comes from MINERAL_HABIT rather
             # than from whether the structure database carries an axis - a
             # refined PO correction is not a statement about crystal habit.
-            pole = (crystal.po_axis if MINERAL_HABIT.get(name.strip().lower()) else None)
+            # From the habit table, not from crystal.po_axis: sepiolite and
+            # palygorskite carry no axis in a typical structure database, so
+            # reading the pole from there left them screened as random powders,
+            # which is the one thing this block exists to prevent.
+            pole = habit_pole(name, crystal)
             one = powder_pattern(crystal, grid, reference,
                                  r_march_dollase=0.5 if pole is not None else 1.0,
                                  po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
@@ -771,7 +794,7 @@ def screen_phases(
     quality = np.ones(len(candidates))
     for index, name in enumerate(candidates):
         try:
-            positions, heights = peak_list(crystals[name], two_theta_range, reference)
+            positions, heights = _habit_peak_list(name, crystals[name], two_theta_range, reference)
             if positions.size == 0:
                 continue
             strongest = np.sort(np.argsort(heights)[::-1][:12])
@@ -891,7 +914,7 @@ def screen_phases(
         matches: list[PeakMatch] = []
         presence = agreement = 0.0
         try:
-            positions, heights = peak_list(crystals[name], two_theta_range, reference)
+            positions, heights = _habit_peak_list(name, crystals[name], two_theta_range, reference)
             positions = _scale_positions(positions, wavelength, scale_of[index])
             usable = np.isfinite(positions)
             positions, heights = positions[usable], heights[usable]
@@ -1086,7 +1109,7 @@ def stable_phases(
         if only is not None and name not in only:
             continue
         try:
-            positions, heights = peak_list(crystal, two_theta_range, reference)
+            positions, heights = _habit_peak_list(name, crystal, two_theta_range, reference)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the scan
             continue
         if positions.size == 0 or heights.max() <= 0.0:
@@ -1559,7 +1582,7 @@ def screen_treatments(
         if only is not None and name not in only:
             continue
         try:
-            positions, heights = peak_list(crystal, two_theta_range, reference)
+            positions, heights = _habit_peak_list(name, crystal, two_theta_range, reference)
         except Exception:  # noqa: BLE001 - one broken entry must not stop the screen
             continue
         best: PhaseEvidence | None = None

@@ -236,6 +236,21 @@ will not be the same, is still read correctly or refused outright.
 MINERAL_HABIT: dict[str, tuple[int, int, int]] = {
     "sepiolite": (1, 1, 0),
     "palygorskite": (1, 1, 0),
+    # The amphiboles, for the same reason and with the same pole.  They are
+    # prismatic, they settle on a prism face, and (110) is the face they settle
+    # on, so an oriented mount shows the 8.4 A (110) and very little else.  On a
+    # real separate the 10.4 deg line stood at 9592 counts while the 35.3 and
+    # 32.9 deg lines - 59 and 54 per cent of it in a random powder - held 127
+    # and 157.  Every orientation that fits that is a (110) pole at r = 0.3-0.4
+    # and no random-powder amphibole comes close (Sec. A.48).
+    "riebeckite": (1, 1, 0),
+    "hornblende": (1, 1, 0),
+    "actinolite": (1, 1, 0),
+    "tremolite": (1, 1, 0),
+    "glaucophane": (1, 1, 0),
+    "anthophyllite": (1, 1, 0),
+    "cummingtonite": (1, 1, 0),
+    "grunerite": (1, 1, 0),
 }
 """Preferred-orientation pole per mineral, for minerals that are not platelets.
 
@@ -751,3 +766,27 @@ def eg_smectite_layer(thickness: float = REYNOLDS_1965_D001) -> LayerModel:
         ),
         mirror=True,
     )
+
+
+def habit_pole(name: str, crystal=None) -> tuple[float, float, float] | None:
+    """The texture pole of a mineral that has a crystal habit, or ``None``.
+
+    The pole comes from :data:`MINERAL_HABIT`, keyed by name, and not from
+    whatever axis the structure database happens to carry.  That distinction is
+    the whole point and it was got wrong once: a refined preferred-orientation
+    correction in somebody's TOPAS input is a fitting parameter, so taking it as
+    a statement of habit would span quartz, while *failing* to find one would
+    silently drop the habit of a mineral that has one - which is what happened
+    to sepiolite and palygorskite, whose database entries carry no axis at all,
+    so the mechanism written for them did nothing for them.
+
+    ``crystal`` is accepted so a caller can pass what it has; it is used only as
+    a fallback for a mineral named in :data:`MINERAL_HABIT` whose pole is
+    recorded there as ``None``, which none currently is.
+    """
+    pole = MINERAL_HABIT.get(name.strip().lower())
+    if pole is not None:
+        return tuple(float(v) for v in pole)
+    if crystal is not None and getattr(crystal, "po_axis", None) is not None:
+        return None
+    return None
