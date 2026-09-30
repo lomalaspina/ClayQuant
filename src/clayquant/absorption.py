@@ -80,8 +80,27 @@ MASS_ATTENUATION_CU_KA: dict[str, float] = {
     "Zr": 143.0,
     "Ba": 336.0,
     "Pb": 232.0,
+    # Light elements a silicate rarely carries but a real phase database does:
+    # lithium in an amphibole towards holmquistite, boron in the LaB6 standard.
+    "Li": 0.477,
+    "B": 2.39,
+    # Heavy elements, from the accessory and standard phases.  Cadmium, tin and
+    # lanthanum rise steadily above zirconium; tungsten falls back below them
+    # because its L3 edge has passed over the Cu K-alpha energy, which is why the
+    # series is not monotonic in Z and why these are read from a table rather
+    # than interpolated.
+    "Cd": 234.0,
+    "Sn": 256.0,
+    "La": 393.0,
+    "W": 172.0,
 }
-"""Mass attenuation coefficient in cm^2/g at Cu K-alpha, by element symbol."""
+"""Mass attenuation coefficient in cm^2/g at Cu K-alpha, by element symbol.
+
+From International Tables for Crystallography Volume C, Table 4.2.4.3, at
+lambda = 1.5418 A.  Nothing here is interpolated or estimated: an element whose
+coefficient is not in this table raises rather than returning a guess, because a
+wrong coefficient propagates silently into a weight percent.
+"""
 
 
 def mass_attenuation(species: str) -> float:

@@ -710,9 +710,47 @@ class KaoliniteEvidence:
 
     @property
     def detected(self) -> bool:
-        """Kaolinite is there whatever the chlorite under it is doing."""
+        """Kaolinite is there whatever the chlorite under it is doing.
+
+        The heated mount decides this where it exists, and the reason is that it
+        is a *measurement* rather than an inference.  Heating to 550 C destroys
+        kaolinite and leaves chlorite, so what disappears from the 7.15 A window
+        is kaolinite, bounded only by how much of itself a chlorite 002 keeps -
+        which was measured on two chlorite standards carrying no kaolinite.  The
+        chlorite-ratio routes, by contrast, infer the chlorite 002 from the 001
+        or the 003 through a ratio that varies from one chlorite to the next.
+
+        Taking the weakest of all the routes, which this did, let one noisy
+        estimate veto every other.  On a real separate the four ratio routes
+        gave 2-35, 36-44, 40-51 and 52-66 per cent and the collapse test gave
+        56-81, with 86 per cent of the peak gone after heating; the verdict was
+        "not established" because one route's lower bound was 2.  A specimen
+        whose 7.15 A reflection almost entirely disappears on heating has
+        kaolinite in it, and no amount of disagreement between the ratio routes
+        makes that untrue.
+        """
+        if self.collapse is not None and self.collapse.air.is_present:
+            return bool(self.collapse.kaolinite_detected)
         least, _ = self.bounds
         return bool(least == least and least > 0.1)
+
+    @property
+    def excluded(self) -> bool:
+        """Whether the evidence positively rules kaolinite *out*.
+
+        Not the negation of :attr:`detected`, and the distinction is the whole
+        point: failing to establish a lower bound is not the same as measuring
+        an upper one near zero.  Only the second is a reason to take kaolinite
+        out of a fit, because taking it out asserts that there is none - which
+        is one end of the range, not the middle of it.
+        """
+        if self.collapse is not None and self.collapse.air.is_present:
+            _, most = self.collapse.kaolinite_bounds
+            return bool(most == most and most < 0.05)
+        if not self.usable:
+            return False
+        _, most = self.bounds
+        return bool(most == most and most < 0.05)
 
     def summary(self) -> str:
         if not self.usable:

@@ -3253,7 +3253,12 @@ def register_callbacks(app: Dash) -> None:
                             f"{100.0 * least:.0f} to {100.0 * most:.0f}% of the "
                             f"overlapped intensity - so it is fitted freely."
                         )
-                    elif evidence.usable:
+                    elif evidence.excluded:
+                        # Only where the evidence puts an upper bound near zero.
+                        # Removing the phase asserts that there is none of it,
+                        # which is one end of a range and not the middle, so it
+                        # needs evidence of absence rather than absence of
+                        # evidence.
                         keep = [
                             index for index, entry in enumerate(library.entries)
                             if not entry.phase.startswith("kaolinite")
@@ -3261,10 +3266,19 @@ def register_callbacks(app: Dash) -> None:
                         removed = len(library.entries) - len(keep)
                         library = _library_subset(library, np.asarray(keep, dtype=int))
                         kaolinite_note = (
-                            f"The three mounts do not establish kaolinite: at most "
-                            f"{100.0 * most:.0f}% of the overlapped intensity, and a "
-                            f"chlorite accounts for the rest. {removed} kaolinite "
-                            f"entries were left out of the fit."
+                            f"The three mounts rule kaolinite out: at most "
+                            f"{100.0 * most:.0f}% of the overlapped intensity, which is "
+                            f"within the noise, and a chlorite accounts for the rest. "
+                            f"{removed} kaolinite entries were left out of the fit."
+                        )
+                    elif evidence.usable:
+                        kaolinite_note = (
+                            f"The three mounts leave kaolinite between "
+                            f"{100.0 * least:.0f} and {100.0 * most:.0f}% of the "
+                            f"overlapped intensity - a range rather than a value, "
+                            f"because the chlorite routes disagree - so it stays in the "
+                            f"fit and the pattern decides. Read the weight percent "
+                            f"against that range."
                         )
                     else:
                         kaolinite_note = (
