@@ -10,8 +10,17 @@ from clayquant.pattern import peak_list
 
 
 def test_the_amphiboles_are_declared_prismatic():
-    """Their 8.4 A (110) is often the only line an oriented mount shows."""
-    for name in ("riebeckite", "hornblende", "actinolite", "tremolite", "glaucophane"):
+    """Their 8.4 A (110) is often the only line an oriented mount shows.
+
+    The pole is per mineral and not one value for the family: riebeckite and
+    hornblende were refined on different ones, (020) and (110), and those are
+    different directions - the b normal against the prism face - predicting
+    different intensities for every line but the one they share.  A family-wide
+    pole would have overwritten a measurement with an analogy.
+    """
+    assert MINERAL_HABIT["riebeckite"] == (0, 2, 0)
+    assert MINERAL_HABIT["hornblende"] == (1, 1, 0)
+    for name in ("actinolite", "tremolite", "glaucophane", "anthophyllite"):
         assert MINERAL_HABIT[name] == (1, 1, 0)
 
 
