@@ -1413,6 +1413,22 @@ def main_minerals_tab() -> html.Div:
                     label("Minimum coverage (%), three-mount search"),
                     dcc.Slider(id="detect-coverage", min=5, max=95, step=5, value=30,
                                marks={5: "5", 30: "30", 60: "60", 95: "95"}),
+                    label("Stable reflections a phase must show"),
+                    dcc.Slider(id="detect-min-matched", min=1, max=4, step=1, value=2,
+                               marks={1: "1", 2: "2", 3: "3", 4: "4"}),
+                    html.Div(
+                        "Two is the safe default: one line at the right angle is a "
+                        "coincidence waiting to happen. But a mineral with a strong "
+                        "habit may honestly have only one line to show \u2014 an "
+                        "amphibole lying on a prism face puts nearly everything into "
+                        "its 8.4 \u00c5 (110), and on one separate that line stood at "
+                        "9122 counts, the third largest peak in the pattern, while the "
+                        "phase was refused for having no second one. Lower this to 1 "
+                        "when a strong peak is going unexplained, and read the result "
+                        "as a candidate rather than an identification: at 1 the same "
+                        "separate also offered ankerite and rutile on one line each.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
                     html.Div(
                         "With two or more mounts loaded the search uses the one thing "
                         "three treatments give that no fit of a single scan can: the "
@@ -2775,10 +2791,11 @@ def register_callbacks(app: Dash) -> None:
         State("detect-tick", "value"),
         State("detect-only", "value"),
         State("detect-coverage", "value"),
+        State("detect-min-matched", "value"),
         prevent_initial_call=True,
     )
     def run_detection(_clicks, mount, allowance, min_score, snr, search_range, tick_above,
-                      only, min_coverage):
+                      only, min_coverage, min_matched):
         """Search for accompanying minerals, three ways, in order of preference.
 
         With two or more mounts loaded the search asks which peaks stand at the
@@ -2828,6 +2845,7 @@ def register_callbacks(app: Dash) -> None:
                     instrument=gui_instrument(),
                     min_coverage=float(min_coverage) / 100.0,
                     min_signal_to_noise=float(snr),
+                    min_matched=int(min_matched or 2),
                     only=set(only) if only else None,
                 )
             elif screened:

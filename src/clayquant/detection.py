@@ -1058,6 +1058,7 @@ def stable_phases(
     min_coverage: float = 0.30,
     min_matched: int = 2,
     min_intensity: float = 0.10,
+    score_by: str = "intensity",
     min_signal_to_noise: float = 5.0,
     minimum_height: float = 0.006,
     separation: float = 0.09,
@@ -1137,11 +1138,45 @@ def stable_phases(
                 noise=float(peak.height / peak.signal_to_noise)
                 if found and peak.signal_to_noise > 0 else 1.0,
             ))
-        coverage = explained / float(np.sum(heights))
+        by_intensity = explained / float(np.sum(heights))
+        n_matched = sum(1 for match in matches if match.matched)
+        by_line = n_matched / float(len(matches)) if matches else 0.0
+        # Which of the two decides the phase is a real choice and not a detail.
+        #
+        # Weighting by calculated intensity asks the specimen to reproduce the
+        # phase's *intensities*, and on an oriented mount it cannot: a prismatic
+        # mineral lying on a prism face shows one family of reflections and
+        # little else, so its strongest random-powder lines are missing and it
+        # scores near zero however plainly it is there.  An amphibole at 9122
+        # counts scored nothing at all this way.
+        #
+        # Counting lines asks only whether the reflections are where they should
+        # be, which is what a search can honestly test, and it is what the
+        # habit and the structure both leave alone.  Its cost is coincidence: a
+        # phase with many lines matches some of them by luck, which is why
+        # position matching alone once ranked quartz 101st of 169.  The stable
+        # test blunts that cost, because a coincidence has to fall at the same
+        # angle in three scans.
+        #
+        # Measured on a real separate, the intensity weighting wins - but only
+        # once the habit is right.  With the amphibole screened at its (110)
+        # pole the predicted intensities become 1.00 at 10.49 deg and 0.22 at
+        # 28.50, so matching the one line the mount shows scores 82 %, against
+        # 50 % for counting lines, and 82 % ranks it second while 50 % ties it
+        # with rutile and cannot order them.  Discarding the intensities throws
+        # away a real discrimination; the fault was never the weighting but the
+        # weights, which were a random powder's.
+        #
+        # So the intensity agreement is the default score, the line count is
+        # offered by `score_by="lines"` for a specimen whose textures are not
+        # trusted, and both are always reported: a phase whose lines are all
+        # present while its intensities disagree is a phase with a texture,
+        # which is information rather than a rejection.
+        coverage = by_line if score_by == "lines" else by_intensity
         # Reflections, not distinct peaks: two lines of a phase can fall on one
         # stable peak, and both are reflections the measurement accounts for.
         # This is what "2 stable reflections" counts.
-        if sum(1 for match in matches if match.matched) < min_matched:
+        if n_matched < min_matched:
             continue
         if not hit or coverage < min_coverage:
             continue
@@ -1150,8 +1185,8 @@ def stable_phases(
             is_clay=is_clay_phase(name),
             score=coverage,
             matches=matches,
-            presence=coverage,
-            intensity_agreement=float("nan"),
+            presence=by_line,
+            intensity_agreement=by_intensity,
         ))
     findings.sort(key=lambda evidence: (-evidence.score, -evidence.n_matched))
     return findings, peaks

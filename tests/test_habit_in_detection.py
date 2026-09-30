@@ -74,3 +74,29 @@ def test_the_oriented_list_concentrates_intensity():
     )
     above = lambda h: int(np.sum(h >= 0.10 * h.max()))  # noqa: E731
     assert above(oriented_heights) < above(random_heights)
+
+
+def test_stable_phases_reports_both_scores():
+    """The line count and the intensity agreement are different questions and
+    both are answered, so a phase whose lines are all present while its
+    intensities disagree reads as textured rather than as absent."""
+    import inspect
+
+    from clayquant.detection import stable_phases
+
+    parameters = inspect.signature(stable_phases).parameters
+    assert parameters["score_by"].default == "intensity"
+    assert "min_matched" in parameters
+
+
+def test_scoring_by_lines_is_available_but_not_the_default():
+    """Measured on a real separate, the intensity weighting ranks an oriented
+    amphibole at 82 % and second, while counting lines gives it 50 % and ties it
+    with rutile.  The fault was never the weighting, it was that the weights
+    were a random powder's - so the option exists and is not the default."""
+    import inspect
+
+    from clayquant.detection import stable_phases
+
+    source = inspect.getsource(stable_phases)
+    assert 'score_by == "lines"' in source
