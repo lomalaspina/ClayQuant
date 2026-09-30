@@ -35,9 +35,13 @@ def test_a_species_is_read_the_way_a_cif_writes_it():
 
 
 def test_an_element_that_is_not_tabulated_raises_rather_than_guessing():
-    """A wrong coefficient propagates silently into a weight percent."""
+    """A wrong coefficient propagates silently into a weight percent.
+
+    Plutonium rather than gold, because the table now runs to uranium: an
+    element it does not reach is one no structure here will carry.
+    """
     with pytest.raises(KeyError, match="not guessed at"):
-        mass_attenuation("Au")
+        mass_attenuation("Pu")
 
 
 def test_iron_absorbs_far_more_than_the_magnesium_it_replaces():

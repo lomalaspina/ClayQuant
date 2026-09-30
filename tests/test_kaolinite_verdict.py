@@ -25,7 +25,7 @@ def test_the_coefficients_are_not_monotonic_in_atomic_number():
 
 def test_an_unknown_element_still_raises_rather_than_guessing():
     with pytest.raises(KeyError, match="no Cu K-alpha mass attenuation"):
-        mass_attenuation("Rn")
+        mass_attenuation("Pu")
 
 
 def test_tin_resolves_through_its_oxidation_state():

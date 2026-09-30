@@ -24,6 +24,44 @@ __all__ = ["f0", "debye_waller", "normalise_species", "available_species"]
 _ION_PATTERN = re.compile(r"^([A-Z][a-z]?)(?:([0-9]*)([+-])|([+-])([0-9]*))?$")
 
 
+
+_LABEL_PATTERN = re.compile(r"^([A-Z][a-z]?)[0-9]*$")
+
+
+def _relax(label: str) -> str | None:
+    """A species spelling real files use, rewritten to one this table knows.
+
+    Four of them, each seen in a structure file rather than imagined:
+
+    * a parenthesised charge, ``Ti(4+)`` for ``Ti4+``;
+    * deuterium, which scatters x-rays as hydrogen and is written ``D``;
+    * a site *label* left in the species field, ``Fe1`` or ``O3``, which is the
+      commonest of the four and the one that makes a whole structure unusable
+      rather than one site - note this is only reached after the strict parse
+      has failed, so a genuine charge like ``Fe3+`` never comes here;
+    * a symbol in the wrong case, ``FE`` or ``si``.
+
+    Returns ``None`` where nothing sensible can be made of the label, which is
+    the right answer for ``OH``: that is two elements, and guessing which one
+    was meant would put a wrong mass into a weight percent.
+    """
+    text = label.replace("(", "").replace(")", "").strip()
+    if not text:
+        return None
+    if text in ("D", "T"):      # deuterium and tritium scatter as hydrogen
+        return "H"
+    if _ION_PATTERN.match(text):
+        return text
+    bare = _LABEL_PATTERN.match(text)
+    if bare is not None:
+        return bare.group(1)
+    if len(text) <= 2 and text.isalpha():
+        cased = text[0].upper() + text[1:].lower()
+        if _ION_PATTERN.match(cased):
+            return cased
+    return None
+
+
 @lru_cache(maxsize=1)
 def _table() -> dict[str, dict]:
     with resources.files("clayquant.data").joinpath("waasmaier_kirfel_f0.json").open() as fh:
@@ -49,7 +87,16 @@ def normalise_species(species: str) -> str:
 
     match = _ION_PATTERN.match(label)
     if match is None:
-        raise KeyError(f"cannot parse scattering species {species!r}")
+        # The strict spelling failed, so try the ones real files actually carry
+        # before giving up.  These are fallbacks and run only here, so nothing
+        # that already parsed can change meaning.
+        relaxed = _relax(label)
+        if relaxed is not None and relaxed in table:
+            return relaxed
+        if relaxed is not None:
+            match = _ION_PATTERN.match(relaxed)
+        if match is None:
+            raise KeyError(f"cannot parse scattering species {species!r}")
     element = match.group(1)
     digits = match.group(2) or match.group(5) or ""
     sign = match.group(3) or match.group(4) or ""
@@ -60,6 +107,12 @@ def normalise_species(species: str) -> str:
             return candidate
     if element in table:
         return element
+    # A label can pass the strict pattern and still not name a tabulated
+    # element - "D" is a valid-looking symbol and is deuterium - so the
+    # relaxations get a turn here too.
+    relaxed = _relax(element)
+    if relaxed is not None and relaxed in table:
+        return relaxed
     raise KeyError(f"no scattering factor tabulated for {species!r}")
 
 

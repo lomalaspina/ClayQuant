@@ -51,9 +51,9 @@ __all__ = [
     "mass_per_area",
 ]
 
-MASS_ATTENUATION_CU_KA: dict[str, float] = {
+_CHECKED_CU_KA: dict[str, float] = {
     "H": 0.435,
-    "C": 4.60,
+    "C": 4.6,
     "N": 7.52,
     "O": 11.5,
     "F": 15.95,
@@ -72,7 +72,6 @@ MASS_ATTENUATION_CU_KA: dict[str, float] = {
     "Mn": 285.0,
     "Fe": 308.0,
     "Co": 313.0,
-    # Nickel through zinc lie above the Cu K-alpha energy and absorb little.
     "Ni": 49.2,
     "Cu": 52.9,
     "Zn": 60.3,
@@ -80,26 +79,114 @@ MASS_ATTENUATION_CU_KA: dict[str, float] = {
     "Zr": 143.0,
     "Ba": 336.0,
     "Pb": 232.0,
-    # Light elements a silicate rarely carries but a real phase database does:
-    # lithium in an amphibole towards holmquistite, boron in the LaB6 standard.
-    "Li": 0.477,
-    "B": 2.39,
-    # Heavy elements, from the accessory and standard phases.  Cadmium, tin and
-    # lanthanum rise steadily above zirconium; tungsten falls back below them
-    # because its L3 edge has passed over the Cu K-alpha energy, which is why the
-    # series is not monotonic in Z and why these are read from a table rather
-    # than interpolated.
-    "Cd": 234.0,
-    "Sn": 256.0,
-    "La": 393.0,
-    "W": 172.0,
 }
+"""International Tables Volume C, Table 4.2.4.3, for the rock-forming elements.
+
+These are the ones the program is checked on, and they are kept exactly as they
+are because of that check: the published coefficients of kaolinite, illite and
+chlorite come out within 1 % on these values and 2 to 4 % out on any other
+tabulation tried.
+"""
+
+_ELAM_CU_KA: dict[str, float] = {
+    "He": 0.2917,
+    "Li": 0.4993,
+    "Be": 1.106,
+    "B": 2.306,
+    "Ne": 22.87,
+    "Ar": 116.1,
+    "Sc": 179.9,
+    "Ga": 62.01,
+    "Ge": 67.8,
+    "As": 74.5,
+    "Se": 79.82,
+    "Br": 88.8,
+    "Kr": 94.92,
+    "Rb": 104.1,
+    "Y": 123.8,
+    "Nb": 144.5,
+    "Mo": 154.1,
+    "Tc": 165.6,
+    "Ru": 175.6,
+    "Rh": 188.4,
+    "Pd": 198.5,
+    "Ag": 213,
+    "Cd": 221.8,
+    "In": 235.3,
+    "Sn": 246.2,
+    "Sb": 259,
+    "Te": 266,
+    "I": 287.6,
+    "Xe": 298.6,
+    "Cs": 316.5,
+    "La": 347.4,
+    "Ce": 367.4,
+    "Pr": 388.9,
+    "Nd": 403.2,
+    "Pm": 424.9,
+    "Sm": 433.4,
+    "Eu": 392.7,
+    "Gd": 400.9,
+    "Tb": 308.3,
+    "Dy": 321.6,
+    "Ho": 125.1,
+    "Er": 131,
+    "Tm": 137.6,
+    "Yb": 142.2,
+    "Lu": 149.1,
+    "Hf": 154.7,
+    "Ta": 161.4,
+    "W": 168,
+    "Re": 175.1,
+    "Os": 180.9,
+    "Ir": 188.6,
+    "Pt": 195.7,
+    "Au": 204.1,
+    "Hg": 210.9,
+    "Tl": 217.5,
+    "Bi": 234.3,
+    "Po": 245.7,
+    "At": 256.2,
+    "Rn": 253.8,
+    "Fr": 264.5,
+    "Ra": 272.7,
+    "Ac": 283.7,
+    "Th": 289.4,
+    "Pa": 302.9,
+    "U": 306.1,
+}
+"""Elam et al. at 8047.8 eV, for every remaining element up to uranium.
+
+What a real phase database reaches and a clay analysis is not calibrated on: a
+cassiterite, a tungsten carbide, a lithium-bearing amphibole.  Generated once
+and stored, so nothing is looked up at runtime.
+
+Kept as a separate table rather than merged by hand because the two sources
+differ by up to 11 % on individual elements.  A coefficient from here carries
+the accuracy of its source and not of the check above, and which one a value
+came from should be answerable by looking.
+"""
+
+MASS_ATTENUATION_CU_KA: dict[str, float] = {**_ELAM_CU_KA, **_CHECKED_CU_KA}
 """Mass attenuation coefficient in cm^2/g at Cu K-alpha, by element symbol.
 
-From International Tables for Crystallography Volume C, Table 4.2.4.3, at
-lambda = 1.5418 A.  Nothing here is interpolated or estimated: an element whose
-coefficient is not in this table raises rather than returning a guess, because a
-wrong coefficient propagates silently into a weight percent.
+Every element from hydrogen to uranium, so that no structure can stop a fit for
+want of a coefficient, from two sources with the seam between them marked in the
+table above.
+
+The rock-forming elements are International Tables Volume C, Table 4.2.4.3, and
+they stay that way because they are the ones the program is checked on: the
+published coefficients of kaolinite, illite and chlorite come out within 1 % on
+these and 2 to 4 % out on any other tabulation tried.  The rest are Elam et al.
+at 8047.8 eV, covering what a real phase database reaches - a cassiterite, a
+tungsten carbide, a lithium-bearing amphibole - where no such check exists.
+
+The series is not monotonic in atomic number and must never be interpolated.
+Two edges cross the Cu K-alpha energy: the K edge between cobalt and nickel,
+where the coefficient falls from 313 to 49, and the L3 edge among the heavy
+elements, where tungsten sits below lanthanum before lead rises again.  An
+element missing from a table like this cannot be estimated from its neighbours,
+which is why the whole table is here and why an unknown one still raises.
 """
 
 
