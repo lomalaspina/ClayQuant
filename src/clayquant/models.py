@@ -243,7 +243,12 @@ MINERAL_HABIT: dict[str, tuple[int, int, int]] = {
     # 32.9 deg lines - 59 and 54 per cent of it in a random powder - held 127
     # and 157.  Every orientation that fits that is a (110) pole at r = 0.3-0.4
     # and no random-powder amphibole comes close (Sec. A.48).
-    "riebeckite": (1, 1, 0),
+    # Riebeckite on (020) and hornblende on (110), which is not a guess from
+    # the shape of an amphibole but what the refinements of these two give.
+    # They are different directions and the distinction is measurable: (020) is
+    # the b normal, (110) the prism face, and the two predict different
+    # intensities for every line but the one they share.
+    "riebeckite": (0, 2, 0),
     "hornblende": (1, 1, 0),
     "actinolite": (1, 1, 0),
     "tremolite": (1, 1, 0),
