@@ -157,6 +157,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-47">A.47 One mineral under two names</a>
 <a href="#a-48">A.48 A prismatic mineral shows one line</a>
 <a href="#a-49">A.49 Where the attenuation coefficients come from</a>
+<a href="#a-50">A.50 Three windows, and what each of them is for</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6285,6 +6286,72 @@ than one site &mdash; a site label left in the species field, <code>Fe1</code> o
 These now resolve, as fallbacks reached only after the strict spelling fails, so nothing that
 already parsed can change meaning. What cannot be read is still refused: <code>OH</code> is two
 elements, and choosing one would put a wrong mass into a weight percent.</p>
+
+
+
+<h3 id="a-50">A.50 Three windows, and what each of them is for</h3>
+
+<p>Kaolinite and chlorite overlap in two places and chlorite can be measured alone in three, and
+until this was written the program used five of those five badly: the 3.5&nbsp;&Aring; region was
+read as a <em>single</em> window spanning 24.0 to 25.8&nbsp;&deg;, which holds the kaolinite 002 at
+3.579&nbsp;&Aring; and the chlorite 004 at 3.52&ndash;3.56 together. That discards the one place
+the two minerals separate.</p>
+
+<div class="tablewrap"><table>
+<tr><th>window</th><th>2&theta;</th><th>holds</th><th>what it is for</th></tr>
+<tr><td>chlorite 001</td><td>5.6&ndash;6.9</td><td>chlorite only</td><td>reference, and where the 004 is</td></tr>
+<tr><td>kaolinite 001</td><td>11.6&ndash;13.2</td><td><strong>both</strong></td><td>the measurement</td></tr>
+<tr><td>chlorite 003</td><td>18.1&ndash;19.5</td><td>chlorite only</td><td>reference</td></tr>
+<tr><td>kaolinite 002</td><td>24.6&ndash;25.0</td><td><strong>both</strong>, mostly kaolinite</td><td>the second-order test</td></tr>
+<tr><td>chlorite 004</td><td>derived</td><td>chlorite only</td><td>the tail correction, and the third reference</td></tr>
+</table></div>
+
+<p><strong>The split cannot be at a fixed angle.</strong> A chlorite's fourth order is at a quarter
+of its own 001 spacing, and that spacing varies enough between chlorites to move the reflection
+across the kaolinite 002: a 14.1&nbsp;&Aring; chlorite has it at 25.25&nbsp;&deg;, clear of the
+kaolinite 002 at 24.86, and a 14.4&nbsp;&Aring; chlorite at 24.72, on the wrong side of it. The
+window is therefore derived from the measured chlorite 001 &mdash; which is the first window
+earning a second job &mdash; and where the two reflections come closer than 0.22&nbsp;&deg; the
+deconvolution is not attempted and the second order is reported as untestable rather than absent.
+An unresolved doublet is missing information, not evidence.</p>
+
+<p><strong>The chlorite's tail has to be subtracted.</strong> The two windows are adjacent and clay
+reflections are broad, so splitting them does not separate the minerals by itself. How far the
+chlorite 004's tail reaches into the kaolinite window is measurable on the two kaolinite-free
+standards, and it is stable where almost nothing else about these two specimens is: 0.166 and
+0.169, on chlorites that differ by 2.2 times in how much of the 004 survives heating. A tail is a
+peak shape rather than a composition, which is why it transfers when the survival fractions do
+not.</p>
+
+<p><strong>What the third window buys.</strong> Two things that two windows could not give. The
+first is that a specimen's own chlorite behaviour becomes measurable, instead of being bounded by
+two other chlorites: on the standards the 002 survives heating in a fixed proportion to the 003 and
+the 004 (0.79&ndash;0.98 and 0.63&ndash;0.95), so a specimen's own higher orders predict how its own
+002 should behave. The second is that kaolinite's second order becomes a <em>test</em> of its first
+&mdash; a pure kaolinite shows a 002 of 0.21 to 0.29 of its 001 area, so a strong 7.15&nbsp;&Aring;
+reflection with no 3.58&nbsp;&Aring; order has something else at 7.15.</p>
+
+<p>That test has to be made, because the collapse test alone cannot do this job: both chlorite
+standards lose 66&nbsp;% and 28&nbsp;% of their 7.15&nbsp;&Aring; peak on heating and neither
+contains any kaolinite at all. All four standards now resolve correctly &mdash; the two pure
+kaolinites found, the two chlorites refused.</p>
+
+<p><strong>And the test must be sized by the kaolinite share, which is the subtle part.</strong>
+The 7.15&nbsp;&Aring; window is shared. Computing the expected second order from the whole of it
+assumes every count there is kaolinite, which inflates the expectation by however much chlorite is
+present, and an inflated expectation turns an undetectably small second order into a refusal. On a
+real separate that was the difference between expecting 227 counts and expecting 91: the first
+excluded kaolinite from the fit, the second cannot, because 91 counts would not have been visible.
+The expectation is therefore taken at the <em>smallest</em> kaolinite share any route allows, so the
+test refuses only where even the least kaolinite consistent with the evidence would have shown a
+second order.</p>
+
+<p>On that separate the three windows do not agree and the honest output is a range rather than a
+verdict. Its own 003 predicts the chlorite 002 should survive 0.32&ndash;0.40 and its own 004
+predicts 0.17&ndash;0.26, against an observed 0.21: the first route needs 35 to 47&nbsp;% kaolinite
+to account for the difference and the second needs none. Where two chlorite-only references
+disagree like that, one of them is being mismeasured, and the program says so rather than choosing.
+What it does not do any longer is remove kaolinite from the fit on the strength of it.</p>
 
 
 

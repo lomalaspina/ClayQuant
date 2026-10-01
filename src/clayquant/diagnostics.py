@@ -1040,7 +1040,13 @@ def kaolinite_evidence(
         shares=tuple(shares),
         collapse=collapse,
         second_collapse=second_collapse,
-        second_order=second_order_check(air, wavelength=wavelength),
+        second_order=second_order_check(
+            air, wavelength=wavelength,
+            # the lowest kaolinite share any route allows, so the expectation is
+            # the smallest second order consistent with the evidence and the
+            # veto fires only when even that would have been visible
+            kaolinite_share=_least_kaolinite_share(shares, collapse),
+        ),
     )
 
 
@@ -1122,6 +1128,7 @@ def second_order_check(
     first_window: tuple[float, float] = KAOLINITE_001_WINDOW,
     ratio: tuple[float, float] = KAOLINITE_002_TO_001,
     wavelength: float = CU_KA1,
+    kaolinite_share: float = 1.0,
     **kwargs,
 ) -> tuple[float, float, bool]:
     """Whether the 3.58 A second order is consistent with the 7.15 A first.
@@ -1131,10 +1138,17 @@ def second_order_check(
     what is actually kaolinite's second order, and that can then be held against
     the first order in the overlapped 7.15 A window.
 
+    ``kaolinite_share`` is the fraction of the 7.15 A window that is kaolinite
+    rather than chlorite 002, and it must be passed or the test is wrong in a
+    way that matters.  The 7.15 A window is *shared*: computing the expected
+    second order from the whole of it assumes every count there is kaolinite,
+    which inflates the expectation by however much chlorite is present and can
+    turn an undetectably small second order into a refusal.  A specimen whose
+    7.15 A window is a quarter kaolinite expects a quarter of the second order,
+    and if that sits in the noise its absence says nothing at all.
+
     Returns ``(expected_least, measured_most, consistent)``.  ``consistent`` is
-    False only when the first order is strong enough that a second order would
-    have to be visible and none is - a specimen can have too little kaolinite to
-    show a second order, and that is not evidence against the first.
+    False only where a second order would have had to be visible and is not.
     """
     # An unresolved doublet is missing information rather than evidence, so the
     # check stands down where the two reflections are closer than their width.
@@ -1146,9 +1160,30 @@ def second_order_check(
     least, most = kaolinite_002_area(pattern, wavelength=wavelength, **kwargs)
     if not first.is_present or first.area <= 0.0:
         return 0.0, float(most), True
-    expected_least = min(ratio) * first.area
+    expected_least = min(ratio) * first.area * max(0.0, float(kaolinite_share))
     # Below this the second order would sit in the noise whatever is there, so
     # its absence says nothing.
     if expected_least < 3.0 * first.noise:
         return float(expected_least), float(most), True
     return float(expected_least), float(most), bool(most >= 0.5 * expected_least)
+
+
+def _least_kaolinite_share(shares, collapse) -> float:
+    """The smallest kaolinite share of the 7.15 A window the evidence allows.
+
+    Used to size the second order the specimen should show.  The *smallest* share
+    rather than the best estimate, because this feeds a refusal: the test should
+    only refuse kaolinite when even the least of it the evidence permits would
+    have produced a visible 3.58 A reflection.
+    """
+    candidates = [
+        share.kaolinite[0] for share in shares
+        if share.window == "7.15" and share.kaolinite[0] == share.kaolinite[0]
+    ]
+    if collapse is not None and collapse.air.is_present:
+        least, _ = collapse.kaolinite_bounds
+        if least == least:
+            candidates.append(least)
+    if not candidates:
+        return 1.0
+    return float(max(0.0, min(candidates)))

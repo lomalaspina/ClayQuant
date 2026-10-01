@@ -226,3 +226,32 @@ def test_too_little_kaolinite_to_show_a_second_order_is_not_a_veto():
     faint = _scan([(6.215, 400.0), (12.38, 150.0), (18.73, 420.0), (25.07, 560.0)])
     _, _, consistent = second_order_check(faint)
     assert consistent is True
+
+
+def test_the_expected_second_order_is_sized_by_the_kaolinite_share():
+    """The 7.15 A window is shared, so the whole of it is not kaolinite.
+
+    Computing the expected 3.58 A order from the entire first window assumes
+    every count there is kaolinite, which inflates the expectation by whatever
+    chlorite is present and can turn an undetectably small second order into a
+    refusal.  On a real separate that was the difference between expecting 227
+    counts and 91: the first excluded kaolinite, the second could not, and the
+    second is the right one.
+    """
+    from clayquant.diagnostics import second_order_check
+
+    pattern = _scan([(6.215, 4000.0), (12.38, 8000.0), (18.73, 4200.0), (25.07, 5600.0)])
+    whole, _, _ = second_order_check(pattern, kaolinite_share=1.0)
+    quarter, _, _ = second_order_check(pattern, kaolinite_share=0.25)
+    assert quarter == pytest.approx(0.25 * whole, rel=1e-6)
+
+
+def test_a_small_kaolinite_share_cannot_be_refused_on_a_missing_second_order():
+    """Absence of evidence, where the evidence would have been in the noise."""
+    from clayquant.diagnostics import second_order_check
+
+    pattern = _scan([(6.215, 4000.0), (12.38, 8000.0), (18.73, 4200.0), (25.07, 5600.0)])
+    _, _, refused_whole = second_order_check(pattern, kaolinite_share=1.0)
+    _, _, refused_small = second_order_check(pattern, kaolinite_share=0.02)
+    assert refused_whole is False      # all of it kaolinite: the order must show
+    assert refused_small is True       # a fiftieth of it: nothing to look for
