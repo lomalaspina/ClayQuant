@@ -2644,11 +2644,15 @@ def register_callbacks(app: Dash) -> None:
                 "measurement.",
                 style={"color": "#a15c00", "fontSize": "0.8rem"},
             ))
+        scale_block = ([html.Div(result.scale_note,
+                                 style={"color": "#a15c00", "fontSize": "0.8rem"})]
+                       if result.scale_note else [])
         return figure, html.Div(
             [
                 html.Div("The classical collapse test",
                          style={"fontWeight": "600"}),
                 html.Div(result.summary()),
+                *scale_block,
                 html.Ul([html.Li(text) for text in conclusion]),
                 *chlorite_block,
                 html.Div(
@@ -2756,7 +2760,11 @@ def register_callbacks(app: Dash) -> None:
             )
             if marks else None
         )
-        return figure, html.Div([html.B(verdict), html.Div(result.summary()), note])
+        scale_block = (html.Div(result.scale_note,
+                                style={"color": "#a15c00", "fontSize": "0.8rem"})
+                       if result.scale_note else None)
+        return figure, html.Div(
+            [html.B(verdict), html.Div(result.summary()), scale_block, note])
 
     @app.callback(
         Output("instrument-strip", "children"),

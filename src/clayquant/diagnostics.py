@@ -40,6 +40,7 @@ from .pattern import Pattern
 __all__ = [
     "PeakMetrics",
     "measure_peak",
+    "common_scale",
     "scale_to_reference",
     "KaoliniteResult",
     "kaolinite_collapse",
@@ -403,24 +404,66 @@ def scale_to_reference(
     window: tuple[float, float] | None = None,
     wavelength: float = CU_KA1,
     tolerance: float = 0.4,
+    fallback: float | None = None,
 ) -> float:
     """Factor that puts ``other`` on the intensity scale of ``pattern``.
 
     The factor is the ratio of the areas of a reflection that the treatment does
     not affect - by default quartz 100, whose window is derived from its
     d-spacing and the wavelength.
+
+    ``fallback`` is what to return when that reflection is not in the window.
+    Without one this raises, which is right for a caller that cannot proceed
+    without a measured scale; a caller that can - every diagnostic here, because
+    two mounts of the same separate measured at the same settings are already on
+    a common scale - passes 1.0 and reports that it did.  The reason this matters
+    is that a pure mineral standard contains no quartz at all, and a pure dickite
+    is exactly the specimen the kaolinite diagnostic should be easiest on.
     """
     if window is None:
         center = reference_two_theta(QUARTZ_100_D, wavelength)
         window = (center - tolerance, center + tolerance)
     here = measure_peak(pattern, window, wavelength=wavelength)
     there = measure_peak(other, window, wavelength=wavelength)
-    if not there.is_present:
+    if not (there.is_present and here.is_present) or there.area <= 0.0:
+        if fallback is not None:
+            return float(fallback)
         raise ValueError(
             f"no reference reflection found in {window} deg of {other.name!r}; "
             f"choose another reference window or scale the mounts manually"
         )
     return here.area / there.area
+
+
+def common_scale(
+    pattern: Pattern,
+    other: Pattern,
+    window: tuple[float, float] | None = None,
+    wavelength: float = CU_KA1,
+    tolerance: float = 0.4,
+) -> tuple[float, str]:
+    """The scale between two mounts, and a sentence saying where it came from.
+
+    Returns ``(scale, note)``, the note empty when the reference reflection was
+    measured and saying so when it was not and 1.0 was assumed instead.  Nothing
+    here fails for want of a reference: the two mounts are usually the same
+    specimen measured twice, so 1.0 is the honest default, and the one thing the
+    reader has to know is whether it was measured or assumed.
+    """
+    if window is None:
+        center = reference_two_theta(QUARTZ_100_D, wavelength)
+        window = (center - tolerance, center + tolerance)
+    here = measure_peak(pattern, window, wavelength=wavelength)
+    there = measure_peak(other, window, wavelength=wavelength)
+    if not (there.is_present and here.is_present) or there.area <= 0.0:
+        return 1.0, (
+            f"No reference reflection in {window[0]:.2f}-{window[1]:.2f} deg of either "
+            f"mount, so the two were taken as already on a common scale (factor 1.0). "
+            f"That is the right assumption for one specimen measured twice at the same "
+            f"settings, and it is what a pure mineral standard needs, having no quartz "
+            f"to scale on; set the factor by hand if the mounts differ."
+        )
+    return here.area / there.area, ""
 
 
 @dataclass
@@ -444,6 +487,15 @@ class KaoliniteResult:
     """
 
     label: str = "7.15 A"
+
+    scale_note: str = ""
+    """Empty when the two mounts were scaled on a measured reflection.
+
+    Otherwise it says that no reference was found and 1.0 was assumed, which is
+    what happens on a pure mineral standard: it has no quartz to scale on, and
+    refusing to analyse it for that reason - as this used to - fails on exactly
+    the specimens the diagnostic should be easiest on.
+    """
 
     @property
     def kaolinite_bounds(self) -> tuple[float, float]:
@@ -559,7 +611,7 @@ def chlorite_002_survival_from_003(
         return (*fallback, "no chlorite 003 in the air-dried mount, so the chlorite's own "
                            "collapse could not be measured and the standards' range is kept")
     if scale is None:
-        scale = scale_to_reference(air, heated, None, wavelength=wavelength)
+        scale, _ = common_scale(air, heated, None, wavelength=wavelength)
     heated_third = measure_peak(heated, CHLORITE_003_WINDOW, wavelength=wavelength,
                                 minimum_sigmas=minimum_sigmas)
     # A heated 003 that did not clear the noise has not survived nothing: it has
@@ -615,8 +667,9 @@ def kaolinite_collapse(
         Explicit scale factor for the heated pattern, bypassing the reference
         reflection.
     """
+    scale_note = ""
     if scale is None:
-        scale = scale_to_reference(air, heated, reference_window, wavelength=wavelength)
+        scale, scale_note = common_scale(air, heated, reference_window, wavelength=wavelength)
     air_peak = measure_peak(air, window, wavelength=wavelength)
     heated_peak = measure_peak(heated, window, wavelength=wavelength)
 
@@ -646,6 +699,7 @@ def kaolinite_collapse(
         reference_window=reference_window,
         survival=survival,
         label=label,
+        scale_note=scale_note,
     )
 
 
@@ -660,6 +714,9 @@ class ExpandabilityResult:
     shift_d: float
     glycol_area_ratio: float
     reference_window: tuple[float, float] | None
+    scale_note: str = ""
+    """Empty when the mounts were scaled on a measured reflection; see
+    :attr:`KaoliniteResult.scale_note`."""
 
     @property
     def expandable_detected(self) -> bool:
@@ -701,8 +758,9 @@ def smectite_swelling(
     ratio of the areas (after putting the mounts on a common scale) are the
     relative measures of expandable content.
     """
+    scale_note = ""
     if scale is None:
-        scale = scale_to_reference(air, glycol, reference_window, wavelength=wavelength)
+        scale, scale_note = common_scale(air, glycol, reference_window, wavelength=wavelength)
     air_peak = measure_peak(air, window, wavelength=wavelength)
     glycol_peak = measure_peak(glycol, window, wavelength=wavelength)
 
@@ -725,6 +783,7 @@ def smectite_swelling(
         shift_d=float(shift_d),
         glycol_area_ratio=float(ratio),
         reference_window=reference_window,
+        scale_note=scale_note,
     )
 
 
