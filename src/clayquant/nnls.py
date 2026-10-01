@@ -1986,3 +1986,55 @@ def solve_film_and_mass(
         mass_per_area=mass_per_area(mass, area_cm2), mass_attenuation=mu
     )
     return result, film, mass, history
+
+
+def orientation_at_an_edge(orientation: float | None, library) -> str:
+    """A warning where the clays' fitted orientation sits on the end of the axis.
+
+    This is the single most dangerous thing a clay fit can do quietly, because
+    the orientation enters the weight percent as ``r**-3``: the bottom of a
+    0.1-to-1.0 axis weighs a thousand times less per unit of measured intensity
+    than the top, so a fit that slides to 0.1 does not report less clay for a
+    reason - it reports almost no clay at all, and R_wp barely moves while it
+    happens.
+
+    Measured on one separate while choosing which feldspars to fit: eight of
+    nine combinations put the clays at 0.1 and the clay total at 1.8 %, one put
+    them at 0.3 and 32 %, and the R_wp between the best of the first group and
+    the second differed by 0.003.  No residual-based criterion separates those,
+    and the weight percent separates them completely.
+
+    Returns an empty string where the orientation is interior, so a caller can
+    treat any non-empty result as something to show.
+    """
+    if orientation is None:
+        return ""
+    spanned = sorted({
+        float(entry.march_dollase) for entry in library.entries
+        if entry.march_dollase and _is_clay_entry(entry)
+    })
+    if len(spanned) < 2:
+        return ""
+    value = float(orientation)
+    if value <= spanned[0] + 1e-9:
+        return (
+            f"The clays fitted at r = {value:g}, the lowest value the library spans. "
+            f"That is a bound and not a measurement: the fit wanted to go further and "
+            f"the library stopped it. Weight percent goes as r to the power -3, so this "
+            f"is where a clay analysis collapses quietly - treat every clay percentage "
+            f"here as unreliable, and look for what else is taking their intensity "
+            f"before believing it."
+        )
+    if value >= spanned[-1] - 1e-9:
+        return (
+            f"The clays fitted at r = {value:g}, the highest value the library spans, "
+            f"which is a randomly oriented powder. On an oriented mount that is a bound "
+            f"rather than a measurement."
+        )
+    return ""
+
+
+def _is_clay_entry(entry) -> bool:
+    from .quantification import _is_clay
+
+    return _is_clay(entry.phase)

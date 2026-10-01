@@ -111,6 +111,7 @@ from ..nnls import (
     _library_subset,
     best_variant_per_phase,
     screen_diagnostic_peaks,
+    orientation_at_an_edge,
     select_in_two_stages,
     solve_film_and_mass,
     select_one_orientation,
@@ -3351,6 +3352,12 @@ def register_callbacks(app: Dash) -> None:
                         f"behind the same scattering."
                         if selection.orientation is not None else ""
                     )
+                    # The one failure a residual cannot see: at the end of the
+                    # axis the weight percent collapses as r**-3 while R_wp
+                    # barely moves.
+                    edge = orientation_at_an_edge(selection.orientation, library)
+                    if edge:
+                        lattice_note = (lattice_note + " " + edge).strip()
                 elif exclusive == "staged" and deviation <= 0.0:
                     selection = select_in_two_stages(
                         state.corrected(), library, families, **arguments,

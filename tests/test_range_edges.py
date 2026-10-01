@@ -225,3 +225,32 @@ def test_an_orientation_of_one_is_a_random_powder_not_a_missing_entry(library):
                        if "march_dollase" in note and note.startswith("kaolinite_1M"))
     assert "random powder" in orientation
     assert "span it further" not in orientation
+
+
+def test_an_orientation_on_the_end_of_the_axis_is_reported():
+    """The failure a residual cannot see.
+
+    Choosing which feldspars to fit on one separate, eight of nine combinations
+    put the clays at r = 0.1 with a clay total of 1.8 % and one put them at 0.3
+    with 32 %; the R_wp between the best of the first group and the second
+    differed by 0.003.  Weight percent goes as r**-3, so the end of the axis is
+    where a clay analysis collapses quietly.
+    """
+    import numpy as np
+
+    from clayquant.library import LibraryEntry, PatternLibrary
+    from clayquant.nnls import orientation_at_an_edge
+
+    grid = np.linspace(4.0, 40.0, 20)
+    library = PatternLibrary(
+        two_theta=grid,
+        entries=[
+            LibraryEntry(name=f"illite PO={r:g}", phase="illite",
+                         intensity=np.ones_like(grid), march_dollase=r)
+            for r in (0.1, 0.3, 0.5, 1.0)
+        ],
+    )
+    assert "lowest value" in orientation_at_an_edge(0.1, library)
+    assert "randomly oriented" in orientation_at_an_edge(1.0, library)
+    assert orientation_at_an_edge(0.3, library) == ""
+    assert orientation_at_an_edge(None, library) == ""
