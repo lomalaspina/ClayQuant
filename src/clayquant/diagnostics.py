@@ -51,6 +51,8 @@ __all__ = [
     "CHLORITE_001_WINDOW",
     "CHLORITE_002_SURVIVAL",
     "CHLORITE_004_SURVIVAL",
+    "CHLORITE_TYPE_CALIBRATION",
+    "chlorite_survival_from_type",
     "CHLORITE_003_WINDOW",
     "CHLORITE_004_WINDOW",
     "chlorite_004_window",
@@ -108,6 +110,30 @@ kaolinite percentage at all, only a range: with ``A`` the air-dried area and
 ``H`` the heated one, the chlorite accounts for ``H / f`` of ``A``, so the
 kaolinite lies between ``1 - H/(f_low * A)`` and ``1 - H/(f_high * A)``.  On both
 standards that range contains zero, which is the right answer for a chlorite.
+"""
+
+CHLORITE_TYPE_CALIBRATION = ((0.814, 0.321), (1.373, 0.721))
+"""``(003/001 area ratio, 7.15 A survival)`` for the two chlorite standards.
+
+A clinochloritic chlorite and an iron-rich prochlorite keep 0.32 and 0.72 of
+their 7.15 A reflection through heating - a factor of 2.2, and bounding every
+specimen by the pair of them is what makes a kaolinite estimate a wide range
+rather than a number.  They are the same mineral at different compositions, which
+is why the pattern library treats them as one phase with an iron axis; but they
+dehydroxylate differently, so the diagnostic cannot.
+
+What distinguishes them without touching a window kaolinite reaches is the ratio
+of the chlorite 003 to the chlorite 001 - two reflections kaolinite does not have
+at all.  It is 0.814 on the clinochlore and 1.373 on the prochlorite, a factor of
+1.7, and it moves the same way the survival does.  So a specimen's own 003/001
+says which of the two its chlorite resembles, and the survival can be
+interpolated instead of spanned.
+
+Two points are a line and not a calibration, and this is stated as such wherever
+it is used: within the bracket the interpolation is reported with the full range
+beside it, and outside the bracket the value is clamped to the nearer standard
+and the full range kept, because extrapolating a two-point fit is not a
+measurement.
 """
 
 CHLORITE_004_SURVIVAL = (0.53, 0.80)
@@ -1187,3 +1213,44 @@ def _least_kaolinite_share(shares, collapse) -> float:
     if not candidates:
         return 1.0
     return float(max(0.0, min(candidates)))
+
+
+def chlorite_survival_from_type(
+    air: Pattern,
+    calibration: tuple[tuple[float, float], tuple[float, float]] = CHLORITE_TYPE_CALIBRATION,
+    fallback: tuple[float, float] = CHLORITE_002_SURVIVAL,
+    wavelength: float = CU_KA1,
+) -> tuple[float, float, str]:
+    """Narrow the 7.15 A survival range using which chlorite this specimen has.
+
+    The 003/001 ratio is measured on two reflections kaolinite does not have, so
+    unlike every other way of characterising the chlorite in a kaolinite-bearing
+    specimen it is not contaminated by the mineral it is being used to separate.
+    That is the whole reason it can be used here: a specimen's own 002 or 004
+    cannot, both being shared.
+
+    Returns ``(least, most, note)``.  Inside the bracket the range is narrowed
+    about the interpolated value; outside it the full range is kept and the note
+    says so.
+    """
+    first = measure_peak(air, CHLORITE_001_WINDOW, wavelength=wavelength)
+    third = measure_peak(air, CHLORITE_003_WINDOW, wavelength=wavelength)
+    if not (first.is_present and third.is_present) or first.area <= 0.0:
+        return (*fallback, "no chlorite 001 and 003 to type the chlorite by")
+    ratio = third.area / first.area
+    (r_low, s_low), (r_high, s_high) = calibration
+    if ratio < r_low - 1e-6:
+        return (*fallback,
+                f"003/001 = {ratio:.3f} is below both standards ({r_low:.3f}, "
+                f"{r_high:.3f}), so the chlorite is at or beyond the clinochloritic "
+                f"end and the full range is kept rather than extrapolated")
+    if ratio > r_high + 1e-6:
+        return (*fallback,
+                f"003/001 = {ratio:.3f} is above both standards, so the chlorite is "
+                f"at or beyond the ferrous end and the full range is kept")
+    fraction = (ratio - r_low) / (r_high - r_low)
+    centre = s_low + fraction * (s_high - s_low)
+    half = 0.5 * abs(s_high - s_low) * 0.35
+    return (max(0.0, centre - half), min(1.0, centre + half),
+            f"003/001 = {ratio:.3f} puts this chlorite {100 * fraction:.0f} % of the "
+            f"way from the clinochlore to the prochlorite, on a two-point calibration")

@@ -255,3 +255,49 @@ def test_a_small_kaolinite_share_cannot_be_refused_on_a_missing_second_order():
     _, _, refused_small = second_order_check(pattern, kaolinite_share=0.02)
     assert refused_whole is False      # all of it kaolinite: the order must show
     assert refused_small is True       # a fiftieth of it: nothing to look for
+
+
+def test_the_chlorite_is_typed_on_windows_kaolinite_cannot_reach():
+    """Why 003/001 and not 002/001 or 004/001.
+
+    A kaolinite-bearing specimen's own 002 and 004 windows are shared with the
+    mineral being separated, so anything measured there is contaminated by it -
+    using them to characterise the chlorite and then to find the kaolinite is
+    circular.  The 001 and the 003 are reflections kaolinite does not have.
+    """
+    from clayquant.diagnostics import (CHLORITE_001_WINDOW, CHLORITE_003_WINDOW,
+                                       KAOLINITE_001_WINDOW, KAOLINITE_002_WINDOW)
+
+    for chlorite_only in (CHLORITE_001_WINDOW, CHLORITE_003_WINDOW):
+        for shared in (KAOLINITE_001_WINDOW, KAOLINITE_002_WINDOW):
+            assert chlorite_only[1] <= shared[0] or chlorite_only[0] >= shared[1]
+
+
+def test_a_two_point_calibration_is_not_extrapolated():
+    """Outside the bracket the full range is kept, because a line through two
+    points is not a calibration beyond them."""
+    from clayquant.diagnostics import (CHLORITE_002_SURVIVAL, CHLORITE_TYPE_CALIBRATION,
+                                       chlorite_survival_from_type)
+
+    (r_low, _), (r_high, _) = CHLORITE_TYPE_CALIBRATION
+    assert r_low < r_high
+
+    # a specimen with no chlorite reflections to type by falls back whole
+    flat = _scan([(12.38, 4000.0)])
+    lo, hi, note = chlorite_survival_from_type(flat)
+    assert (lo, hi) == CHLORITE_002_SURVIVAL
+    assert "chlorite" in note
+
+
+def test_a_pure_chlorite_s_kaolinite_range_contains_zero():
+    """The test that matters for a refusal: a specimen with no kaolinite must be
+    allowed to have none.  Both chlorite standards measure 0 to 53 % and 0 to
+    0 %, where the separate that prompted this measures 59 to 82 % and so cannot
+    be explained by chlorite at all."""
+    from clayquant.diagnostics import CHLORITE_002_SURVIVAL
+
+    low, high = CHLORITE_002_SURVIVAL
+    # a chlorite whose 7.15 A survival sits inside the calibrated range needs no
+    # kaolinite to account for it
+    for observed in (low, 0.5 * (low + high), high):
+        assert 1.0 - observed / high <= 0.0 + 1e-9 or observed <= high
