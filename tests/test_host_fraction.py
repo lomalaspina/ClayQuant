@@ -76,7 +76,10 @@ def test_a_discrete_mineral_is_all_host(library):
 def test_the_table_and_the_csv_carry_it(library, tmp_path):
     name = next(n for n in library.names if n.startswith("I/S 0.60"))
     quantification = fit_one(library, name)
-    row = next(r for r in quantification.table() if r["phase"] == "I/S")
+    # the phase column now carries the proportions, so that an "I/S" at 0.99
+    # cannot be read as a mixed-layer clay when it is essentially pure illite
+    row = next(r for r in quantification.table() if r["phase"].startswith("I/S"))
+    assert row["phase"] == "I/S 60/40"
     assert row["host_fraction"] == pytest.approx(0.60, abs=0.01)
     path = quantification.to_csv(tmp_path / "shares.csv")
     header = next(line for line in path.read_text().splitlines() if line.startswith("phase,"))

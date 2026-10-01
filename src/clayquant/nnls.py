@@ -1823,11 +1823,21 @@ def select_one_orientation(
             if not is_clay or math.isclose(float(entry.march_dollase), value)
         ]
         indices = np.asarray(keep, dtype=int)
+        # The constraint blocks carry one design column per library entry, so
+        # subsetting the library without subsetting them leaves the two out of
+        # step - and a block that does not match is dropped rather than
+        # applied, so the restraint silently stops acting.  That is how a
+        # kaolinite bound measured on the heated mount came to have no effect
+        # on a fit that was passed it.
+        narrowed = dict(selection)
+        blocks = narrowed.get("constraints") or ()
+        if blocks:
+            narrowed["constraints"] = [block.subset(indices) for block in blocks]
         chosen = select_one_per_family(
             measured,
             _library_subset(library, indices),
             families=[labels[index] for index in keep],
-            **selection,
+            **narrowed,
         )
         evaluations += chosen.evaluations
         chosen.orientation = value

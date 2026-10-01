@@ -57,6 +57,7 @@ __all__ = [
     "SMECTITE_GLYCOL_001_WINDOW",
     "ExpansionEvidence",
     "ExtraObservation",
+    "kaolinite_share_constraint",
     "expandable_entries",
     "expansion_evidence",
     "BASAL_AGREEMENT_WEIGHT",
@@ -1220,4 +1221,71 @@ def expandable_bound(
             f"expandable. {len(excluded)} of the library's {len(indices)} expandable "
             f"entries are above that and are left out of the fit."
         ),
+    )
+
+
+def kaolinite_share_constraint(
+    measured: Pattern,
+    library,
+    bounds: tuple[float, float],
+    window: tuple[float, float] = (11.6, 13.2),
+    background=None,
+    weight: float = 1.0,
+) -> "ExtraObservation | None":
+    """Require kaolinite to take the share of the 7.15 A window the mounts measured.
+
+    The three mounts measure something the glycolated pattern cannot: heating
+    destroys kaolinite and leaves chlorite, so what disappears from the
+    7.15 A window bounds how much of it was kaolinite.  That bound was being
+    computed, reported, and then ignored - the fit saw one pattern and was free
+    to contradict it, and on a real separate it did, giving kaolinite 16 % of
+    that window where the heated mount allowed 59 to 82 and letting the chlorite
+    claim 83 % where at most 41 was available.
+
+    This is the same device the air-dried mount uses to restrain the expandable
+    clays: one extra row saying that the kaolinite entries, weighted by how much
+    each puts in the window, must sum to the measured share of what is there.
+    The midpoint of ``bounds`` is the target, because a least-squares row takes a
+    value and not an interval; the width is the uncertainty on it and belongs in
+    ``weight``, which a caller sets from how far apart the routes came out.
+
+    ``None`` where the library has no kaolinite or the window holds nothing, so a
+    caller can pass the result straight through.
+    """
+    import numpy as np
+
+    grid = np.asarray(library.two_theta, dtype=float)
+    inside = (grid >= window[0]) & (grid <= window[1])
+    if not np.any(inside):
+        return None
+
+    observed = np.asarray(measured.intensity, dtype=float)
+    if background is not None:
+        observed = np.asarray(background.subtract(measured.two_theta, observed), dtype=float)
+    window_area = float(np.trapezoid(
+        np.clip(np.interp(grid[inside], np.asarray(measured.two_theta), observed), 0.0, None),
+        grid[inside],
+    ))
+    if window_area <= 0.0:
+        return None
+
+    design = np.zeros((1, len(library.entries)), dtype=float)
+    any_kaolinite = False
+    for column, entry in enumerate(library.entries):
+        if not entry.phase.startswith("kaolinite"):
+            continue
+        any_kaolinite = True
+        design[0, column] = float(np.trapezoid(
+            np.asarray(entry.intensity, dtype=float)[inside], grid[inside]
+        ))
+    if not any_kaolinite or not np.any(design > 0.0):
+        return None
+
+    least, most = sorted(float(v) for v in bounds)
+    target = np.array([0.5 * (least + most) * window_area], dtype=float)
+    return ExtraObservation(
+        target=target,
+        design=design,
+        weight=float(weight),
+        name=f"kaolinite {100 * least:.0f}-{100 * most:.0f}% of the 7.15 A window",
     )

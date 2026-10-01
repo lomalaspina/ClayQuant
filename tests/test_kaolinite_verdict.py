@@ -301,3 +301,40 @@ def test_a_pure_chlorite_s_kaolinite_range_contains_zero():
     # kaolinite to account for it
     for observed in (low, 0.5 * (low + high), high):
         assert 1.0 - observed / high <= 0.0 + 1e-9 or observed <= high
+
+
+def test_a_near_end_member_is_labelled_with_its_proportions():
+    """"I/S" alone reads as a swelling clay whatever the fit chose.
+
+    On a specimen whose glycolated mount showed no movement at all, the fit took
+    I/S at 0.99 and C/S at 0.95 - 0.06 and 0.15 wt % of actual smectite between
+    them - and reported them as 6.1 % I/S and 3.0 % C/S, which reads as mixed
+    layer clays that are not there.
+    """
+    from clayquant.quantification import PhaseShare
+
+    def share(phase, host):
+        return PhaseShare(phase=phase, is_clay=True, coefficient=1.0,
+                          scattering=0.1, amplitude=0.1, host_fraction=host)
+
+    assert share("I/S", 0.99).label == "I/S 99/1"
+    assert share("C/S", 0.95).label == "C/S 95/5"
+    assert share("I/S", 0.5).label == "I/S 50/50"
+    # a discrete phase keeps its plain name
+    assert share("illite", 1.0).label == "illite"
+
+
+def test_the_constraint_blocks_are_subset_with_the_library():
+    """A restraint that does not match the library it is handed is not applied.
+
+    select_one_orientation narrows the library to one orientation at a time;
+    passing the constraint blocks through unsubset left their design columns out
+    of step with it, and the kaolinite bound measured on the heated mount had no
+    effect whatever on a fit it was passed to.
+    """
+    import inspect
+
+    from clayquant.nnls import select_one_orientation
+
+    source = inspect.getsource(select_one_orientation)
+    assert "block.subset(indices)" in source

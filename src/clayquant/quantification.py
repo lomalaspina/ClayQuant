@@ -627,6 +627,25 @@ class PhaseShare:
         """Proportion of expandable layers in this phase, 0 for a discrete one."""
         return 0.0 if self.host_fraction >= 1.0 else 1.0 - self.host_fraction
 
+    @property
+    def label(self) -> str:
+        """The phase name with its layer proportions, where it has any.
+
+        ``I/S`` on its own reads as a swelling clay whatever the fit actually
+        chose, and on a specimen whose glycolated mount showed no movement at
+        all the fit chose 0.99 - a stack of essentially pure illite, 1 % of it
+        expandable.  Writing it ``I/S 99/1`` puts the composition where the
+        reader looks instead of in a column beside it, so a near-end-member
+        cannot be mistaken for a mixed-layer clay.
+
+        A discrete phase keeps its plain name: there are no proportions to show
+        and a suffix would only be noise.
+        """
+        if self.host_fraction >= 0.9995:
+            return self.phase
+        host = 100.0 * self.host_fraction
+        return f"{self.phase} {host:.0f}/{100.0 - host:.0f}"
+
     absolute_weight: float = 0.0
     """Weight percent of the whole specimen, when an internal standard fixes it.
 
@@ -782,7 +801,7 @@ class Quantification:
         rows = []
         for share in selected:
             row = {
-                "phase": share.phase,
+                "phase": share.label,
                 "group": share.group,
                 "coefficient": share.coefficient,
                 "weight_percent": (share.clay_weight if clay_basis else share.weight)
