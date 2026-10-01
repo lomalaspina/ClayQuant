@@ -77,3 +77,56 @@ def test_detected_and_excluded_are_not_opposites():
     absent = _evidence((0.0, 0.02), None)
     assert absent.detected is False
     assert absent.excluded is True
+
+
+def test_the_second_overlap_window_is_measured_too():
+    """Kaolinite overlaps chlorite twice and the heated mount tests both.
+
+    Reading only the 7.15 A window discarded half of what the three mounts
+    measured.  The 3.58 A window is an independent test - a different reflection
+    of each mineral, against a chlorite order that survives heating differently.
+    """
+    from clayquant.diagnostics import CHLORITE_002_SURVIVAL, CHLORITE_004_SURVIVAL
+
+    assert CHLORITE_002_SURVIVAL != CHLORITE_004_SURVIVAL
+    low2, high2 = CHLORITE_002_SURVIVAL
+    low4, high4 = CHLORITE_004_SURVIVAL
+    # the fourth order survives better, and - the useful part - varies less
+    # between the two chlorites, so it bounds kaolinite more tightly
+    assert low4 > low2
+    assert (high4 / low4) < (high2 / low2)
+
+
+def test_the_survival_range_travels_with_the_measurement():
+    """A 7.15 A window sits over a chlorite 002 and a 3.58 A window over a 004.
+    Assuming one range for both would misread the second window."""
+    import inspect
+
+    from clayquant.diagnostics import KaoliniteResult
+
+    assert "survival" in inspect.signature(KaoliniteResult).parameters
+
+
+def test_either_window_can_establish_kaolinite():
+    from clayquant.diagnostics import CHLORITE_004_SURVIVAL, KaoliniteEvidence
+
+    class Peak:
+        is_present = True
+
+    class Route:
+        def __init__(self, bounds):
+            self.air = Peak()
+            self.kaolinite_bounds = bounds
+
+        @property
+        def kaolinite_detected(self):
+            return self.kaolinite_bounds[0] > 0.1
+
+    # the first window is ambiguous, the second is not
+    evidence = KaoliniteEvidence(
+        windows={}, references={}, shares=(),
+        collapse=Route((0.0, 0.4)), second_collapse=Route((0.6, 0.9)),
+    )
+    assert len(evidence.collapse_routes) == 2
+    assert evidence.detected is True
+    assert evidence.excluded is False

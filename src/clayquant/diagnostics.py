@@ -50,6 +50,7 @@ __all__ = [
     "CHLORITE_001_ENHANCEMENT",
     "CHLORITE_001_WINDOW",
     "CHLORITE_002_SURVIVAL",
+    "CHLORITE_004_SURVIVAL",
     "CHLORITE_003_WINDOW",
     "CHLORITE_RATIOS",
     "ChloriteShare",
@@ -102,6 +103,22 @@ kaolinite percentage at all, only a range: with ``A`` the air-dried area and
 ``H`` the heated one, the chlorite accounts for ``H / f`` of ``A``, so the
 kaolinite lies between ``1 - H/(f_low * A)`` and ``1 - H/(f_high * A)``.  On both
 standards that range contains zero, which is the right answer for a chlorite.
+"""
+
+CHLORITE_004_SURVIVAL = (0.53, 0.80)
+"""What fraction of a chlorite 004 survives heating, from the same two standards.
+
+The 3.58 A window is the second place kaolinite and chlorite overlap - kaolinite
+002 against chlorite 004 - and it carries the same collapse test as the 7.15 A
+window, measured against this range instead.  Using only the 7.15 A window threw
+half the evidence away.
+
+Measured on the same clinochloritic Chlorite and iron-rich Prochlorite, heated by
+the same procedure: the 3.58 A area after heating was 53 % and 80 % of the
+air-dried area, against 32 % and 72 % at 7.15 A.  The fourth order survives
+better than the second and, more usefully, *varies less between the two
+chlorites* - a spread of 1.5 against 2.2 - so the bound this window puts on
+kaolinite is the tighter of the two even though the reflection is weaker.
 """
 
 PEAK_WIDTH = 0.12
@@ -365,6 +382,15 @@ class KaoliniteResult:
     collapse_fraction: float
     residual_fraction: float
     reference_window: tuple[float, float] | None
+    survival: tuple[float, float] = CHLORITE_002_SURVIVAL
+    """How much of the chlorite order under this window survives heating.
+
+    The 7.15 A window sits over a chlorite 002 and the 3.58 A window over a
+    chlorite 004, and the two survive differently, so the range is carried with
+    the measurement rather than assumed from the class.
+    """
+
+    label: str = "7.15 A"
 
     @property
     def kaolinite_bounds(self) -> tuple[float, float]:
@@ -381,7 +407,7 @@ class KaoliniteResult:
             self.scale * self.heated.area / self.air.area
             if self.heated.is_present else 0.0
         )
-        low_survival, high_survival = CHLORITE_002_SURVIVAL
+        low_survival, high_survival = self.survival
         least = 1.0 - remaining / low_survival
         most = 1.0 - remaining / high_survival
         return (float(np.clip(least, 0.0, 1.0)), float(np.clip(most, 0.0, 1.0)))
@@ -407,20 +433,20 @@ class KaoliniteResult:
     def summary(self) -> str:
         if not self.air.is_present:
             return (
-                f"No reflection at 7.15 A in the air-dried mount - the tallest point in "
+                f"No reflection at {self.label} in the air-dried mount - the tallest point in "
                 f"the window stands {self.air.significance:.1f} standard deviations above "
                 f"the background, short of the {self.air.minimum_sigmas:g} required - so "
                 f"neither kaolinite nor chlorite is indicated here."
             )
         if not self.heated.is_present:
             return (
-                f"The 7.15 A reflection, {self.air.significance:.0f} standard deviations "
+                f"The {self.label} reflection, {self.air.significance:.0f} standard deviations "
                 f"above the background in the air-dried mount, is gone after heating: all "
                 f"of it collapsed, so it is kaolinite and there is no chlorite 002 under it."
             )
         least, most = self.kaolinite_bounds
         return (
-            f"7.15 A peak area {self.air.area:.4g} (air) vs {self.scale * self.heated.area:.4g} "
+            f"{self.label} peak area {self.air.area:.4g} (air) vs {self.scale * self.heated.area:.4g} "
             f"(heated, scaled): {100.0 * self.collapse_fraction:.1f}% of it collapsed on "
             f"heating. A chlorite 002 keeps between "
             f"{100.0 * CHLORITE_002_SURVIVAL[0]:.0f} and "
@@ -438,8 +464,10 @@ def kaolinite_collapse(
     reference_window: tuple[float, float] | None = None,
     scale: float | None = None,
     wavelength: float = CU_KA1,
+    survival: tuple[float, float] = CHLORITE_002_SURVIVAL,
+    label: str = "7.15 A",
 ) -> KaoliniteResult:
-    """Quantify the kaolinite 001 collapse between the air-dried and heated mounts.
+    """Quantify a kaolinite reflection's collapse between the air-dried and heated mounts.
 
     Parameters
     ----------
@@ -479,6 +507,8 @@ def kaolinite_collapse(
         collapse_fraction=collapse,
         residual_fraction=1.0 - collapse,
         reference_window=reference_window,
+        survival=survival,
+        label=label,
     )
 
 
@@ -660,6 +690,8 @@ class KaoliniteEvidence:
     references: dict[str, PeakMetrics]
     shares: tuple[ChloriteShare, ...]
     collapse: "KaoliniteResult | None" = None
+    second_collapse: "KaoliniteResult | None" = None
+    """The same collapse test on the 3.58 A window, which is independent of it."""
 
     @property
     def usable(self) -> tuple[ChloriteShare, ...]:
@@ -709,6 +741,20 @@ class KaoliniteEvidence:
         return min(high for _, high in spans) >= max(low for low, _ in spans)
 
     @property
+    def collapse_routes(self) -> tuple["KaoliniteResult", ...]:
+        """The collapse tests that could be measured, 7.15 A and 3.58 A.
+
+        Two independent measurements of the same thing: different reflections of
+        both minerals, against chlorite orders that survive heating differently -
+        32 to 72 % for the 002 under 7.15 A, 53 to 80 % for the 004 under 3.58 A.
+        Reading only the first discarded half of what the heated mount measured.
+        """
+        return tuple(
+            route for route in (self.collapse, self.second_collapse)
+            if route is not None and route.air.is_present
+        )
+
+    @property
     def detected(self) -> bool:
         """Kaolinite is there whatever the chlorite under it is doing.
 
@@ -729,8 +775,11 @@ class KaoliniteEvidence:
         kaolinite in it, and no amount of disagreement between the ratio routes
         makes that untrue.
         """
-        if self.collapse is not None and self.collapse.air.is_present:
-            return bool(self.collapse.kaolinite_detected)
+        for route in self.collapse_routes:
+            if route.kaolinite_detected:
+                return True
+        if self.collapse_routes:
+            return False
         least, _ = self.bounds
         return bool(least == least and least > 0.1)
 
@@ -744,9 +793,10 @@ class KaoliniteEvidence:
         out of a fit, because taking it out asserts that there is none - which
         is one end of the range, not the middle of it.
         """
-        if self.collapse is not None and self.collapse.air.is_present:
-            _, most = self.collapse.kaolinite_bounds
-            return bool(most == most and most < 0.05)
+        if self.collapse_routes:
+            highs = [route.kaolinite_bounds[1] for route in self.collapse_routes]
+            highs = [h for h in highs if h == h]
+            return bool(highs and max(highs) < 0.05)
         if not self.usable:
             return False
         _, most = self.bounds
@@ -779,8 +829,8 @@ class KaoliniteEvidence:
                 "low-angle air scatter - and the range above is the wider of the two "
                 "rather than a measurement."
             )
-        if self.collapse is not None and self.collapse.air.is_present:
-            lines.append("  " + self.collapse.summary())
+        for route in self.collapse_routes:
+            lines.append("  " + route.summary())
         return "\n".join(lines)
 
 
@@ -882,15 +932,25 @@ def kaolinite_evidence(
                 limited=limited,
             )
         )
-    collapse = None
+    collapse = second_collapse = None
     if heated is not None:
         collapse = kaolinite_collapse(
             air, heated, window=windows.get("7.15", KAOLINITE_001_WINDOW),
             scale=scale, wavelength=wavelength,
+            survival=CHLORITE_002_SURVIVAL, label="7.15 A",
+        )
+        # The 3.58 A window is the same test on kaolinite's second order, and
+        # it is independent of the first: a different reflection of each
+        # mineral, against a chlorite order that survives heating differently.
+        second_collapse = kaolinite_collapse(
+            air, heated, window=windows.get("3.58", KAOLINITE_002_WINDOW),
+            scale=scale, wavelength=wavelength,
+            survival=CHLORITE_004_SURVIVAL, label="3.58 A",
         )
     return KaoliniteEvidence(
         windows=measured,
         references=reference_peaks,
         shares=tuple(shares),
         collapse=collapse,
+        second_collapse=second_collapse,
     )

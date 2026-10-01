@@ -155,6 +155,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-45">A.45 A cell and a texture for the accompanying minerals</a>
 <a href="#a-46">A.46 A weighed film is not a thick plate</a>
 <a href="#a-47">A.47 One mineral under two names</a>
+<a href="#a-48">A.48 A prismatic mineral shows one line</a>
+<a href="#a-49">A.49 Where the attenuation coefficients come from</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6175,6 +6177,114 @@ microstrain; the interstratified ones carry the crystallite thickness distributi
 &sect;2.6, which is what actually sets a basal width. A pure illite can no
 longer be fitted with its thickness spanned, only with its strain spanned. An approximate width on
 one phase is the smaller error of the two.</p>
+
+
+
+<h3 id="a-48">A.48 A prismatic mineral shows one line, and the search looked for ten</h3>
+
+<p>An amphibole stood at 9122 counts in a real separate &mdash; the third largest peak in the
+pattern, at 8.43&nbsp;&Aring; &mdash; and the accompanying-mineral search did not report it at all.
+Riebeckite and hornblende were both in the structure database and both on the common list, so
+nothing was missing; what was wrong was the intensities they were sought with.</p>
+
+<p>As a random powder, riebeckite's 35.3&nbsp;&deg; line is 59&nbsp;% of its 10.4&nbsp;&deg; line
+and its 32.9&nbsp;&deg; line 54&nbsp;%. The measurement holds 127 and 157 counts there against 9592.
+Hornblende is worse placed still: 35.3&nbsp;&deg; is its <em>strongest</em> reflection. Scored over
+nine of each phase's own lines, every orientation that fits is a (110) or (100) pole at
+<var>r</var>&nbsp;&le;&nbsp;0.6, and no random-powder amphibole comes near:</p>
+
+<div class="tablewrap"><table>
+<tr><th>phase</th><th>pole</th><th><var>r</var></th><th>misfit</th></tr>
+<tr><td>Hornblende</td><td>(110)</td><td>0.35</td><td>0.238</td></tr>
+<tr><td>Hornblende</td><td>(110)</td><td>0.30</td><td>0.293</td></tr>
+<tr><td>Riebeckite</td><td>(110)</td><td>0.40</td><td>0.349</td></tr>
+<tr><td>Riebeckite</td><td>(020)</td><td>any</td><td>~1.03</td></tr>
+</table></div>
+
+<p>The poles are the ones these two phases were refined on rather than an analogy from the shape of
+an amphibole, and the distinction is measurable: (020) is the <var>b</var> normal and (110) the
+prism face, predicting different intensities for every line but the one they share. On this
+specimen hornblende's (110) describes the pattern and riebeckite's (020) does not, at any
+orientation.</p>
+
+<p><strong>A second phase does not explain it.</strong> The natural reading, when a phase's heights
+are wrong, is that another mineral is also present. It cannot be that here, and the reason is
+arithmetic rather than mineralogical: superposition is additive and non-negative, so two phases can
+only <em>add</em> intensity at 32.9 and 35.3&nbsp;&deg;, where the trouble is an excess. Given both
+amphiboles and free amounts, a non-negative fit sets hornblende to zero and keeps riebeckite, at
+<var>R</var><sub>wp</sub>&nbsp;0.757; the same pair oriented on (110) at
+<var>r</var>&nbsp;=&nbsp;0.35 reaches 0.376. This says nothing about whether both minerals are in
+the specimen - the pattern cannot separate them either way - only that the heights are not evidence
+for two.</p>
+
+<p><strong>What was changed.</strong> The pole was being read from the structure database's refined
+axis while only being <em>gated</em> on the habit table, so a mineral with a habit whose database
+entry carried no axis was screened as a random powder anyway. Sepiolite and palygorskite are
+exactly that case, which means the mechanism written for them had been doing nothing for them. The
+pole now comes from the table, by name, and all five peak-list sites in the search apply it where
+before one of four functions considered a habit at all.</p>
+
+<p><strong>What it does not fix.</strong> Even screened correctly, an amphibole lying on a prism
+face offers one line, and the search required two stable reflections. That threshold is reachable
+now rather than hard-coded, and the cost of lowering it is stated where it is set: at one matched
+reflection the same separate also offers ankerite and rutile on a single line each. One line at the
+right angle is a candidate, not an identification.</p>
+
+<p>A related caution about <var>R</var><sub>wp</sub>, since the same arithmetic recurs: scoring the
+search by line positions alone rather than by expected intensity was tried, on the reasoning that
+intensities are unreliable for an oriented mineral. Measured, it is the worse test - but only once
+the habit is right. With the amphibole screened at its pole the predicted intensities become 1.00
+at 10.49&nbsp;&deg; and 0.22 at 28.50, so matching the single line the mount shows scores
+82&nbsp;% and ranks second, where counting lines gives 50&nbsp;% and ties it with rutile. The fault
+was never the weighting but the weights.</p>
+
+
+
+<h3 id="a-49">A.49 Where the attenuation coefficients come from</h3>
+
+<p>A weight percent needs a mass attenuation coefficient for every element in every phase, and the
+table held 27 of them: the elements a silicate is made of. A real structure database reaches
+further &mdash; a cassiterite, a tungsten carbide, a lithium-bearing amphibole &mdash; and a fit
+that reached one stopped with <em>no coefficient for Sn</em>. The table now runs from hydrogen to
+uranium.</p>
+
+<p><strong>Two sources, and the seam between them is named.</strong> Replacing all 27 original
+values with one consistent modern tabulation was tried first and broke three tests: the published
+coefficients of kaolinite, illite and chlorite are reproduced to within 1&nbsp;% by the original
+values and 2 to 4&nbsp;% by the replacement. Those 27 are therefore kept exactly as they were,
+because they are the ones the program is checked on.</p>
+
+<div class="tablewrap"><table>
+<tr><th>elements</th><th>source</th><th>what it is checked against</th></tr>
+<tr><td>H, C, N, O, F, Na, Mg, Al, Si, P, S, Cl, K, Ca, Ti, V, Cr, Mn, Fe, Co, Ni, Cu, Zn, Sr, Zr, Ba, Pb</td>
+    <td>International Tables Vol.&nbsp;C, Table 4.2.4.3</td>
+    <td>kaolinite, illite and chlorite compound coefficients, to 1&nbsp;%</td></tr>
+<tr><td>the remaining 65 up to uranium</td>
+    <td>Elam <i>et al.</i> at 8047.8&nbsp;eV</td>
+    <td>not independently checked here</td></tr>
+</table></div>
+
+<p>The two tabulations agree to a few per cent on most elements and differ by up to 11&nbsp;% on
+individual ones &mdash; lanthanum is 393 against 347, strontium 125 against 113, hydrogen 0.435
+against 0.391. That is the ordinary spread between published compilations, and it is also why they
+are stored as two tables merged rather than one list written out: which source a coefficient came
+from should be answerable by looking, and a value from the second carries the accuracy of its source
+rather than of the check above.</p>
+
+<p>The series is not monotonic in atomic number and must never be interpolated. Two absorption edges
+cross the Cu K-alpha energy: the K edge between cobalt and nickel, where the coefficient falls from
+313 to 49, and the L3 edge among the heavy elements, where tungsten at 168 sits below lanthanum at
+347 before lead rises again to 232. An element missing from a table like this cannot be estimated
+from its neighbours, which is why the whole table is present and why an element beyond it still
+raises rather than guessing.</p>
+
+<p><strong>Reading the species.</strong> Half of the same failure was not the table but the label.
+The parser accepted <code>Fe3+</code> and <code>O-2</code> and refused <code>Ti(4+)</code>,
+<code>D</code>, <code>FE</code>, and &mdash; the one that makes a whole structure unusable rather
+than one site &mdash; a site label left in the species field, <code>Fe1</code> or <code>O3</code>.
+These now resolve, as fallbacks reached only after the strict spelling fails, so nothing that
+already parsed can change meaning. What cannot be read is still refused: <code>OH</code> is two
+elements, and choosing one would put a wrong mass into a weight percent.</p>
 
 
 
