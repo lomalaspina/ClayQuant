@@ -49,7 +49,9 @@ __all__ = [
     "EXPANDABLE_001_WINDOW",
     "CHLORITE_001_ENHANCEMENT",
     "CHLORITE_001_WINDOW",
+    "CHLORITE_002_OVER_003_SURVIVAL",
     "CHLORITE_002_SURVIVAL",
+    "chlorite_002_survival_from_003",
     "CHLORITE_004_SURVIVAL",
     "CHLORITE_TYPE_CALIBRATION",
     "chlorite_survival_from_type",
@@ -164,6 +166,26 @@ is the matched filter for a peak of that width.  The default is a well
 collimated instrumental width; a broader specimen only makes the estimate
 conservative, because averaging over less than the true width still gains on the
 noise.
+"""
+
+
+CHLORITE_002_OVER_003_SURVIVAL = (0.89, 0.98)
+"""How a chlorite 002's heat survival compares with its own 003's.
+
+The absolute survival of a chlorite basal order varies hugely between chlorites
+- :data:`CHLORITE_002_SURVIVAL` spans 32 to 72 % across two standards - so an
+absolute bracket is a weak constraint, and on a chlorite that collapses harder
+than either standard it is the wrong one.  The *ratio* between two orders of the
+same chlorite is far better behaved: measured on the same two standards, the 002
+and the 003 survive within a tenth of each other (0.89 and 0.98), because
+dehydroxylation redistributes intensity into the 001 and takes the even and odd
+orders above it down together.
+
+That is what makes :func:`chlorite_002_survival_from_003` possible, and it is
+the one route out of the circularity: the 003 is a chlorite reflection kaolinite
+does not have, so measuring it in a kaolinite-bearing specimen is legitimate,
+while the 002 and the 004 are both shared and measuring either tells you
+nothing you did not assume.
 """
 
 
@@ -439,6 +461,10 @@ class KaoliniteResult:
             if self.heated.is_present else 0.0
         )
         low_survival, high_survival = self.survival
+        if low_survival <= 0.0 or high_survival <= 0.0:
+            # A chlorite expected to survive nothing cannot be told from a
+            # kaolinite by survival, so the window bounds nothing.
+            return float("nan"), float("nan")
         least = 1.0 - remaining / low_survival
         most = 1.0 - remaining / high_survival
         return (float(np.clip(least, 0.0, 1.0)), float(np.clip(most, 0.0, 1.0)))
@@ -476,16 +502,96 @@ class KaoliniteResult:
                 f"of it collapsed, so it is kaolinite and there is no chlorite 002 under it."
             )
         least, most = self.kaolinite_bounds
+        low, high = self.survival
+        measured = self.survival != CHLORITE_002_SURVIVAL
+        basis = (
+            "taken from this specimen's own chlorite 003, where no kaolinite "
+            "contributes, scaled by the order ratio of two chlorite standards"
+            if measured else
+            "measured on two chlorite standards containing no kaolinite"
+        )
         return (
             f"{self.label} peak area {self.air.area:.4g} (air) vs {self.scale * self.heated.area:.4g} "
             f"(heated, scaled): {100.0 * self.collapse_fraction:.1f}% of it collapsed on "
-            f"heating. A chlorite 002 keeps between "
-            f"{100.0 * CHLORITE_002_SURVIVAL[0]:.0f} and "
-            f"{100.0 * CHLORITE_002_SURVIVAL[1]:.0f}% of itself through the same heating - "
-            f"measured on two chlorite standards containing no kaolinite - so the kaolinite "
+            f"heating. The chlorite order under this window was expected to keep between "
+            f"{100.0 * low:.0f} and {100.0 * high:.0f}% of itself through the same heating - "
+            f"{basis} - so the kaolinite "
             f"is between {100.0 * least:.0f} and {100.0 * most:.0f}% of this peak and the "
             f"chlorite is the rest."
         )
+
+
+def chlorite_002_survival_from_003(
+    air: Pattern,
+    heated: Pattern,
+    scale: float | None = None,
+    ratio: tuple[float, float] = CHLORITE_002_OVER_003_SURVIVAL,
+    fallback: tuple[float, float] = CHLORITE_002_SURVIVAL,
+    wavelength: float = CU_KA1,
+    minimum_sigmas: float = MINIMUM_SIGMAS,
+) -> tuple[float, float, str]:
+    """How much of *this* specimen's chlorite 002 survives heating, and how it is known.
+
+    The 7.15 A window holds a kaolinite 001 and a chlorite 002 together, so what
+    kaolinite's share of it is depends entirely on how much of the chlorite 002
+    was expected to survive 550 C.  Assuming the standards' absolute bracket
+    (:data:`CHLORITE_002_SURVIVAL`, 32 to 72 %) is what this used to do, and on a
+    chlorite that collapses harder than either standard it asks kaolinite to
+    account for a drop that the chlorite managed on its own.  On one real
+    metabasite separate it put kaolinite at 55 to 80 % of the window when the
+    truth was 18 to 26 %, and forcing the fit to honour that cost ten points of
+    Rwp.
+
+    The way out is the 003.  It is a chlorite reflection with no kaolinite under
+    it, so measuring its collapse in a kaolinite-bearing specimen is not
+    circular - unlike the 002 and the 004, which are both shared, and which is
+    why a specimen's own 7.15 A or 3.58 A behaviour can never be used to
+    characterise its chlorite.  The standards then supply only the *ratio*
+    between the two orders' survival, which is the stable part
+    (:data:`CHLORITE_002_OVER_003_SURVIVAL`).
+
+    Returns ``(least, most, note)``.  Where the 003 cannot be measured in both
+    mounts the ``fallback`` comes back and the note says why.
+    """
+    air_third = measure_peak(air, CHLORITE_003_WINDOW, wavelength=wavelength,
+                             minimum_sigmas=minimum_sigmas)
+    if not air_third.is_present or air_third.area <= 0.0:
+        return (*fallback, "no chlorite 003 in the air-dried mount, so the chlorite's own "
+                           "collapse could not be measured and the standards' range is kept")
+    if scale is None:
+        scale = scale_to_reference(air, heated, None, wavelength=wavelength)
+    heated_third = measure_peak(heated, CHLORITE_003_WINDOW, wavelength=wavelength,
+                                minimum_sigmas=minimum_sigmas)
+    # A heated 003 that did not clear the noise has not survived nothing: it has
+    # survived less than this measurement could see.  Taking it as zero would
+    # make the expected chlorite 002 survival zero too, which divides by zero in
+    # the share and, worse, asserts something the data cannot support.  The
+    # detection limit is an upper bound on what survived, and an upper bound on
+    # the chlorite's survival is exactly what gives a lower bound on kaolinite -
+    # the direction the constraint needs.
+    if heated_third.is_present:
+        survived = scale * heated_third.area / air_third.area
+        how = "measured"
+    else:
+        survived = scale * _detection_limit_area(heated_third) / air_third.area
+        how = "bounded by the detection limit, the heated 003 being too weak to measure"
+    survived = float(np.clip(survived, 0.0, 1.5))
+    if survived <= 0.0:
+        return (*fallback, "the chlorite 003 gave no usable survival, so the standards' "
+                           "absolute range is kept")
+    low, high = sorted(ratio)
+    least, most = survived * low, survived * high
+    return (
+        float(np.clip(least, 1e-4, 1.0)),
+        float(np.clip(most, 1e-4, 1.0)),
+        f"this chlorite's 003 kept {100.0 * survived:.1f}% of its area through the "
+        f"heating ({how}), in a window where no kaolinite contributes; on the two "
+        f"standards a chlorite 002 survives {low:.2f} to {high:.2f} times as well as "
+        f"its own 003, so this chlorite's 002 is expected to keep "
+        f"{100.0 * least:.1f} to {100.0 * most:.1f}% rather than the "
+        f"{100.0 * fallback[0]:.0f} to {100.0 * fallback[1]:.0f}% the standards span "
+        f"in absolute terms"
+    )
 
 
 def kaolinite_collapse(
@@ -775,6 +881,25 @@ class KaoliniteEvidence:
     second_collapse: "KaoliniteResult | None" = None
     """The same collapse test on the 3.58 A window, which is independent of it."""
 
+    measured_collapse: "KaoliniteResult | None" = None
+    """The 7.15 A collapse against this specimen's own chlorite 003 survival.
+
+    :attr:`collapse` uses the two standards' absolute range, which is right only
+    for a chlorite that behaves like them.  This one uses what the specimen's own
+    chlorite did, measured where no kaolinite contributes.  Both are reported
+    because they can disagree widely and the disagreement is informative; see
+    :func:`chlorite_002_survival_from_003`.
+    """
+
+    survival_note: str = ""
+    """How the chlorite 002's expected survival was arrived at.
+
+    Either from this specimen's own chlorite 003 or, where that could not be
+    measured, from the standards' absolute range; the two give very different
+    kaolinite shares, so which one was used belongs in the report.  See
+    :func:`chlorite_002_survival_from_003`.
+    """
+
     second_order: tuple[float, float, bool] | None = None
     """``(expected, found, consistent)`` from :func:`second_order_check`.
 
@@ -1045,12 +1170,39 @@ def kaolinite_evidence(
                 limited=limited,
             )
         )
-    collapse = second_collapse = None
+    collapse = second_collapse = measured_collapse = None
+    survival_note = ""
     if heated is not None:
+        # What the chlorite 002 under the 7.15 A window was expected to survive
+        # is the whole of this test, and the standards' absolute range is the
+        # wrong thing to assume: it spans 32 to 72 %, and a chlorite that
+        # collapses harder than either standard then hands kaolinite a drop the
+        # chlorite managed alone.  The specimen's own 003 says what its chlorite
+        # did, in a window kaolinite cannot reach, and the standards supply only
+        # the ratio between the orders.  See
+        # :func:`chlorite_002_survival_from_003`.
+        least, most, survival_note = chlorite_002_survival_from_003(
+            air, heated, scale=scale, wavelength=wavelength,
+            minimum_sigmas=minimum_sigmas,
+        )
         collapse = kaolinite_collapse(
             air, heated, window=windows.get("7.15", KAOLINITE_001_WINDOW),
             scale=scale, wavelength=wavelength,
             survival=CHLORITE_002_SURVIVAL, label="7.15 A",
+        )
+        # The same window again, against what this specimen's own chlorite did
+        # rather than what the standards' chlorites did.  It is carried beside
+        # the standards' route and not in place of it, because the two can
+        # disagree by a factor of three and which is right depends on how the
+        # heated 003 is integrated - a peak that is often at the detection
+        # limit.  Where they disagree that is the finding, and it belongs in
+        # front of whoever is reading the report rather than resolved silently:
+        # a specimen whose chlorite collapses harder than either standard gets
+        # a kaolinite share from the standards' range that is far too high.
+        measured_collapse = kaolinite_collapse(
+            air, heated, window=windows.get("7.15", KAOLINITE_001_WINDOW),
+            scale=scale, wavelength=wavelength,
+            survival=(least, most), label="7.15 A, on this chlorite's own 003",
         )
         # The 3.58 A window is the same test on kaolinite's second order, and
         # it is independent of the first: a different reflection of each
@@ -1066,6 +1218,8 @@ def kaolinite_evidence(
         shares=tuple(shares),
         collapse=collapse,
         second_collapse=second_collapse,
+        survival_note=survival_note,
+        measured_collapse=measured_collapse,
         second_order=second_order_check(
             air, wavelength=wavelength,
             # the lowest kaolinite share any route allows, so the expectation is

@@ -159,6 +159,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-49">A.49 Where the attenuation coefficients come from</a>
 <a href="#a-50">A.50 Three windows, and what each of them is for</a>
 <a href="#a-51">A.51 Applying the kaolinite bound instead of reporting it</a>
+<a href="#a-52">A.52 Three residuals that were not missing phases</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6447,6 +6448,120 @@ being wrong, and it is not a texture (&sect;<a href="#a-45">A.45</a>); it is a p
 fit whose strongest lines fall in the crowded 27 to 28&nbsp;&deg; cluster, which is where the
 albite's own scale is being set from.</p>
 
+<h3 id="a-52">A.52 Three residuals that were not missing phases</h3>
+
+<p>The paragraph above was wrong, and the way it was wrong is worth keeping. Three features of that
+separate's fit were put to the program as three questions &mdash; what is missing from the 27 to
+28&nbsp;&deg; cluster, why does the 7&nbsp;&Aring; peak split so badly, and what produces the
+calculated line near 40&nbsp;&deg; where the measurement has nothing. None of the three turned out to
+be a missing phase, and two of them were defects in this program.</p>
+
+<p><strong>The 27 to 28&nbsp;&deg; cluster.</strong> At 0.0167&nbsp;&deg; steps the cluster resolves
+into four lines, where the model has two:</p>
+
+<div class="tablewrap"><table>
+<tr><th>measured</th><th><var>d</var></th><th>net counts</th><th>as an 00<var>l</var></th></tr>
+<tr><td>26.411&nbsp;&deg;</td><td>3.3720&nbsp;&Aring;</td><td>435</td><td>003 of a 10.116&nbsp;&Aring; mica &mdash; biotite</td></tr>
+<tr><td>26.628&nbsp;&deg;</td><td>3.3449&nbsp;&Aring;</td><td>5958</td><td>quartz 101 (3.3435&nbsp;&Aring;)</td></tr>
+<tr><td>26.695&nbsp;&deg;</td><td>3.3367&nbsp;&Aring;</td><td>3886</td><td>003 of a 10.010&nbsp;&Aring; mica</td></tr>
+<tr><td>26.895&nbsp;&deg;</td><td>3.3123&nbsp;&Aring;</td><td>6149</td><td>003 of the 9.937&nbsp;&Aring; illite the fit has</td></tr>
+</table></div>
+
+<p>Three micaceous populations rather than one, which the 10&nbsp;&Aring; peak cannot show &mdash;
+0.07&nbsp;&Aring; in <var>d</var>(001) is 0.06&nbsp;&deg; there and 0.20&nbsp;&deg; at the third
+order. It is also what the fit has been expressing all along as <code>illite</code> beside
+<code>I/S&nbsp;99/1</code>: two populations the library has no grain-size axis to separate.</p>
+
+<p>Adding muscovite and biotite to the fit as accompanying minerals moves R<sub>wp</sub> from 38.66
+to 38.62&nbsp;% and leaves the residual at 26.628&nbsp;&deg; at +2697 counts of +2707. So the
+cluster is not short of phases. It is short of quartz: the fit puts 3252 counts at the quartz 101
+where the measurement has 5958, and holds it there because quartz's own weak lines are already
+over-predicted. Cutting the fit to 4&ndash;33&nbsp;&deg;, which removes both of them, leaves quartz
+at 56&nbsp;% of its 101. <strong>A positive residual standing on a strong line of a phase already in
+the fit is a scale that something else is holding down, and looking for a new phase under it finds
+one that is not there.</strong></p>
+
+<p><strong>The line near 40&nbsp;&deg;.</strong> It is quartz 102 at 39.47&nbsp;&deg;, 96&nbsp;% of
+the calculated intensity in that window, and it is in the library at 8&nbsp;% of quartz 101, which is
+the powder-file value. The specimen measures it at 1.0&nbsp;%, and quartz 110 at 36.54&nbsp;&deg; at
+1.9&nbsp;% against a powder 8&nbsp;%. It is not a background artefact: the raw counts there are 344
+against a local level of 266, and that level declines smoothly to the end of the scan, so nothing is
+being swallowed. Neither absorption nor a displacement parameter can suppress a line by a factor of
+eight over ten degrees &mdash; a thin film reweights by at most the ratio of the sines, 1.47, and a
+displacement parameter of 2&nbsp;&Aring;<sup>2</sup> by a tenth. What does it is particle statistics:
+in an oriented mount the quartz is a small coarse fraction, few enough grains that individual
+reflections depart from powder intensities by factors, and its 101 here has a half width of
+0.046&nbsp;&deg;, below what this geometry can give a powder-averaged line. <strong>A quartz whose
+reflections are spiky is a quartz whose scale factor is not a measurement</strong>, and both the
+40&nbsp;&deg; over-prediction and the under-fitted 101 follow from it.</p>
+
+<p><strong>The 7&nbsp;&Aring; peak.</strong> The split is a position mismatch, and the kaolinite in
+the structure library is not what is wrong with it. The library puts kaolinite 001 at
+12.372&nbsp;&deg;, <var>d</var> = 7.148&nbsp;&Aring;, which is the accepted value. The measured
+maximum is at 12.490&nbsp;&deg;, <var>d</var> = 7.081&nbsp;&Aring;, and the specimen's own chlorite
+001 at 6.223&nbsp;&deg; &mdash; <var>d</var>(001) = 14.183&nbsp;&Aring; &mdash; puts its 002 at
+12.472&nbsp;&deg;, 0.018&nbsp;&deg; away. The peak sits on the chlorite's position, not kaolinite's,
+and forcing kaolinite to 67&nbsp;% of the window area put a profile 0.11&nbsp;&deg; below the
+measured maximum. The derivative-shaped residual is that, and nothing else.</p>
+
+<p>Which exposes the real error: the bound itself. &sect;<a href="#a-50">A.50</a> sizes kaolinite's
+share from <code>CHLORITE_002_SURVIVAL</code>, the 32 to 72&nbsp;% that two pure chlorite
+standards keep through 550&nbsp;&deg;C. That is right for a chlorite that behaves like them, and this
+one does not. Normalising the two mounts on four heat-stable lines (quartz 100 and 101, the
+K-feldspar at 27.5&nbsp;&deg;, the albite at 27.9&nbsp;&deg;; median ratio 0.957, so the mounts are
+comparable and the 001 tripling to 319&nbsp;% is real dehydroxylation), the chlorite-only 003 window
+keeps between 6 and 21&nbsp;% of its area depending on how a near-invisible heated peak is
+integrated &mdash; against 36.5 and 73.4&nbsp;% in the two standards.</p>
+
+<p><strong>The 003 is the one window that can say this without circularity.</strong> It carries no
+kaolinite, so measuring it in a kaolinite-bearing specimen is legitimate, which the 002 and the 004
+are not: a specimen's own shared window cannot characterise the chlorite it is being used to
+separate. The standards then supply only the <em>ratio</em> between the orders, which is the stable
+part of the behaviour &mdash; on both of them a chlorite 002 survives 0.89 to 0.98 times as well as
+its own 003 (<code>CHLORITE_002_OVER_003_SURVIVAL</code>), because dehydroxylation moves
+intensity into the 001 and takes the orders above it down together.</p>
+
+<div class="tablewrap"><table>
+<tr><th>window</th><th>what it holds</th><th>survives 550&nbsp;&deg;C</th></tr>
+<tr><td>chlorite 001</td><td>chlorite only</td><td>319&nbsp;%</td></tr>
+<tr><td>7&nbsp;&Aring;</td><td>kaolinite 001 + chlorite 002</td><td>15.2&nbsp;%</td></tr>
+<tr><td>chlorite 003</td><td>chlorite only</td><td>20.8&nbsp;%</td></tr>
+<tr><td>3.54&nbsp;&Aring;</td><td>kaolinite 002 + chlorite 004</td><td>41.5&nbsp;%</td></tr>
+</table></div>
+
+<p>At a 003 survival of 20.8&nbsp;% the chlorite 002 is expected to keep 18.5 to 20.4&nbsp;%, and the
+shared window keeps 15.2&nbsp;%: kaolinite is 18 to 26&nbsp;% of it, not 55 to 80. Applying that
+bound instead takes R<sub>wp</sub> from 48.54 to <strong>38.66&nbsp;%</strong> &mdash; ten points
+from one corrected number &mdash; with kaolinite falling from 4.9 to 1.6&nbsp;wt&nbsp;% and chlorite
+rising to 4.3. Kaolinite is still there: 15.2&nbsp;% is below 18.5, so the window does collapse
+further than the chlorite alone accounts for. It is simply small.</p>
+
+<p><code>chlorite_002_survival_from_003</code> implements this and <code>kaolinite_evidence</code>
+carries its result as <code>measured_collapse</code> <em>beside</em> the standards' route rather than
+in place of it. The two can differ by a factor of three, and which is right turns on how a heated 003
+at the detection limit is integrated &mdash; on this separate the peak-fitting integration gives
+5.9&nbsp;% where a clipped trapezoid over the same window gives 20.8. Resolving that silently would
+hide the one thing the reader has to judge, so both ranges and the sentence saying how each was
+reached go into the report.</p>
+
+<p><strong>And a defect in the width anchor.</strong> &sect;<a href="#a-37">A.37</a> anchors the
+library's peak width on the quartz 101, whose width in a clay separate is the instrument's. The
+search window is 0.45&nbsp;&deg; wide where no zero error has been applied, and the line fitted was
+whichever point in it stood tallest. On this specimen the illite 003 at 26.895&nbsp;&deg; stands at
+6149 counts against the quartz 101's 5958, so the anchor fitted the mica &mdash; and returned
+0.101&nbsp;&deg;, the mica's width, where the quartz 101's is 0.046. The routine said so in its note
+and built the library anyway. <strong>A library built at twice the true width has every strong peak
+half as tall as it should be with the right area underneath, which reads as a set of missing phases
+and is not one.</strong> The fit now chooses among the local maxima in the window by distance from
+where the <var>d</var>-spacing puts the line rather than by height, and refuses a result landing
+further than <code>QUARTZ_CENTRE_TOLERANCE</code> = 0.15&nbsp;&deg; from nominal instead of warning
+about it.</p>
+
+<p>On this specimen the corrected anchor returns 0.046&nbsp;&deg;, which is below what a
+0.5&nbsp;&deg; slit on a 240&nbsp;mm goniometer can give a powder-averaged line &mdash; so here the
+quartz is not a usable width standard either, for the same graininess that makes its scale factor
+unreliable. That is a judgement about the specimen, and it is now one the note puts in front of
+whoever is reading it rather than one the program makes silently in the wrong direction.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

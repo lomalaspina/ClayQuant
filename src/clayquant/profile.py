@@ -52,6 +52,7 @@ __all__ = [
     "CU_KALPHA2_OVER_KALPHA1",
     "KALPHA2_INTENSITY_RATIO",
     "QUARTZ_SEARCH_WINDOW",
+    "QUARTZ_CENTRE_TOLERANCE",
     "QUARTZ_UNSHIFTED_WINDOW",
     "QUARTZ_WIDTH_LIMITS",
     "LineWidth",
@@ -469,9 +470,22 @@ QUARTZ_UNSHIFTED_WINDOW = 0.45
 """The window used when no displacement has been measured yet.
 
 Wider, because with no shift the line really may be a few tenths away, and a
-window that cannot reach it finds nothing.  What the width then rests on is
-whichever peak is strongest in that stretch, so the note says how far from
-nominal the fitted line sits and the caller can judge it.
+window that cannot reach it finds nothing.  Which line inside it is fitted is
+decided by :func:`_candidate_line`, not by height alone, and the result is
+refused outright if it lands further than :data:`QUARTZ_CENTRE_TOLERANCE` from
+nominal.
+"""
+
+
+QUARTZ_CENTRE_TOLERANCE = 0.15
+"""How far the fitted quartz 101 may sit from where its d-spacing puts it, in deg.
+
+Beyond this the line fitted is some other mineral's and
+:func:`quartz_line_width` refuses it rather than returning a width measured on
+the wrong reflection.  The number is a little over one peak width, so a real
+zero error the search window did not fully absorb still passes, while the
+nearest competitor that matters - the illite/mica 003 at 3.31 A, 0.25 deg above
+the quartz 101 - does not.
 """
 
 
@@ -499,6 +513,50 @@ class LineWidth:
     eta: float
     centre: float
     note: str
+
+
+def _candidate_line(
+    angles: np.ndarray,
+    counts: np.ndarray,
+    near: np.ndarray,
+    nominal: float,
+    floor: float = 0.3,
+) -> float | None:
+    """Which maximum in the search window to fit the doublet to.
+
+    The tallest point is the obvious choice and it is wrong often enough to
+    matter.  The window has to be wide - 0.45 deg when the zero error has not
+    been corrected - and on a mica-bearing specimen that window reaches the
+    illite/mica 003 at 3.31 A, 0.25 deg above the quartz 101.  On one real
+    metabasite separate that line stood 6149 counts high against the quartz
+    101's 5958, so the tallest point *was* the mica, and the width that came
+    back was the mica's 0.101 deg rather than quartz's 0.052 deg.  A library
+    built twice too broad is a library whose every strong peak is half as tall
+    as it should be at the top, with the right area underneath - which looks
+    exactly like a set of missing phases and is not one.
+
+    So the candidates are the local maxima that are at least ``floor`` of the
+    tallest, and among those the one nearest where the d-spacing puts the line
+    wins.  Height alone decides nothing; height only decides which bumps are
+    real enough to be considered.
+    """
+    local = counts[near]
+    if local.size < 3:
+        return None
+    tallest = float(np.max(local))
+    if not np.isfinite(tallest) or tallest <= 0.0:
+        return None
+    peaks = [
+        index
+        for index in range(1, local.size - 1)
+        if local[index] >= local[index - 1]
+        and local[index] >= local[index + 1]
+        and local[index] >= floor * tallest
+    ]
+    if not peaks:
+        return float(angles[near][int(np.argmax(local))])
+    best = min(peaks, key=lambda index: abs(float(angles[near][index]) - nominal))
+    return float(angles[near][best])
 
 
 def quartz_line_width(
@@ -551,7 +609,9 @@ def quartz_line_width(
     near = np.flatnonzero(np.abs(angles - nominal) <= window)
     if near.size < 5:
         return None
-    expected = float(angles[near][int(np.argmax(counts[near]))])
+    expected = _candidate_line(angles, counts, near, nominal)
+    if expected is None:
+        return None
     try:
         partner = kalpha2_two_theta(expected + float(shift)) - float(shift)
     except ValueError:
@@ -601,6 +661,15 @@ def quartz_line_width(
     # library.  Rejecting sends the caller to the fallback, which says so.
     if width <= floor * 1.02 or width >= limits[1] * 0.98:
         return None
+    # A line this far from where the d-spacing puts it is not the quartz 101,
+    # whatever it is, and its width is some other mineral's.  This used to be a
+    # sentence in the note, which is a warning nobody has to act on; the width
+    # went into the library regardless and every strong peak came out short.
+    # Refusing sends the caller to the fallback, which states in the status line
+    # that the width was taken from the specimen's own peaks instead.
+    offset = abs(float(solved.x[0]) - nominal)
+    if offset > QUARTZ_CENTRE_TOLERANCE:
+        return None
     return LineWidth(
         fwhm=width,
         eta=float(np.clip(solved.x[2], 0.0, 1.0)),
@@ -609,10 +678,9 @@ def quartz_line_width(
             f"width {width:.3f} deg from the {reference:.2f} deg quartz K-alpha "
             f"doublet, fitted at {float(solved.x[0]):.3f} deg with the doublet "
             f"separation and 2:1 ratio held fixed"
-            + (f" - {abs(float(solved.x[0]) - nominal):.3f} deg from where the "
-               f"d-spacing puts it, which is a long way and worth checking: the "
-               f"line fitted may not be the quartz 101"
-               if abs(float(solved.x[0]) - nominal) > 0.15 else "")
+            + (f" - {offset:.3f} deg from where the d-spacing puts it, which is "
+               f"far enough to be worth checking"
+               if offset > 0.5 * QUARTZ_CENTRE_TOLERANCE else "")
         ),
     )
 
