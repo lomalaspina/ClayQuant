@@ -1991,12 +1991,18 @@ def solve_film_and_mass(
 def orientation_at_an_edge(orientation: float | None, library) -> str:
     """A warning where the clays' fitted orientation sits on the end of the axis.
 
-    This is the single most dangerous thing a clay fit can do quietly, because
-    the orientation enters the weight percent as ``r**-3``: the bottom of a
-    0.1-to-1.0 axis weighs a thousand times less per unit of measured intensity
-    than the top, so a fit that slides to 0.1 does not report less clay for a
-    reason - it reports almost no clay at all, and R_wp barely moves while it
-    happens.
+    Not because the value is implausible.  These are oriented mounts and a clay
+    at ``r = 0.1`` is exactly what they are prepared to produce, so a low
+    orientation with a good fit is a result rather than a fault.  What the edge
+    means is narrower than that: the fit may have wanted to go *past* the end of
+    the axis and been stopped there, so the number is a bound and not a
+    measurement, and nothing in the residual distinguishes the two.
+
+    It is worth saying because the orientation enters the weight percent as
+    ``r**-3``, which makes the end of the axis the one place a clay analysis can
+    fail without the residual showing it.  The reading to take is not "this value
+    is wrong" but "this value is the limit of what the library can represent, so
+    check the weight percent against something other than R_wp".
 
     Measured on one separate while choosing which feldspars to fit: eight of
     nine combinations put the clays at 0.1 and the clay total at 1.8 %, one put
@@ -2019,11 +2025,11 @@ def orientation_at_an_edge(orientation: float | None, library) -> str:
     if value <= spanned[0] + 1e-9:
         return (
             f"The clays fitted at r = {value:g}, the lowest value the library spans. "
-            f"That is a bound and not a measurement: the fit wanted to go further and "
-            f"the library stopped it. Weight percent goes as r to the power -3, so this "
-            f"is where a clay analysis collapses quietly - treat every clay percentage "
-            f"here as unreliable, and look for what else is taking their intensity "
-            f"before believing it."
+            f"An oriented mount can genuinely be this oriented, so this is not by "
+            f"itself a bad result - but it is a bound rather than a measurement, "
+            f"because the fit may have wanted to go further and been stopped. Weight "
+            f"percent goes as r to the power -3, so check the clay percentages against "
+            f"something other than R_wp before relying on them."
         )
     if value >= spanned[-1] - 1e-9:
         return (

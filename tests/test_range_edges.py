@@ -250,7 +250,10 @@ def test_an_orientation_on_the_end_of_the_axis_is_reported():
             for r in (0.1, 0.3, 0.5, 1.0)
         ],
     )
-    assert "lowest value" in orientation_at_an_edge(0.1, library)
+    message = orientation_at_an_edge(0.1, library)
+    assert "lowest value" in message
+    # and it must not claim the value is implausible: these are oriented mounts
+    assert "bound rather than a measurement" in message
     assert "randomly oriented" in orientation_at_an_edge(1.0, library)
     assert orientation_at_an_edge(0.3, library) == ""
     assert orientation_at_an_edge(None, library) == ""
