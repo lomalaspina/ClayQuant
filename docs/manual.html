@@ -158,6 +158,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-48">A.48 A prismatic mineral shows one line</a>
 <a href="#a-49">A.49 Where the attenuation coefficients come from</a>
 <a href="#a-50">A.50 Three windows, and what each of them is for</a>
+<a href="#a-51">A.51 Applying the kaolinite bound instead of reporting it</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6369,6 +6370,82 @@ range does not contain zero, which is the test: run on the two chlorite standard
 same arithmetic gives 0&ndash;53&nbsp;% and 0&ndash;0&nbsp;%, both containing zero, as a specimen
 with no kaolinite must. The drop at 7.15&nbsp;&Aring; on this separate is not accounted for by
 chlorite, and the program no longer removes kaolinite from the fit over it.</p>
+
+
+
+<h3 id="a-51">A.51 Applying the kaolinite bound instead of reporting it</h3>
+
+<p>&sect;<a href="#a-50">A.50</a> ends with a bound: on the separate that prompted it, the heated
+mount puts kaolinite at 55 to 80&nbsp;% of the 7.15&nbsp;&Aring; window. The fit was never told.
+It saw one glycolated pattern, and what it did with that window was:</p>
+
+<div class="tablewrap"><table>
+<tr><th>phase</th><th>share of the 7.15&nbsp;&Aring; window</th></tr>
+<tr><td>chlorite</td><td>55.9&nbsp;%</td></tr>
+<tr><td>C/S</td><td>27.4&nbsp;%</td></tr>
+<tr><td>kaolinite</td><td>16.2&nbsp;%</td></tr>
+</table></div>
+
+<p>Kaolinite at 16&nbsp;% where the heated mount allows 55 to 80, and the chlorite family at
+83&nbsp;% where at most 45 is available. The evidence was computed, printed on its own tab, and then
+left out of the arithmetic &mdash; which is the worst of the three places it could have been, because
+it reads as though it had been used.</p>
+
+<p><strong>The device already existed.</strong> An air-dried mount restrains the expandable clays
+through <code>ExtraObservation</code>: extra rows appended to the least-squares system, describing a
+second thing the same coefficients have to account for. The kaolinite bound is the same shape of
+statement &mdash; one row saying that the kaolinite entries, weighted by what each puts in the
+window, sum to the measured share of what is there. The midpoint of the bound is the target, because
+a least-squares row takes a value and not an interval, and the width belongs in the weight.</p>
+
+<p><strong>It had no effect, and that was a defect rather than a tuning problem.</strong> At weights
+from 1 to 100&nbsp;000 the answer did not move by a digit.
+<code>select_one_orientation</code> narrows the library to one orientation at a time, and was passing
+the constraint blocks through unsubset, so their design columns no longer lined up with the library
+they were being applied to. <code>ExtraObservation.subset</code> exists for exactly this and was not
+being called. Any restraint used with that selection &mdash; including the air-dried one &mdash; was
+silently inert.</p>
+
+<p><strong>What it does once applied.</strong> With the clays held at one orientation,
+<var>r</var>&nbsp;=&nbsp;0.3:</p>
+
+<div class="tablewrap"><table>
+<tr><th></th><th>kaolinite</th><th>chlorite</th><th>illite</th><th>kaolinite's share of the window</th><th><var>R</var><sub>wp</sub></th></tr>
+<tr><td>unconstrained</td><td>0.87&nbsp;%</td><td>7.18&nbsp;%</td><td>24.30&nbsp;%</td><td>16.2&nbsp;%</td><td>0.3878</td></tr>
+<tr><td>held to the bound</td><td>4.98&nbsp;%</td><td>4.16&nbsp;%</td><td>23.98&nbsp;%</td><td>62.7&nbsp;%</td><td>0.4899</td></tr>
+</table></div>
+
+<p>The intensity moves from the chlorite to the kaolinite, which is what the heated mount says
+happened, and the illite does not move at all. The residual gets worse by 0.10, and that is the
+price of believing a measurement the glycolated pattern cannot make. It is the same trade as
+&sect;<a href="#a-45">A.45</a> and &sect;<a href="#a-47">A.47</a>: where a measurement and a residual
+disagree about a weight percent, the residual is the weaker witness.</p>
+
+<p><strong>It requires one orientation for the whole mount, and this is not optional.</strong> Left
+free to choose orientations per composition, the fit satisfies the constraint without finding any
+more kaolinite: it slides the clays to <var>r</var>&nbsp;=&nbsp;0.1, where intensity is cheap,
+meets the 62&nbsp;% share exactly, and takes every clay weight to near zero &mdash; kaolinite
+0.27&nbsp;%, chlorite 0.22&nbsp;%, illite 1.31&nbsp;%. Weight percent goes as
+<var>r</var><sup>&minus;3</sup>, so an orientation left free is always a cheaper way to satisfy an
+intensity constraint than a composition change. The fit says so when the two settings disagree.</p>
+
+<p><strong>The weight.</strong> Fifty, as a named constant. One extra row against some eighteen
+hundred pattern points needs a weight well above one to be heard at all; 20, 50, 300 and 1000 all
+give the same answer here, so the number is not delicate. It has not been tried on a specimen whose
+bound is tighter or whose kaolinite is larger, and that is recorded where it is set rather than
+discovered later.</p>
+
+<p>The constraint is off by default. Whether to believe the heated mount is the operator's
+judgement, and giving the evidence its own tab before its own checkbox is the point.</p>
+
+<p><strong>What it does not fix.</strong> With the bound applied the separate's largest remaining
+residual is the 22.054&nbsp;&deg; reflection, which is albite's own position and 94&nbsp;% of its
+strongest line, and which the fit accounts for to about 10&nbsp;%. Adding anorthite as a second
+plagioclase does not help: the misfit over that window moves from 0.905 to 0.906 and the anorthite
+takes 1.3&nbsp;% almost entirely out of the albite. So the peak is not a plagioclase composition
+being wrong, and it is not a texture (&sect;<a href="#a-45">A.45</a>); it is a phase absent from the
+fit whose strongest lines fall in the crowded 27 to 28&nbsp;&deg; cluster, which is where the
+albite's own scale is being set from.</p>
 
 
 
