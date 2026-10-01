@@ -130,3 +130,99 @@ def test_either_window_can_establish_kaolinite():
     assert len(evidence.collapse_routes) == 2
     assert evidence.detected is True
     assert evidence.excluded is False
+
+
+def test_the_three_windows_are_distinct():
+    """Two overlapped windows and one the chlorite has to itself.
+
+    The 3.5 A doublet used to be read as a single window spanning 24.0-25.8,
+    which held both the kaolinite 002 and the chlorite 004 and so discarded the
+    one place the two minerals separate.
+    """
+    from clayquant.diagnostics import CHLORITE_004_WINDOW, KAOLINITE_002_WINDOW
+
+    assert KAOLINITE_002_WINDOW[1] <= CHLORITE_004_WINDOW[0]
+    assert KAOLINITE_002_WINDOW[0] > 24.0 and CHLORITE_004_WINDOW[1] < 25.8
+
+
+def test_the_chlorite_tail_leaks_by_a_transferable_amount():
+    """A tail is a peak shape rather than a composition, which is why this
+    transfers between two chlorites that dehydroxylate 2.2 times differently
+    while the survival fractions do not."""
+    from clayquant.diagnostics import CHLORITE_004_LEAKAGE
+
+    low, high = CHLORITE_004_LEAKAGE
+    assert 0.1 < low < high < 0.25
+    assert (high - low) / low < 0.05   # the two standards agree to a few per cent
+
+
+def _scan(peaks, seed=11, background=40.0):
+    """A full-range synthetic scan, so every window the code reads exists."""
+    import numpy as np
+
+    from clayquant.pattern import Pattern
+
+    grid = np.arange(4.0, 40.0, 0.02)
+    signal = np.zeros_like(grid)
+    for centre, height in peaks:
+        signal += height * np.exp(-4.0 * np.log(2.0) * ((grid - centre) / 0.14) ** 2)
+    rng = np.random.default_rng(seed)
+    return Pattern(two_theta=grid,
+                   intensity=rng.poisson(signal + background).astype(float))
+
+
+def test_a_pure_chlorite_is_left_with_no_kaolinite_second_order():
+    """The validation that matters: both chlorite standards carry a 7.15 A
+    reflection that collapses on heating and no kaolinite at all.
+
+    A 14.21 A chlorite, so its 004 falls at 25.07 and its tail reaches into the
+    kaolinite 002 window - which is the case the leakage constant exists for.
+    """
+    import numpy as np
+
+    from clayquant.diagnostics import kaolinite_002_area
+
+    chlorite = _scan([(6.215, 4000.0), (12.46, 8000.0),
+                      (18.73, 4200.0), (25.07, 5600.0)])
+    least, most = kaolinite_002_area(chlorite)
+    assert least == 0.0
+    assert most < 400.0
+
+
+def test_the_second_order_vetoes_a_collapsing_peak_that_is_not_kaolinite():
+    """A 7.15 A peak that collapses is kaolinite only with a 3.58 A order to
+    match.  Without the third window this could not be asked."""
+    from clayquant.diagnostics import KaoliniteEvidence
+
+    class Peak:
+        is_present = True
+
+    class Route:
+        air = Peak()
+        kaolinite_bounds = (0.56, 0.81)
+        kaolinite_detected = True
+
+    convincing = KaoliniteEvidence(
+        windows={}, references={}, shares=(), collapse=Route(),
+        second_order=(227.0, 240.0, True),
+    )
+    assert convincing.detected is True
+
+    unsupported = KaoliniteEvidence(
+        windows={}, references={}, shares=(), collapse=Route(),
+        second_order=(227.0, 0.0, False),
+    )
+    assert unsupported.detected is False
+
+
+def test_too_little_kaolinite_to_show_a_second_order_is_not_a_veto():
+    """Absence of a second order only counts where one would have been visible."""
+    import numpy as np
+
+    from clayquant.diagnostics import second_order_check
+
+    # a 001 just clear of the noise, whose 002 would be a quarter of it and so
+    # buried: its absence is uninformative and must not be read as a veto
+    faint = _scan([(6.215, 400.0), (12.38, 150.0), (18.73, 420.0), (25.07, 560.0)])
+    _, _, consistent = second_order_check(faint)
+    assert consistent is True

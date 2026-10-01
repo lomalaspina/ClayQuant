@@ -52,6 +52,11 @@ __all__ = [
     "CHLORITE_002_SURVIVAL",
     "CHLORITE_004_SURVIVAL",
     "CHLORITE_003_WINDOW",
+    "CHLORITE_004_WINDOW",
+    "chlorite_004_window",
+    "MINIMUM_DOUBLET_SEPARATION",
+    "CHLORITE_004_LEAKAGE",
+    "KAOLINITE_002_TO_001",
     "CHLORITE_RATIOS",
     "ChloriteShare",
     "KAOLINITE_002_WINDOW",
@@ -595,8 +600,51 @@ def smectite_swelling(
 # Separating the chlorite from the kaolinite without heating anything
 # --------------------------------------------------------------------------
 
-KAOLINITE_002_WINDOW = (24.0, 25.8)
-"""2theta window around the kaolinite 002 / chlorite 004 reflection at ~3.58 A."""
+KAOLINITE_002_WINDOW = (24.60, 25.00)
+"""2theta window around the kaolinite 002 at 3.579 A, to the low-angle side.
+
+This used to span 24.0 to 25.8 degrees and so held the chlorite 004 as well,
+which threw away the one place the two minerals are *separable*.  Kaolinite's
+second order is at 3.579 A and a chlorite's fourth at 3.52-3.56, which is
+0.3 degrees away - broad clay peaks overlap there but they are not one peak, and
+reading them as one discards the classical kaolinite/chlorite deconvolution.
+"""
+
+CHLORITE_004_WINDOW = (25.00, 25.45)
+"""2theta window around the chlorite 004 at ~3.54 A, to the high-angle side.
+
+The third window, and the point of the split: with the chlorite 001 and 003 it
+makes three places a chlorite can be measured where no kaolinite reaches, against
+two where the two minerals overlap.
+"""
+
+KAOLINITE_002_TO_001 = (0.21, 0.29)
+"""A kaolinite's 002 area as a share of its 001, from the two pure standards.
+
+Measured the same way the diagnostic measures them, on Kaolinite_12 and
+Kaolinite_43: 0.213 and 0.291.  It is what makes the second order a *test* of the
+first rather than a second opinion about it - a 7.15 A reflection that collapses
+on heating is kaolinite only if a 3.58 A reflection of about a quarter its area
+is there too, and a specimen with a strong 001 and no 002 at all has something
+else at 7.15 A.
+"""
+
+CHLORITE_004_LEAKAGE = (0.166, 0.169)
+"""What share of its 004 window a kaolinite-free chlorite puts in the 002 window.
+
+The two windows above are adjacent and clay reflections are broad, so splitting
+them does not separate the minerals by itself: the chlorite 004's low-angle tail
+reaches into the kaolinite window and would be read as kaolinite.  How much it
+reaches is measurable, on the same two standards that carry no kaolinite, and it
+is remarkably stable - 0.166 on the clinochloritic Chlorite and 0.169 on the
+iron-rich Prochlorite, two specimens that differ by 2.2 times in how much of the
+004 survives heating.  A tail is a peak shape rather than a composition, which is
+why it transfers where the survival fractions do not.
+
+So the kaolinite 002 area is the 002 window less this share of the 004 window,
+and a specimen where that comes out near zero has no kaolinite second order
+whatever its 7.15 A window is doing.
+"""
 
 CHLORITE_001_WINDOW = (5.6, 6.9)
 """Around the chlorite 001 at 14.2 A, which no kaolinite reflection reaches."""
@@ -607,10 +655,18 @@ CHLORITE_003_WINDOW = (18.1, 19.4)
 CHLORITE_RATIOS: dict[tuple[str, str], tuple[float, float]] = {
     ("7.15", "001"): (1.862, 2.289),
     ("7.15", "003"): (1.691, 2.360),
-    ("3.58", "001"): (1.133, 1.696),
-    ("3.58", "003"): (1.253, 1.436),
 }
-"""How much a chlorite puts at 7.15 and 3.58 A per unit of its 001 or 003.
+"""How much a chlorite puts at 7.15 A per unit of its 001 or 003.
+
+The 3.58 A entries are gone, and their absence is the point of the three-window
+split rather than a loss.  They existed to *infer* the chlorite's contribution to
+a 3.58 A window that held the chlorite 004 as well as the kaolinite 002.  Now
+that the window is split at the position this specimen's own chlorite 001 puts
+its fourth order (:func:`chlorite_004_window`), that contribution is measured
+next door instead of inferred, which is the better of the two by the same
+argument that prefers measuring a chlorite 001 to assuming one.  The 7.15 A
+window has no such neighbour - kaolinite 001 and chlorite 002 are 0.10 deg
+apart, inside a peak width - so there the inference stays.
 
 Measured on two chlorite standards containing no kaolinite - a clinochloritic
 Chlorite and an iron-rich Prochlorite - as integrated areas of the air-dried
@@ -692,6 +748,15 @@ class KaoliniteEvidence:
     collapse: "KaoliniteResult | None" = None
     second_collapse: "KaoliniteResult | None" = None
     """The same collapse test on the 3.58 A window, which is independent of it."""
+
+    second_order: tuple[float, float, bool] | None = None
+    """``(expected, found, consistent)`` from :func:`second_order_check`.
+
+    The third window's contribution.  A 7.15 A reflection that collapses on
+    heating is kaolinite only if the 3.58 A second order is there in proportion,
+    and the chlorite 004 window is what makes that second order measurable
+    rather than blended with a chlorite's.
+    """
 
     @property
     def usable(self) -> tuple[ChloriteShare, ...]:
@@ -775,6 +840,12 @@ class KaoliniteEvidence:
         kaolinite in it, and no amount of disagreement between the ratio routes
         makes that untrue.
         """
+        # The second order vetoes, and it has to: both chlorite standards have a
+        # 7.15 A reflection that collapses on heating and neither contains any
+        # kaolinite.  The collapse test alone passes them; the missing 3.58 A
+        # order is what catches them.
+        if self.second_order is not None and not self.second_order[2]:
+            return False
         for route in self.collapse_routes:
             if route.kaolinite_detected:
                 return True
@@ -831,6 +902,22 @@ class KaoliniteEvidence:
             )
         for route in self.collapse_routes:
             lines.append("  " + route.summary())
+        if self.second_order is not None:
+            expected, found, ok = self.second_order
+            if ok:
+                lines.append(
+                    f"  The 3.58 A second order holds {found:.4g} against the "
+                    f"{expected:.4g} a kaolinite with this 001 would show, once the "
+                    f"chlorite 004's tail is removed: consistent."
+                )
+            else:
+                lines.append(
+                    f"  The 3.58 A second order holds {found:.4g} against the "
+                    f"{expected:.4g} a kaolinite with this 001 would show, once the "
+                    f"chlorite 004's tail is removed. A 7.15 A reflection without a "
+                    f"second order is not kaolinite - both chlorite standards collapse "
+                    f"at 7.15 A too, and this is what tells them apart."
+                )
         return "\n".join(lines)
 
 
@@ -953,4 +1040,115 @@ def kaolinite_evidence(
         shares=tuple(shares),
         collapse=collapse,
         second_collapse=second_collapse,
+        second_order=second_order_check(air, wavelength=wavelength),
     )
+
+
+MINIMUM_DOUBLET_SEPARATION = 0.22
+"""How far apart the kaolinite 002 and chlorite 004 must be to be separated, in deg.
+
+The split between the two windows cannot be a fixed angle, because the chlorite
+004 is wherever that chlorite's 001 puts it: a 14.1 A chlorite has it at
+25.25 deg, clear of the kaolinite 002 at 24.86, and a 14.4 A chlorite at 24.72 -
+on the wrong side of it.  Deriving the window from the measured chlorite 001
+handles the position; this handles the cases where no window would help, because
+the two reflections are closer together than the width of either.
+
+Set at 0.22 deg, which is above the 0.14 deg width of a clay reflection on this
+instrument and below the 0.29 deg the specimens that motivated the split showed.
+Where the separation is smaller the deconvolution is not attempted and the second
+order is reported as untestable rather than as absent - an unresolved doublet is
+missing information, not evidence.
+"""
+
+
+def chlorite_004_window(
+    pattern: Pattern,
+    wavelength: float = CU_KA1,
+    default: tuple[float, float] = CHLORITE_004_WINDOW,
+) -> tuple[float, float] | None:
+    """Where this specimen's chlorite 004 is, from where its own 001 is.
+
+    A chlorite's fourth order sits at a quarter of its 001 spacing, and that
+    spacing varies enough between chlorites to move the reflection across the
+    kaolinite 002.  Measuring it rather than assuming it is what lets the two be
+    split at all.  ``None`` where there is no chlorite 001 to measure.
+    """
+    first = measure_peak(pattern, CHLORITE_001_WINDOW, wavelength=wavelength)
+    if not first.is_present or first.d_spacing <= 0.0:
+        return default
+    d004 = first.d_spacing / 4.0
+    argument = wavelength / (2.0 * d004)
+    if not -1.0 < argument < 1.0:
+        return default
+    centre = math.degrees(2.0 * math.asin(argument))
+    half = 0.5 * (default[1] - default[0])
+    return (centre - half, centre + half)
+
+
+def kaolinite_002_area(
+    pattern: Pattern,
+    kaolinite_window: tuple[float, float] = KAOLINITE_002_WINDOW,
+    chlorite_window: tuple[float, float] | None = None,
+    leakage: tuple[float, float] = CHLORITE_004_LEAKAGE,
+    wavelength: float = CU_KA1,
+) -> tuple[float, float]:
+    """Kaolinite's 002 area with the chlorite 004's tail removed, as a range.
+
+    The third window is what makes this possible.  A chlorite can be measured
+    where no kaolinite reaches - its 001, its 003 and the high-angle side of the
+    3.5 A doublet - and the last of those says how much of the doublet's
+    low-angle side is the chlorite's tail rather than kaolinite's second order.
+
+    Returns ``(least, most)`` from the two ends of :data:`CHLORITE_004_LEAKAGE`,
+    clipped at zero.  A range that reaches zero means the 002 window holds
+    nothing the chlorite does not account for.
+    """
+    if chlorite_window is None:
+        chlorite_window = chlorite_004_window(pattern, wavelength=wavelength)
+    kao = measure_peak(pattern, kaolinite_window, wavelength=wavelength)
+    chl = measure_peak(pattern, chlorite_window, wavelength=wavelength)
+    kao_area = kao.area if kao.is_present else 0.0
+    chl_area = chl.area if chl.is_present else 0.0
+    high_leak, low_leak = max(leakage), min(leakage)
+    return (
+        float(max(0.0, kao_area - high_leak * chl_area)),
+        float(max(0.0, kao_area - low_leak * chl_area)),
+    )
+
+
+def second_order_check(
+    pattern: Pattern,
+    first_window: tuple[float, float] = KAOLINITE_001_WINDOW,
+    ratio: tuple[float, float] = KAOLINITE_002_TO_001,
+    wavelength: float = CU_KA1,
+    **kwargs,
+) -> tuple[float, float, bool]:
+    """Whether the 3.58 A second order is consistent with the 7.15 A first.
+
+    Three windows make this possible, which two could not: the chlorite 004
+    window says how much of the 3.5 A doublet is the chlorite's tail, leaving
+    what is actually kaolinite's second order, and that can then be held against
+    the first order in the overlapped 7.15 A window.
+
+    Returns ``(expected_least, measured_most, consistent)``.  ``consistent`` is
+    False only when the first order is strong enough that a second order would
+    have to be visible and none is - a specimen can have too little kaolinite to
+    show a second order, and that is not evidence against the first.
+    """
+    # An unresolved doublet is missing information rather than evidence, so the
+    # check stands down where the two reflections are closer than their width.
+    window = chlorite_004_window(pattern, wavelength=wavelength)
+    kaolinite_centre = 0.5 * sum(KAOLINITE_002_WINDOW)
+    if abs(0.5 * sum(window) - kaolinite_centre) < MINIMUM_DOUBLET_SEPARATION:
+        return 0.0, 0.0, True
+    first = measure_peak(pattern, first_window, wavelength=wavelength)
+    least, most = kaolinite_002_area(pattern, wavelength=wavelength, **kwargs)
+    if not first.is_present or first.area <= 0.0:
+        return 0.0, float(most), True
+    expected_least = min(ratio) * first.area
+    # Below this the second order would sit in the noise whatever is there, so
+    # its absence says nothing.
+    if expected_least < 3.0 * first.noise:
+        return float(expected_least), float(most), True
+    return float(expected_least), float(most), bool(most >= 0.5 * expected_least)
