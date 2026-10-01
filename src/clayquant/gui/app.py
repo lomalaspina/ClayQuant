@@ -133,7 +133,11 @@ from ..plots import (
 )
 from ..profile import PeakShape
 from ..quantification import Calibration, quantify
-from ..treatment import expandable_bound, shift_evidence
+from ..treatment import (
+    expandable_bound,
+    kaolinite_share_constraint,
+    shift_evidence,
+)
 from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
@@ -636,6 +640,17 @@ def gui_instrument(
         ),
     )
 
+
+KAOLINITE_CONSTRAINT_WEIGHT = 50.0
+"""How hard the heated mount's kaolinite share is held against the pattern.
+
+One extra least-squares row against some eighteen hundred pattern points, so it
+needs a weight well above one to be heard at all: at 1 it changed nothing
+measurable.  Fifty is inside a plateau - 20, 50, 300 and 1000 all give the same
+answer on the separate it was tuned on, the share landing at 63 % against a
+measured 55 to 80 - so the number is not delicate.  It has not been tested on a
+specimen whose bound is tighter or whose kaolinite is larger.
+"""
 
 HABIT_ORIENTATIONS: tuple[float, ...] = (0.3, 0.5, 0.7, 1.0)
 """March-Dollase values spanned for an accompanying mineral that has a habit.
@@ -1284,8 +1299,26 @@ def kaolinite_tab() -> html.Div:
                     ),
                     html.Div(
                         "Off by default: read the evidence first and decide whether you "
-                        "believe it. With it on, the fit is not allowed more kaolinite "
-                        "than this bound permits.",
+                        "believe it. With it on, the fit is held to the share of the "
+                        "7.15 \u00c5 window the three mounts measured \u2014 not merely "
+                        "capped at it. That matters in both directions: left only "
+                        "reported, a fit gave kaolinite 16 % of that window where the "
+                        "heated mount allowed 59 to 82, and the chlorite took 83 % where "
+                        "at most 41 was available. Held to it, the same fit moved "
+                        "kaolinite from 0.9 to 5.0 wt % and chlorite from 7.2 to 4.2, at "
+                        "a cost of 0.10 in Rwp \u2014 which is what believing a "
+                        "measurement the glycolated pattern cannot make is worth.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    html.Div(
+                        "Use it with \u201cone orientation for the whole mount\u201d. A "
+                        "fit whose clays are free to take different orientations can "
+                        "satisfy this constraint by sliding to the bottom of the "
+                        "orientation axis rather than by finding more kaolinite: "
+                        "intensity is cheap there, weight percent goes as r to the "
+                        "power -3, and on one separate that met the bound exactly while "
+                        "taking every clay weight to near zero. The fit says so if the "
+                        "two settings disagree.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
                     ),
                     html.Button("Analyse", id="kao-run", n_clicks=0, style={"marginTop": "10px"}),
@@ -3269,12 +3302,41 @@ def register_callbacks(app: Dash) -> None:
                     kaolinite_note = f"The kaolinite evidence could not be read: {exc}"
                 else:
                     least, most = evidence.bounds
+                    # The heated mount measures what the glycolated one cannot,
+                    # and the share it measures is applied rather than reported:
+                    # left only reported, a fit gave kaolinite 16 % of the
+                    # 7.15 A window where the heated mount allowed 59 to 82.
+                    # Prefer the collapse routes, which are a measurement, over
+                    # the chlorite-ratio envelope, which is an inference.
+                    bound = (least, most)
+                    for route in evidence.collapse_routes:
+                        low, high = route.kaolinite_bounds
+                        if low == low and high == high:
+                            bound = (low, high)
+                            break
                     if evidence.detected:
-                        kaolinite_note = (
-                            f"Kaolinite is established by the three mounts - "
-                            f"{100.0 * least:.0f} to {100.0 * most:.0f}% of the "
-                            f"overlapped intensity - so it is fitted freely."
+                        block = kaolinite_share_constraint(
+                            state.corrected(), library, bound,
+                            background=state.background_fit if use_background else None,
+                            weight=KAOLINITE_CONSTRAINT_WEIGHT,
                         )
+                        if block is not None:
+                            constraints.append(block)
+                        kaolinite_note = (
+                            f"Kaolinite is established by the three mounts at "
+                            f"{100.0 * bound[0]:.0f} to {100.0 * bound[1]:.0f}% of the "
+                            f"7.15 \u00c5 window, and the fit is held to it."
+                        )
+                        if exclusive != "mount":
+                            kaolinite_note += (
+                                " The clays are not on one orientation, though, and "
+                                "without that the fit can satisfy this by sliding to "
+                                "the bottom of the orientation axis instead, where "
+                                "intensity is cheap - on one separate that met the "
+                                "constraint exactly while taking every clay weight to "
+                                "near zero. Use \u201cone orientation for the whole "
+                                "mount\u201d with this."
+                            )
                     elif evidence.excluded:
                         # Only where the evidence puts an upper bound near zero.
                         # Removing the phase asserts that there is none of it,

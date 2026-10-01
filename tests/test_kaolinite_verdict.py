@@ -338,3 +338,29 @@ def test_the_constraint_blocks_are_subset_with_the_library():
 
     source = inspect.getsource(select_one_orientation)
     assert "block.subset(indices)" in source
+
+
+def test_the_constraint_is_reachable_from_the_fit_panel():
+    """It was a function nothing called.  The evidence being computed, reported
+    and then not applied is the failure this closes."""
+    import inspect
+
+    from clayquant.gui import app
+
+    source = inspect.getsource(app)
+    assert "kaolinite_share_constraint(" in source
+    assert "constraints.append(block)" in source
+    # and the weight is a named constant rather than a number in the call
+    assert app.KAOLINITE_CONSTRAINT_WEIGHT > 1.0
+
+
+def test_the_collapse_route_is_preferred_over_the_ratio_envelope():
+    """A measurement before an inference: the heated mount measures the share,
+    where the chlorite-ratio routes infer it through a ratio that varies
+    between chlorites."""
+    import inspect
+
+    from clayquant.gui import app
+
+    source = inspect.getsource(app)
+    assert "for route in evidence.collapse_routes:" in source
