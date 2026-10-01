@@ -190,3 +190,19 @@ def test_the_real_database_gives_albite_a_pole_and_quartz_none():
     db = load_phase_database(path)
     assert may_orient("Quartz", db["Quartz"]) is None
     assert may_orient("Albite", db["Albite"]) is not None
+
+
+def test_the_habit_orientation_range_stays_narrow():
+    """Measured, not assumed.
+
+    Widening it from 0.3 to 0.1 sent every feldspar and both amphiboles to the
+    new lowest value, made R_wp worse (38.82 to 38.99 %) and took the albite
+    from 6.8 to 0.5 wt %.  Mass goes as r**-3, so an extreme orientation buys
+    intensity at almost no mass and a fit free to choose it will; the residual
+    does not object.  A mineral pinned at the bottom of this range is reporting
+    that its orientation is unmeasured, not that it equals that value.
+    """
+    from clayquant.gui.app import HABIT_ORIENTATIONS
+
+    assert min(HABIT_ORIENTATIONS) >= 0.3
+    assert max(HABIT_ORIENTATIONS) == 1.0

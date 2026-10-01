@@ -637,7 +637,28 @@ def gui_instrument(
 
 
 HABIT_ORIENTATIONS: tuple[float, ...] = (0.3, 0.5, 0.7, 1.0)
-"""March-Dollase values spanned for an accompanying mineral that has a habit."""
+"""March-Dollase values spanned for an accompanying mineral that has a habit.
+
+It stops at 0.3 deliberately, and the reason is measured rather than assumed.
+Widening it to 0.1 was tried, on the argument that a feldspar flake settling on
+the plate has no reason to be less oriented than a clay platelet and that a
+mineral choosing the lowest value offered has had its axis run out of room.  The
+result refutes the argument: every feldspar and both amphiboles went straight to
+the new lowest value, R_wp got *worse* - 38.82 to 38.99 % - and the albite fell
+from 6.8 to 0.5 wt % while the orthoclase fell from 4.9 to 0.4.
+
+The mechanism is the one that put a quartz at 63.7 wt % in Sec. A.45.  Mass goes
+as ``r**-3``, so an extreme orientation buys measured intensity at almost no
+mass, and a fit free to choose it will, because nothing in the residual objects.
+The orientation of an accompanying mineral is simply not determined by these
+patterns; given more room it runs further rather than settling, and the weight
+percent follows it down.
+
+So the range is kept narrow on purpose.  A mineral that pins to 0.3 here is
+reporting that its orientation is unmeasured, not that it is 0.3, and the honest
+response is to read its weight percent as uncertain rather than to widen the
+axis until the number looks better.
+"""
 
 
 def habit_of(name: str, crystal) -> tuple[float, float, float] | None:
