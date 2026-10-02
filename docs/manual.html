@@ -160,6 +160,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-50">A.50 Three windows, and what each of them is for</a>
 <a href="#a-51">A.51 Applying the kaolinite bound instead of reporting it</a>
 <a href="#a-52">A.52 Three residuals that were not missing phases</a>
+<a href="#a-53">A.53 The kaolin standards, and what they were really saying</a>
+<a href="#a-54">A.54 Restraining both halves of a shared window</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6562,6 +6564,85 @@ about it.</p>
 quartz is not a usable width standard either, for the same graininess that makes its scale factor
 unreliable. That is a judgement about the specimen, and it is now one the note puts in front of
 whoever is reading it rather than one the program makes silently in the wrong direction.</p>
+
+
+<h3 id="a-53">A.53 The kaolin standards, and what they were really saying</h3>
+
+<p>A library that cannot fit the standard it was built from is not describing that
+standard. Three kaolin-group separates &mdash; Kaolinite 12, Kaolinite 43 and Dickite 7, the same
+mineral from three sources &mdash; put their 001 where the library had no column, and the dickite
+fitted at R<sub>wp</sub> 94.5&nbsp;%: the calculated 001 reached 10,000 counts against a measured
+160,000, and the fit reported 32&nbsp;% chlorite/smectite and 18&nbsp;% illite/smectite in a
+specimen that is one mineral. Two separate things were wrong, and only one of them was the
+library.</p>
+
+<p><strong>Most of it was the mount.</strong> Reading each standard order by order:</p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th>d(001) from the 001</th><th>from the 002</th><th>from the 003</th></tr>
+<tr><td>Kaolinite 12</td><td>7.197&nbsp;&Aring;</td><td>7.161</td><td>7.148</td></tr>
+<tr><td>Kaolinite 43</td><td>7.190</td><td>7.161</td><td>7.142</td></tr>
+<tr><td>Dickite 7</td><td>7.215</td><td>7.189</td><td>7.182</td></tr>
+</table></div>
+
+<p>An apparent spacing that falls with angle is not a spacing. A specimen sitting a distance
+<var>s</var> off the focusing circle displaces every line by &minus;(2<var>s</var>/<var>R</var>)
+cos&thinsp;&theta;, which is largest at low angle and vanishes at high &mdash; exactly this shape.
+Solving one displacement per mount from the 001 and the 002 gives 0.25, 0.20 and 0.18&nbsp;mm, the
+thickness of a smear on a glass disc, and brings <em>all three orders of all three standards</em>
+into agreement:</p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th><var>s</var></th><th>corrected d(001), 001 / 002 / 003</th><th>spread</th></tr>
+<tr><td>Kaolinite 12</td><td>0.25&nbsp;mm</td><td>7.1272 / 7.1272 / 7.1269&nbsp;&Aring;</td><td>0.0004&nbsp;&Aring;</td></tr>
+<tr><td>Kaolinite 43</td><td>0.20&nbsp;mm</td><td>7.1345 / 7.1345 / 7.1254</td><td>0.0092</td></tr>
+<tr><td>Dickite 7</td><td>0.18&nbsp;mm</td><td>7.1648 / 7.1648 / 7.1668</td><td>0.0020</td></tr>
+</table></div>
+
+<p>So the library's kaolinite, calculated at 7.154&nbsp;&Aring;, was never a tenth of an
+&aring;ngstr&ouml;m out. <strong>The program has no displacement correction</strong> &mdash; only a
+constant zero error, which is a different function of angle and cannot absorb this &mdash; and that
+is the larger of the two faults. It is recorded here rather than fixed.</p>
+
+<p><strong>And some of it was the library.</strong> The corrected spacings are 7.127, 7.135 and
+7.165&nbsp;&Aring;: a real spread of about 0.04&nbsp;&Aring;, with the published structure near its
+top rather than in its middle. Every other clay in the library spans its basal spacing &mdash; illite
+9.90 to 10.10, chlorite 14.05 to 14.35 &mdash; on the reasoning that a refined structure is one
+specimen's and not the mineral's. The kaolinites were left out of that on the reasoning that a
+kaolinite has no interlayer to vary, which is true of the mineral and false of the measurement, and
+it left them with no freedom at all while a chlorite/smectite at 14.2&nbsp;&Aring; stood ready to
+take the misfit. The axis is now 7.10 to 7.22&nbsp;&Aring; in steps of 0.03 &mdash; finer than the
+0.05 that would match the other phases proportionally, because 0.05 is one step wider than the whole
+spread these three standards show, and the basal reflection is the only strong line a kaolinite
+has.</p>
+
+<p>Both corrections together are what the diagnostic windows need: the 7.15&nbsp;&Aring; window is
+shared with a chlorite 002, and a kaolinite column standing half a peak width from the measured peak
+cannot be told from a chlorite one that stands on it.</p>
+
+<h3 id="a-54">A.54 Restraining both halves of a shared window</h3>
+
+<p>&sect;<a href="#a-51">A.51</a> restrains kaolinite's share of the 7.15&nbsp;&Aring; window. It
+says nothing about the chlorite, and a window is not a partition unless both sides of it are named:
+on the separate the restraint was built for, kaolinite held to 16&nbsp;% of the window sat beside a
+chlorite family taking 83&nbsp;% of the same window, which no division of one peak allows. The
+restraint now carries a second row saying the chlorite entries must take the complement, which the
+heated mount measures in the same breath as the first &mdash; what survives 550&nbsp;&deg;C in that
+window is the chlorite and what disappears is the kaolinite, so the two shares come from one
+measurement and neither is free.</p>
+
+<p>The chlorite row names the chlorite/smectite entries as well as the discrete chlorite, and that
+is not a detail. A restraint naming only the discrete chlorite is satisfied by moving the intensity
+into C/S, which is precisely how a fit comes to report an expandable component that is not there
+(&sect;<a href="#a-53">A.53</a>).</p>
+
+<p>Both rows are in <em>peak area</em>, not in weight per cent. The restraint says how the window is
+divided; what that works out to as a mass depends on the orientation and the structure factors,
+which the fit is still free to settle. That distinction matters because the two are not
+proportional: the March&ndash;Dollase factor scales a basal series as <var>r</var><sup>&minus;3</sup>
+(&sect;<a href="#a-24">A.24</a>), so the same share of the same peak is a different mass at every
+texture the fit might choose, and restraining the mass instead would be asserting a texture nobody
+measured.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

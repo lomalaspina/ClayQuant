@@ -1231,8 +1231,9 @@ def kaolinite_share_constraint(
     window: tuple[float, float] = (11.6, 13.2),
     background=None,
     weight: float = 1.0,
+    constrain_chlorite: bool = True,
 ) -> "ExtraObservation | None":
-    """Require kaolinite to take the share of the 7.15 A window the mounts measured.
+    """Require the 7.15 A window to be split the way the mounts measured it.
 
     The three mounts measure something the glycolated pattern cannot: heating
     destroys kaolinite and leaves chlorite, so what disappears from the
@@ -1243,11 +1244,26 @@ def kaolinite_share_constraint(
     claim 83 % where at most 41 was available.
 
     This is the same device the air-dried mount uses to restrain the expandable
-    clays: one extra row saying that the kaolinite entries, weighted by how much
+    clays: extra rows saying that the entries of a phase, weighted by how much
     each puts in the window, must sum to the measured share of what is there.
-    The midpoint of ``bounds`` is the target, because a least-squares row takes a
-    value and not an interval; the width is the uncertainty on it and belongs in
-    ``weight``, which a caller sets from how far apart the routes came out.
+    Everything here is in peak area, not in weight per cent - the restraint is on
+    how the window is divided, and what that works out to as a mass depends on
+    the orientation and the structure factors, which the fit is still free to
+    settle.  The midpoint of ``bounds`` is the target, because a least-squares
+    row takes a value and not an interval; the width is the uncertainty on it and
+    belongs in ``weight``, which a caller sets from how far apart the routes came
+    out.
+
+    **Both halves of the split are restrained, not just kaolinite.** Saying only
+    what kaolinite may take leaves the chlorite free, and a window is not a
+    partition unless both sides of it are named: on the separate this was built
+    for, kaolinite held to 16 per cent of the window sat beside a chlorite family
+    taking 83 per cent of the same window, which no division of one peak allows.
+    The second row says the chlorite entries must take the complement, which the
+    heated mount measures in the same breath as the first - what survives 550 C
+    in that window is the chlorite, and what disappears is the kaolinite, so the
+    two shares come from one measurement and neither is free.  Pass
+    ``constrain_chlorite=False`` for the one-sided restraint.
 
     ``None`` where the library has no kaolinite or the window holds nothing, so a
     caller can pass the result straight through.
@@ -1269,23 +1285,42 @@ def kaolinite_share_constraint(
     if window_area <= 0.0:
         return None
 
-    design = np.zeros((1, len(library.entries)), dtype=float)
-    any_kaolinite = False
-    for column, entry in enumerate(library.entries):
-        if not entry.phase.startswith("kaolinite"):
-            continue
-        any_kaolinite = True
-        design[0, column] = float(np.trapezoid(
-            np.asarray(entry.intensity, dtype=float)[inside], grid[inside]
-        ))
-    if not any_kaolinite or not np.any(design > 0.0):
+    def areas_of(matches) -> np.ndarray:
+        """Each entry's area inside the window, zero for the phases that fail ``matches``."""
+        row = np.zeros(len(library.entries), dtype=float)
+        for column, entry in enumerate(library.entries):
+            if not matches(entry.phase):
+                continue
+            row[column] = float(np.trapezoid(
+                np.asarray(entry.intensity, dtype=float)[inside], grid[inside]
+            ))
+        return row
+
+    kaolinite = areas_of(lambda phase: phase.startswith("kaolinite"))
+    if not np.any(kaolinite > 0.0):
         return None
 
     least, most = sorted(float(v) for v in bounds)
-    target = np.array([0.5 * (least + most) * window_area], dtype=float)
+    rows = [kaolinite]
+    targets = [0.5 * (least + most) * window_area]
+    name = f"kaolinite {100 * least:.0f}-{100 * most:.0f}% of the 7.15 A window"
+
+    if constrain_chlorite:
+        # Everything in this window that is not kaolinite is a chlorite 002,
+        # including the chlorite/smectite entries, which carry one: a restraint
+        # that named only the discrete chlorite would be satisfied by moving the
+        # intensity into C/S, which is how the fit came to report an expandable
+        # component that was not there.
+        chlorite = areas_of(lambda phase: phase == "chlorite" or phase.startswith("C/S"))
+        if np.any(chlorite > 0.0):
+            rows.append(chlorite)
+            targets.append((1.0 - 0.5 * (least + most)) * window_area)
+            name += (f", chlorite the remaining "
+                     f"{100 * (1.0 - most):.0f}-{100 * (1.0 - least):.0f}%")
+
     return ExtraObservation(
-        target=target,
-        design=design,
+        target=np.asarray(targets, dtype=float),
+        design=np.vstack(rows),
         weight=float(weight),
-        name=f"kaolinite {100 * least:.0f}-{100 * most:.0f}% of the 7.15 A window",
+        name=name,
     )

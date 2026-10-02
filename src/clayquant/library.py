@@ -315,8 +315,10 @@ NORMALIZATION_FLOOR = 4.0
 HOST_THICKNESSES: dict[str, tuple[float, ...]] = {
     "illite": (9.90, 9.95, 10.02, 10.10),
     "chlorite": (14.05, 14.15, 14.25, 14.35),
+    "kaolinite_1M": (7.10, 7.13, 7.16, 7.19, 7.22),
+    "kaolinite_2M": (7.10, 7.13, 7.16, 7.19, 7.22),
 }
-"""Layer repeat distances in A spanned for each interstratification host.
+"""Layer repeat distances in A spanned for each discrete phase.
 
 Neither spacing is a constant.  Illite runs from about 9.90 to 10.10 A with
 interlayer potassium content and hydration, and chlorite from about 14.0 to
@@ -334,6 +336,46 @@ move them.  On M_26_1041 the fit responded by using a chlorite/smectite entry at
 14.2 A as a stand-in for chlorite, which is worse than a bad fit: it reports an
 expandable component that is not there.  Widening this table to reach 14.05 A
 recovered the chlorite as itself and took Rwp from 36.9 to 33.3 per cent.
+
+The kaolinites were left off this table for a long time, on the reasoning that
+a kaolinite has no interlayer to vary.  The spread is smaller than the other two
+and it is not zero: with the specimen displacement solved out of them (below),
+the three kaolin standards measured here sit at 7.127, 7.135 and 7.165 A against
+structures calculated at 7.154, so the range is about 0.04 A wide and the
+published structure is near its top rather than in its middle.  The step here is
+0.03 A rather than the 0.05 A that would match the other two phases
+proportionally, because a 0.05 A step cannot tell these three standards apart at
+all - it is one step wide - and the basal reflection is the only strong line a
+kaolinite has.
+
+What that cost is the same failure the chlorite had, and worse because there is
+no second kaolinite to fall back on.  A pure dickite standard - the specimen
+these very ranges are measured from - fitted at Rwp 94.5 per cent, the
+calculated 001 reaching 10,000 counts against a measured 160,000, because the
+nearest column the library held stood a full peak width away and non-negative
+least squares could not use it at all.  The fit then paid for the misfit by
+reporting 32 per cent chlorite/smectite and 18 per cent illite/smectite in a
+specimen that is one mineral.  A library that cannot fit the standard it was
+built from is not describing the standard.
+
+**Most of the apparent discrepancy was not the structures.** Measured raw, the
+three standards put their 001 at 7.197, 7.190 and 7.215 A - but their 002 at
+7.161, 7.161 and 7.189, and their 003 at 7.148, 7.142 and 7.182.  An apparent
+spacing that falls with angle is not a spacing; it is a specimen sitting off the
+focusing circle, which displaces every line by ``-(2s/R) cos(theta)`` and so
+most at low angle.  One displacement per mount - 0.25, 0.20 and 0.18 mm, the
+thickness of a smear on a glass disc - brings all three orders of all three
+standards into agreement to between 0.0004 and 0.009 A.  The library's kaolinite
+was never a tenth of an angstrom out; the mounts were a fifth of a millimetre
+proud.  Nothing in the program corrects for that yet, which is why it is written
+down here.
+
+One caution that comes with the axis: a kaolinite at 7.10 A and a chlorite 002 at
+the same spacing are very nearly the same column, so widening this downward
+widens the kaolinite/chlorite ambiguity the three diagnostic windows exist to
+resolve.  That is a property of the two minerals and not of the table, and it is
+what the window-split restraint of :func:`clayquant.treatment.kaolinite_share_constraint`
+is for.
 """
 
 CSDS_MEANS: tuple[float, ...] = (5.0, 15.0, 50.0)
