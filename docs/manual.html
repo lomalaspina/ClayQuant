@@ -162,6 +162,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-52">A.52 Three residuals that were not missing phases</a>
 <a href="#a-53">A.53 The kaolin standards, and what they were really saying</a>
 <a href="#a-54">A.54 Restraining both halves of a shared window</a>
+<a href="#a-55">A.55 Calibrating 2&theta; without quartz</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6585,12 +6586,12 @@ library.</p>
 <tr><td>Dickite 7</td><td>7.215</td><td>7.189</td><td>7.182</td></tr>
 </table></div>
 
-<p>An apparent spacing that falls with angle is not a spacing. A specimen sitting a distance
-<var>s</var> off the focusing circle displaces every line by &minus;(2<var>s</var>/<var>R</var>)
-cos&thinsp;&theta;, which is largest at low angle and vanishes at high &mdash; exactly this shape.
-Solving one displacement per mount from the 001 and the 002 gives 0.25, 0.20 and 0.18&nbsp;mm, the
-thickness of a smear on a glass disc, and brings <em>all three orders of all three standards</em>
-into agreement:</p>
+<p>An apparent spacing that falls with order is not a spacing &mdash; it is an uncorrected
+angular offset. A tenth of a degree is a large error in <var>d</var> at a 001 at 12&nbsp;&deg; and a
+small one at the 003 at 37&nbsp;&deg;, so one offset makes the orders disagree in exactly this
+pattern, while a wrong spacing would move them all in proportion. Solving one offset per mount, in
+the form of a specimen displacement, brings <em>all three orders of all three standards</em> into
+agreement:</p>
 
 <div class="tablewrap"><table>
 <tr><th>standard</th><th><var>s</var></th><th>corrected d(001), 001 / 002 / 003</th><th>spread</th></tr>
@@ -6600,9 +6601,21 @@ into agreement:</p>
 </table></div>
 
 <p>So the library's kaolinite, calculated at 7.154&nbsp;&Aring;, was never a tenth of an
-&aring;ngstr&ouml;m out. <strong>The program has no displacement correction</strong> &mdash; only a
-constant zero error, which is a different function of angle and cannot absorb this &mdash; and that
-is the larger of the two faults. It is recorded here rather than fixed.</p>
+&aring;ngstr&ouml;m out. The mounts needed about &minus;0.12&nbsp;&deg; of correction and got none,
+because <code>estimate_zero_error</code> works from a known reference line and a pure kaolin
+standard has no quartz to offer it. That is the larger of the two faults, and
+&sect;<a href="#a-55">A.55</a> is what was done about it.</p>
+
+<p><strong>One claim here was overstated and is worth correcting in place</strong>, because the
+reasoning that produced it is the kind that looks sound. A displacement goes as
+cos&thinsp;&theta; and a zero error is flat in 2&theta;, from which it seems to follow that no zero
+error can absorb a displacement. Over a <em>clay</em> scan that does not follow: cos&thinsp;&theta;
+runs from 0.9985 at 6&nbsp;&deg; to 0.9468 at 38&nbsp;&deg;, so 0.25&nbsp;mm on a 240&nbsp;mm
+goniometer shifts every line by between 0.119 and 0.113&nbsp;&deg;. The shape adds 0.006&nbsp;&deg;
+over the constant &mdash; a twentieth of a peak width &mdash; and a zero error of &minus;0.117&nbsp;&deg;
+does 98&nbsp;% of the same job. The two are not separable from a scan that stops at 40&nbsp;&deg;,
+and the millimetres below are a way of writing the correction down, not a measurement of where the
+mounts sat.</p>
 
 <p><strong>And some of it was the library.</strong> The corrected spacings are 7.127, 7.135 and
 7.165&nbsp;&Aring;: a real spread of about 0.04&nbsp;&Aring;, with the published structure near its
@@ -6668,6 +6681,56 @@ proportional: the March&ndash;Dollase factor scales a basal series as <var>r</va
 (&sect;<a href="#a-24">A.24</a>), so the same share of the same peak is a different mass at every
 texture the fit might choose, and restraining the mass instead would be asserting a texture nobody
 measured.</p>
+
+
+<h3 id="a-55">A.55 Calibrating 2&theta; without quartz</h3>
+
+<p><code>estimate_zero_error</code> works from a known reference line, quartz 100 or 101. A clay
+separate usually has quartz and this is the right way round. A pure mineral standard has none, and
+the honest thing the program offered in that case was nothing: the axis stayed where the
+diffractometer put it, which on the three kaolin standards of &sect;<a href="#a-53">A.53</a> was
+about 0.12&nbsp;&deg; out and cost between 6 and 19 points of R<sub>wp</sub>.</p>
+
+<p><strong>A basal series is its own reference.</strong> Its orders must be consistent: one layer
+repeat has to explain the 001, the 002 and the 003 at once. A single reflection cannot separate an
+angular offset from a spacing, because any position is explained by either, but two orders fix both,
+since an offset is a large error in <var>d</var> at the 001 and a small one at the 003 while a
+spacing moves them in proportion. <code>estimate_displacement</code> solves for the correction that
+minimises the disagreement, and <code>basal_series_positions</code> follows the series from wherever
+the 001 actually is rather than from where a nominal spacing would put it, so an unexpected spacing
+is still tracked.</p>
+
+<p>On the three standards, taking the series the mount shows most orders of:</p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th>orders used</th><th>solved</th><th>equivalent zero error</th><th>spread before &rarr; after</th></tr>
+<tr><td>Kaolinite 12</td><td>12.318, 24.863, 37.696&nbsp;&deg;</td><td>+0.140&nbsp;mm</td><td>&minus;0.066&nbsp;&deg;</td><td>0.0269 &rarr; 0.0036&nbsp;&Aring;</td></tr>
+<tr><td>Kaolinite 43</td><td>12.317, 24.849, 37.683</td><td>+0.128&nbsp;mm</td><td>&minus;0.060&nbsp;&deg;</td><td>0.0245 &rarr; 0.0015</td></tr>
+<tr><td>Dickite 7</td><td>12.265, 24.734, 37.512</td><td>+0.123&nbsp;mm</td><td>&minus;0.058&nbsp;&deg;</td><td>0.0238 &rarr; 0.0003</td></tr>
+</table></div>
+
+<p>Three orders reconciled to between 0.0003 and 0.004&nbsp;&Aring;. Refitting with the correction
+the program solves for itself takes R<sub>wp</sub> from 44.7 to 40.1&nbsp;%, 40.2 to 34.0&nbsp;% and
+68.2 to 48.1&nbsp;%, which is within a point or two of the hand-solved values of
+&sect;<a href="#a-53">A.53</a> and needs no hand.</p>
+
+<p><strong>What the millimetres are not.</strong> They are not a measurement of the mount. Over a 4
+to 40&nbsp;&deg; scan a displacement and a constant zero error fit the same data to within
+0.006&nbsp;&deg; (&sect;<a href="#a-53">A.53</a>), so a specimen genuinely 0.14&nbsp;mm proud cannot
+be told from one sitting true on a goniometer 0.066&nbsp;&deg; out of zero.
+<code>DisplacementResult.equivalent_zero_error</code> gives the constant for anyone who prefers to
+think in degrees, and the solver reports it beside the millimetres rather than letting the choice of
+units imply a physical claim. What the correction <em>is</em> good for is the axis, and that is all
+it is used for.</p>
+
+<p>Two consequences follow for how it is used. Where a separate does have quartz, set the zero error
+from it first and let this take up what is left &mdash; a known line beats an internal consistency
+argument. And where both are set, they compose: <code>MountState.corrected</code> removes the
+displacement and then the zero error, in that order.</p>
+
+<p>The solve runs on the background-subtracted pattern, not the raw one. A peak sitting on the
+low-angle air scatter has its centroid dragged down the slope, and at 6&nbsp;&deg; that slope is
+steep enough to move the answer.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

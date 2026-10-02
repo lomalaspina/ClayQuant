@@ -34,6 +34,16 @@ class MountState:
 
     raw: Pattern | None = None
     zero_error: float = 0.0
+    displacement: float = 0.0
+    """Specimen displacement in mm, positive for a surface standing proud.
+
+    Kept apart from :attr:`zero_error` because it is a different function of
+    angle and a mount can carry both, but read it as a way of writing an angular
+    correction down rather than as a measurement of the preparation; see
+    :func:`clayquant.calibration.estimate_displacement`.
+    """
+
+    displacement_note: str = ""
     background_fit: ClayfitBackground | BackgroundFit | None = None
     """The background applied to this mount, or ``None`` while it has none.
 
@@ -47,14 +57,27 @@ class MountState:
         return self.raw is not None
 
     def corrected(self) -> Pattern | None:
-        """The pattern with the zero error removed."""
+        """The pattern with the zero error and the specimen displacement removed.
+
+        Both are applied because a mount can carry both, and they are different
+        functions of angle - a zero error is constant in 2theta, a displacement
+        goes as cos(theta) - though over a 4 to 40 deg scan the difference
+        between them is about 0.006 deg and a fit cannot tell them apart.  Set
+        the zero error from a known line where there is one, and let the
+        displacement take up what is left; on a separate with no quartz the
+        displacement solve is the only route to a corrected axis, because it
+        needs no reference but the series' own orders.
+        """
         if self.raw is None:
             return None
-        if self.zero_error == 0.0:
-            return self.raw
-        from ..calibration import apply_zero_error
+        from ..calibration import apply_displacement, apply_zero_error
 
-        return apply_zero_error(self.raw, self.zero_error)
+        pattern = self.raw
+        if self.displacement:
+            pattern = apply_displacement(pattern, self.displacement)
+        if self.zero_error:
+            pattern = apply_zero_error(pattern, self.zero_error)
+        return pattern
 
     def subtracted(self) -> Pattern | None:
         """The pattern with the zero error removed and the background subtracted."""

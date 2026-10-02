@@ -33,6 +33,10 @@ __all__ = [
     "estimate_zero_error",
     "zero_error_profile",
     "apply_zero_error",
+    "DisplacementResult",
+    "estimate_displacement",
+    "apply_displacement",
+    "basal_series_positions",
     "peak_position",
 ]
 
@@ -268,3 +272,271 @@ def apply_zero_error(pattern: Pattern, shift: float) -> Pattern:
         metadata={**pattern.metadata, "zero_error": float(shift)},
     )
     return corrected
+
+
+# --------------------------------------------------------------------------
+# Specimen displacement
+# --------------------------------------------------------------------------
+
+DEFAULT_GONIOMETER_RADIUS = 240.0
+"""Goniometer radius in mm used when a pattern's file does not record one."""
+
+MAXIMUM_DISPLACEMENT = 1.0
+"""Largest |s| in mm the solver will report, beyond which it refuses.
+
+A mount further off the focusing circle than a millimetre is a mount that was
+not pressed flat, and a number fitted to it is describing the preparation rather
+than correcting it.
+"""
+
+
+@dataclass
+class DisplacementResult:
+    """Outcome of a specimen-displacement determination."""
+
+    displacement: float
+    """Distance in mm the specimen surface sits off the focusing circle.
+
+    Positive means the surface stands proud of the circle, which moves every
+    line to *lower* 2theta.  Read it as a parameterisation of the angular
+    correction and not as a measurement of the mount: over a clay scan it is
+    nearly degenerate with a zero error, and :attr:`equivalent_zero_error` gives
+    the constant that fits the same data almost as well.
+    """
+
+    orders: tuple[float, ...]
+    """The reflection positions, in degrees, the solve was made from."""
+
+    spacing: float
+    """The layer repeat in A the corrected orders agree on."""
+
+    spread_before: float
+    """Largest minus smallest d(001) implied by the orders, uncorrected, in A."""
+
+    spread_after: float
+    """The same spread once the displacement is removed."""
+
+    radius: float = DEFAULT_GONIOMETER_RADIUS
+    detected: bool = True
+    note: str = ""
+
+    @property
+    def equivalent_zero_error(self) -> float:
+        """The constant 2theta shift that does nearly the same job, in degrees.
+
+        Negated to the sign convention of :func:`apply_zero_error`, which
+        subtracts.  Offered because the two are not separable over a clay scan
+        and a reader who thinks in zero errors should not have to convert.
+        """
+        if not self.orders:
+            return 0.0
+        shifts = displacement_shift(np.asarray(self.orders, dtype=float),
+                                    self.displacement, self.radius)
+        return -float(np.mean(shifts))
+
+
+def displacement_shift(
+    two_theta: np.ndarray | float,
+    displacement: float,
+    radius: float = DEFAULT_GONIOMETER_RADIUS,
+) -> np.ndarray:
+    """How far a displaced specimen moves each line, in degrees.
+
+    A flat specimen whose surface sits a distance ``s`` off the focusing circle
+    reflects from the wrong place, and the error is
+
+        d(2theta) = -(2 s / R) cos(theta)
+
+    in radians, with ``R`` the goniometer radius: largest at low angle, and
+    vanishing towards 2theta = 180 deg.
+
+    **Over a clay scan this is very nearly a constant.** From 6 to 38 deg,
+    cos(theta) runs from 0.9985 to 0.9468, so 0.25 mm on a 240 mm goniometer
+    shifts every line by between 0.1192 and 0.1130 deg - a variation of
+    0.006 deg, a twentieth of a peak width, on a shift of 0.117.  A zero error
+    of -0.117 deg therefore absorbs about 98 per cent of it, and the two
+    corrections are not separable from a measurement over this range.  The
+    distinction matters at high angle and on a scan that reaches it; here it
+    does not, and :func:`estimate_displacement` says so rather than claiming a
+    millimetre it cannot measure.
+    """
+    angles = np.asarray(two_theta, dtype=float)
+    return np.degrees(2.0 * float(displacement) / float(radius)
+                      * np.cos(np.radians(angles / 2.0)))
+
+
+def apply_displacement(
+    pattern: Pattern,
+    displacement: float,
+    radius: float | None = None,
+) -> Pattern:
+    """Return a copy of ``pattern`` with the specimen displacement removed.
+
+    The angular axis is corrected, not resampled: every point keeps its counts
+    and moves to where it would have been measured from a specimen on the
+    focusing circle.  The step therefore stops being exactly constant, by about
+    a thousandth of a degree across a clay scan, which every consumer here
+    handles because they interpolate rather than index.
+    """
+    if radius is None:
+        radius = float((pattern.metadata or {}).get(
+            "goniometer_radius", DEFAULT_GONIOMETER_RADIUS))
+    angles = np.asarray(pattern.two_theta, dtype=float)
+    return Pattern(
+        two_theta=angles + displacement_shift(angles, displacement, radius),
+        intensity=pattern.intensity.copy(),
+        name=pattern.name,
+        metadata={**(pattern.metadata or {}),
+                  "displacement": float(displacement),
+                  "displacement_radius": float(radius)},
+    )
+
+
+def basal_series_positions(
+    pattern: Pattern,
+    first: tuple[float, float],
+    orders: int = 3,
+    window: float = 0.45,
+    wavelength: float = CU_KA1,
+    minimum_height: float = 0.0,
+) -> tuple[float, ...]:
+    """Measure the 00l positions of one basal series, as many orders as show.
+
+    ``first`` is the 2theta window to look for the 001 in.  Each further order is
+    then looked for where the measured 001 puts it, not where a nominal spacing
+    does, so a series at an unexpected spacing is still followed.
+    """
+    angles = np.asarray(pattern.two_theta, dtype=float)
+    counts = np.asarray(pattern.intensity, dtype=float)
+    low, high = sorted(float(v) for v in first)
+    inside = (angles >= low) & (angles <= high)
+    if not np.any(inside):
+        return ()
+    centre = 0.5 * (low + high)
+    try:
+        found = peak_position(angles, counts, centre, window=0.5 * (high - low))
+    except ValueError:
+        return ()
+    spacing = wavelength / (2.0 * np.sin(np.radians(found / 2.0)))
+    out = [float(found)]
+    for order in range(2, int(orders) + 1):
+        sine = order * wavelength / (2.0 * spacing)
+        if not 0.0 < sine < 1.0:
+            break
+        nominal = 2.0 * np.degrees(np.arcsin(sine))
+        near = (angles >= nominal - window) & (angles <= nominal + window)
+        if not np.any(near) or float(np.max(counts[near])) <= minimum_height:
+            continue
+        try:
+            out.append(float(peak_position(angles, counts, nominal, window=window)))
+        except ValueError:
+            continue
+    return tuple(out)
+
+
+def estimate_displacement(
+    pattern: Pattern,
+    first: tuple[float, float] = (11.6, 13.0),
+    orders: int = 3,
+    radius: float | None = None,
+    wavelength: float = CU_KA1,
+    window: float = 0.45,
+    limit: float = MAXIMUM_DISPLACEMENT,
+) -> DisplacementResult:
+    """Solve the specimen displacement from two or more orders of one series.
+
+    A single reflection cannot separate an angular offset from a spacing - any
+    position is explained by either - so this needs a series.  Two orders fix
+    both at once: an offset of a tenth of a degree is a large error in d at the
+    001 and a small one at the 003, while a change of spacing moves every order
+    in proportion.  The tell in uncorrected data is that the apparent d(001)
+    *falls* with order.  Three kaolin standards measured here gave 7.197, 7.161
+    and 7.148 A from their first three orders.
+
+    **What this does and does not measure.** It finds the correction that makes
+    the orders of one series agree, and reports it in millimetres of specimen
+    displacement because that is the physically right shape.  It is not a
+    measurement of where the mount sat: over a 4 to 40 deg scan a displacement
+    and a constant zero error are nearly degenerate (see
+    :func:`displacement_shift`), so a 0.25 mm solution and a -0.117 deg zero
+    error fit the same data to within 0.006 deg, and a specimen that really is
+    displaced by 0.25 mm cannot be told from one sitting true on a goniometer
+    0.117 deg out of zero.  Use the number to correct the axis, not to describe
+    the preparation; and if a separate also has quartz, set the zero error from
+    that first and let this take up what is left.
+
+    What it is genuinely for is the case this program had no answer to: a
+    specimen with no quartz, where :func:`estimate_zero_error` has no reference
+    line to work from and the axis was simply left uncorrected.  A basal series
+    is its own reference, because its orders have to be consistent.
+
+    ``first`` is where to look for the 001 of the series to solve from; the
+    default is the 7.15 A window, the strongest line most clay separates have.
+    Returns a :class:`DisplacementResult` whose ``detected`` is False, with the
+    reason in ``note``, where fewer than two orders could be measured or the
+    solution falls outside ``limit``.
+    """
+    if radius is None:
+        radius = float((pattern.metadata or {}).get(
+            "goniometer_radius", DEFAULT_GONIOMETER_RADIUS))
+    positions = basal_series_positions(
+        pattern, first, orders=orders, window=window, wavelength=wavelength)
+    if len(positions) < 2:
+        return DisplacementResult(
+            displacement=0.0, orders=positions, spacing=float("nan"),
+            spread_before=float("nan"), spread_after=float("nan"), radius=radius,
+            detected=False,
+            note=("fewer than two orders of the series were measurable, and one "
+                  "reflection cannot tell a displacement from a spacing"),
+        )
+
+    def spacings(shift: float) -> np.ndarray:
+        angles = np.asarray(positions, dtype=float)
+        moved = angles + displacement_shift(angles, shift, radius)
+        implied = wavelength / (2.0 * np.sin(np.radians(moved / 2.0)))
+        return implied * np.arange(1, len(positions) + 1)
+
+    def spread(shift: float) -> float:
+        values = spacings(shift)
+        return float(np.max(values) - np.min(values))
+
+    before = spread(0.0)
+    # The spread is piecewise smooth and single-minimum in s over any sane
+    # range, so a golden-section search on it is enough and needs no derivative.
+    low, high = -float(limit), float(limit)
+    golden = 0.5 * (np.sqrt(5.0) - 1.0)
+    a, b = low, high
+    c, d = b - golden * (b - a), a + golden * (b - a)
+    for _ in range(200):
+        if spread(c) < spread(d):
+            b = d
+        else:
+            a = c
+        c, d = b - golden * (b - a), a + golden * (b - a)
+        if abs(b - a) < 1e-9:
+            break
+    solved = 0.5 * (a + b)
+    after = spread(solved)
+    if abs(solved) >= limit * 0.999:
+        return DisplacementResult(
+            displacement=0.0, orders=positions, spacing=float("nan"),
+            spread_before=before, spread_after=before, radius=radius,
+            detected=False,
+            note=(f"the orders are best reconciled by a displacement of "
+                  f"{solved:+.2f} mm, outside the {limit:g} mm this will report; "
+                  f"the series is more likely two minerals than one displaced one"),
+        )
+    return DisplacementResult(
+        displacement=float(solved),
+        orders=positions,
+        spacing=float(np.mean(spacings(solved))),
+        spread_before=before,
+        spread_after=after,
+        radius=radius,
+        detected=True,
+        note=(f"{len(positions)} orders at "
+              + ", ".join(f"{p:.3f}" for p in positions)
+              + f" deg imply layer repeats spread over {before:.4f} A; a specimen "
+              f"{solved:+.3f} mm off the focusing circle brings them to "
+              f"{after:.4f} A at {float(np.mean(spacings(solved))):.4f} A"),
+    )

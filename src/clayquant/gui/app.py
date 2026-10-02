@@ -79,7 +79,9 @@ from ..detection import (
 from ..calibration import (
     QUARTZ_100_D,
     QUARTZ_101_D,
+    apply_displacement,
     apply_zero_error,
+    estimate_displacement,
     estimate_zero_error,
     reference_two_theta,
     zero_error_profile,
@@ -1071,6 +1073,38 @@ def zero_tab() -> html.Div:
                         style={"marginTop": "12px"},
                     ),
                     html.Button("Estimate automatically", id="zero-auto", n_clicks=0),
+                    html.Div(
+                        [
+                            label("Specimen displacement (mm)"),
+                            dcc.Input(
+                                id="disp-typed", type="number", value=0.0, step=0.005,
+                                debounce=True, style={"width": "100%", "marginBottom": "6px"},
+                            ),
+                            html.Div(
+                                "For a separate with no quartz, where the zero error has "
+                                "no reference line to come from. A basal series is its own "
+                                "reference: its orders have to agree, and they only do at "
+                                "one correction. Over a 4\u201340\u00b0 scan this is nearly "
+                                "the same thing as a zero error \u2014 0.25 mm shifts every "
+                                "line by 0.113 to 0.119\u00b0 \u2014 so take the millimetres "
+                                "as a way of writing the correction down, not as a "
+                                "measurement of where the mount sat.",
+                                style={"fontSize": "11px", "color": "#666",
+                                       "marginBottom": "6px"},
+                            ),
+                            html.Button("Solve from a basal series", id="disp-auto",
+                                        n_clicks=0),
+                            html.Div(
+                                "Needs two orders of one series, because a single "
+                                "reflection cannot tell a displacement from a spacing.",
+                                style={"fontSize": "11px", "color": "#666",
+                                       "marginTop": "6px"},
+                            ),
+                            html.Div(id="disp-status", style={"marginTop": "8px"}),
+                        ],
+                        style={"marginTop": "14px", "paddingTop": "12px",
+                               "borderTop": "1px solid #e0e0e0"},
+                    ),
                     html.Div(id="zero-status", style={"marginTop": "10px"}),
                 ],
                 style=CONTROL_PANEL,
@@ -2205,6 +2239,79 @@ def register_callbacks(app: Dash) -> None:
                 ),
             ],
             style={"marginTop": "10px"},
+        )
+
+    @app.callback(
+        Output("disp-typed", "value"),
+        Output("disp-status", "children"),
+        Input("disp-auto", "n_clicks"),
+        State("zero-mount", "value"),
+        prevent_initial_call=True,
+    )
+    def auto_displacement(_clicks, mount):
+        """Solve the displacement from the strongest basal series this mount has.
+
+        The 7.15 A window first, because a clay separate's strongest line is
+        usually there and it has orders at 3.58 and 2.38 A to go with it; then
+        10 A and 14 A for a separate that has no kaolin or chlorite.  Whichever
+        yields the most orders wins, since the solve is only as good as the
+        number of reflections it reconciles.
+        """
+        state = STATE.mounts[mount]
+        pattern = state.raw
+        if pattern is None:
+            return no_update, error_message(
+                ValueError(f"{MOUNT_LABELS[mount]} is not loaded."))
+        # Background out first: a displacement is read off peak positions, and a
+        # peak sitting on the low-angle air scatter has its centroid pulled down
+        # the slope.
+        measured = state.subtracted() or pattern
+        best = None
+        for window, what in (((11.6, 13.0), "the 7.15 A series"),
+                             ((8.3, 9.4), "the 10 A series"),
+                             ((5.8, 6.8), "the 14 A series")):
+            try:
+                found = estimate_displacement(measured, first=window)
+            except Exception:  # noqa: BLE001
+                continue
+            if not found.detected:
+                continue
+            if best is None or len(found.orders) > len(best[0].orders):
+                best = (found, what)
+        if best is None:
+            return no_update, html.Div(
+                "No basal series here showed two orders, and one reflection cannot "
+                "tell a displacement from a spacing. Type a value if you know it.",
+                style={"color": "#a15c00"},
+            )
+        found, what = best
+        state.displacement = float(found.displacement)
+        state.displacement_note = found.note
+        return float(found.displacement), html.Div(
+            [html.Div(f"From {what}: {found.displacement:+.3f} mm, which is within "
+                      f"a hundredth of a degree of a {found.equivalent_zero_error:+.3f}\u00b0 "
+                      f"zero error over this scan."),
+             html.Div(found.note, style={"fontSize": "0.78rem", "color": "#555",
+                                         "marginTop": "4px"})]
+        )
+
+    @app.callback(
+        Output("disp-status", "children", allow_duplicate=True),
+        Input("disp-typed", "value"),
+        State("zero-mount", "value"),
+        prevent_initial_call=True,
+    )
+    def typed_displacement(value, mount):
+        state = STATE.mounts[mount]
+        state.displacement = float(value or 0.0)
+        if not state.displacement:
+            state.displacement_note = ""
+            return html.Div("No displacement applied.",
+                            style={"fontSize": "0.8rem", "color": "#666"})
+        state.displacement_note = f"set by hand to {state.displacement:+.3f} mm"
+        return html.Div(
+            f"{state.displacement:+.3f} mm applied to {MOUNT_LABELS[mount]}.",
+            style={"fontSize": "0.8rem", "color": "#555"},
         )
 
     @app.callback(
