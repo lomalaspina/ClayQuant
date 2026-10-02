@@ -2280,20 +2280,30 @@ def register_callbacks(app: Dash) -> None:
                 best = (found, what)
         if best is None:
             return no_update, html.Div(
-                "No basal series here showed two orders, and one reflection cannot "
-                "tell a displacement from a spacing. Type a value if you know it.",
+                "No basal series here could be solved. Either none showed two orders "
+                "\u2014 and one reflection cannot tell a displacement from a spacing "
+                "\u2014 or the orders would not reconcile to one spacing, which is "
+                "what an interstratified clay is and what no angular correction "
+                "fixes. Type a value if you know it.",
                 style={"color": "#a15c00"},
             )
         found, what = best
         state.displacement = float(found.displacement)
         state.displacement_note = found.note
-        return float(found.displacement), html.Div(
-            [html.Div(f"From {what}: {found.displacement:+.3f} mm, which is within "
-                      f"a hundredth of a degree of a {found.equivalent_zero_error:+.3f}\u00b0 "
-                      f"zero error over this scan."),
-             html.Div(found.note, style={"fontSize": "0.78rem", "color": "#555",
-                                         "marginTop": "4px"})]
-        )
+        rows = [html.Div(f"From {what}: {found.displacement:+.3f} mm, which is within "
+                         f"a hundredth of a degree of a "
+                         f"{found.equivalent_zero_error:+.3f}\u00b0 zero error over "
+                         f"this scan.")]
+        if not found.verified:
+            rows.append(html.Div(
+                "Only two orders showed, and two orders with two unknowns reconcile "
+                "exactly whatever the peaks are \u2014 so nothing here has checked "
+                "that they are orders of one spacing. Treat it as a suggestion.",
+                style={"color": "#a15c00", "fontSize": "0.78rem", "marginTop": "4px"},
+            ))
+        rows.append(html.Div(found.note, style={"fontSize": "0.78rem", "color": "#555",
+                                                "marginTop": "4px"}))
+        return float(found.displacement), html.Div(rows)
 
     @app.callback(
         Output("disp-status", "children", allow_duplicate=True),

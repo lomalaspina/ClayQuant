@@ -315,8 +315,8 @@ NORMALIZATION_FLOOR = 4.0
 HOST_THICKNESSES: dict[str, tuple[float, ...]] = {
     "illite": (9.90, 9.95, 10.02, 10.10),
     "chlorite": (14.05, 14.15, 14.25, 14.35),
-    "kaolinite_1M": (7.10, 7.13, 7.16, 7.19, 7.22),
-    "kaolinite_2M": (7.10, 7.13, 7.16, 7.19, 7.22),
+    "kaolinite_1M": (7.13, 7.16, 7.19, 7.22),
+    "kaolinite_2M": (7.13, 7.16, 7.19, 7.22),
 }
 """Layer repeat distances in A spanned for each discrete phase.
 
@@ -370,12 +370,28 @@ was never a tenth of an angstrom out; the mounts were a fifth of a millimetre
 proud.  Nothing in the program corrects for that yet, which is why it is written
 down here.
 
-One caution that comes with the axis: a kaolinite at 7.10 A and a chlorite 002 at
-the same spacing are very nearly the same column, so widening this downward
-widens the kaolinite/chlorite ambiguity the three diagnostic windows exist to
-resolve.  That is a property of the two minerals and not of the table, and it is
-what the window-split restraint of :func:`clayquant.treatment.kaolinite_share_constraint`
-is for.
+**Why it stops at 7.13 and not lower.** The axis was first written 7.10 to 7.22
+on the reasoning that a wider range costs nothing, and the pure standards showed
+what it costs.  A kaolinite at 7.10 A and a chlorite 002 at the same spacing are
+very nearly the same column, and non-negative least squares will use whichever
+is cheaper: with 7.10 present a pure prochlorite standard fitted as 50 per cent
+kaolinite_1M and 18 per cent chlorite, and a pure chlorite took 11 per cent
+kaolinite.  Dropping the one value took those to 15 and 4 per cent and put the
+chlorite back where it belongs - at a cost of 9 and 6 points of Rwp, because the
+false answer fitted the data better than the true one.  The three kaolin
+standards fit identically either way, never having used 7.10 at all; no real
+kaolinite sits there.
+
+That trade is the whole argument for choosing a library by what it reports and
+not by its residual, and it is the same lesson as the chlorite/smectite stand-in
+above.  A column that can impersonate another mineral earns its place only if
+some specimen needs it, and here none did.
+
+The ambiguity that remains at 7.13 is real - a chlorite with d(001) = 14.26 A
+puts its 002 exactly there - and it is a property of the two minerals rather
+than of this table.  Closing it is what the window-split restraint of
+:func:`clayquant.treatment.kaolinite_share_constraint` is for, and it needs the
+heated mount; a standard fitted by itself has nothing to close it with.
 """
 
 CSDS_MEANS: tuple[float, ...] = (5.0, 15.0, 50.0)

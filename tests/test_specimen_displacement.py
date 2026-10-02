@@ -19,6 +19,7 @@ import pytest
 
 from clayquant.calibration import (
     CU_KA1,
+    RATIONAL_SERIES_SPREAD,
     DisplacementResult,
     apply_displacement,
     apply_zero_error,
@@ -183,3 +184,57 @@ def test_both_corrections_compose_on_the_mount_state():
                for order, p in enumerate(positions, start=1)]
     assert max(implied) - min(implied) < 0.01
     assert float(np.mean(implied)) == pytest.approx(7.15, abs=0.01)
+
+
+def an_irrational_series(first: float = 14.5, ratios=(1.0, 1.95, 2.85)) -> Pattern:
+    """A mixed-layer basal series: peaks that are not orders of one spacing.
+
+    An interstratified clay is defined by this - the 001, 002 and 003 of an I/S
+    do not share a layer repeat - so no angular correction reconciles them, and a
+    solver that returns one anyway is describing noise.
+    """
+    grid = np.arange(3.0, 44.0, 0.01)
+    counts = np.zeros_like(grid)
+    for n, ratio in enumerate(ratios, start=1):
+        sine = ratio * CU_KA1 / (2.0 * first)
+        if not 0.0 < sine < 1.0:
+            continue
+        centre = 2.0 * np.degrees(np.arcsin(sine))
+        counts += (6000.0 / n) * np.exp(
+            -4.0 * np.log(2.0) * ((grid - centre) / 0.3) ** 2)
+    return Pattern(two_theta=grid, intensity=counts + 50.0, name="mixed layer",
+                   metadata={"goniometer_radius": RADIUS})
+
+
+def test_an_interstratified_series_is_refused_rather_than_corrected():
+    """The failure this guard was written from.
+
+    Applied blind, the solve made an illite and two montmorillonites worse by 2
+    to 4 points of Rwp, and all three were exactly the standards whose orders
+    would not reconcile: 0.0165, 0.040 and 0.044 A against 0.0003 to 0.0036 for
+    the five rational ones.
+    """
+    found = estimate_displacement(an_irrational_series(ratios=(1.0, 1.97, 2.93)),
+                                  first=(5.5, 6.6), window=0.6)
+    assert len(found.orders) >= 3, "the guard needs an order it did not fit with"
+    assert not found.detected
+    assert found.displacement == 0.0
+    assert "interstratified" in found.note
+    assert found.spread_after > RATIONAL_SERIES_SPREAD
+
+
+def test_two_orders_alone_are_not_evidence_and_say_so():
+    """Two orders and two unknowns reconcile exactly whatever the peaks are, so
+    a zero residual there is arithmetic rather than a check."""
+    found = estimate_displacement(an_irrational_series(), first=(5.5, 6.6))
+    assert len(found.orders) == 2
+    assert found.detected
+    assert not found.verified
+    assert "exact system" in found.note
+
+
+def test_a_rational_series_is_not_caught_by_the_guard():
+    found = estimate_displacement(a_basal_series(7.15, displacement=0.25))
+    assert found.detected
+    assert found.verified, "three orders, so the answer was checked against one of them"
+    assert found.spread_after < RATIONAL_SERIES_SPREAD

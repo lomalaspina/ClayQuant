@@ -34,6 +34,7 @@ __all__ = [
     "zero_error_profile",
     "apply_zero_error",
     "DisplacementResult",
+    "RATIONAL_SERIES_SPREAD",
     "estimate_displacement",
     "apply_displacement",
     "basal_series_positions",
@@ -281,6 +282,21 @@ def apply_zero_error(pattern: Pattern, shift: float) -> Pattern:
 DEFAULT_GONIOMETER_RADIUS = 240.0
 """Goniometer radius in mm used when a pattern's file does not record one."""
 
+RATIONAL_SERIES_SPREAD = 0.015
+"""How well the orders must reconcile before the answer is reported, in A.
+
+An interstratified clay has no rational basal series - that is what
+interstratification *means* - so reconciling its orders to one spacing is
+meaningless, and the correction that best does it is an artefact.  Measured on
+eight pure standards: the five rational ones (two kaolinites, a dickite, a
+chlorite and a prochlorite) reconcile to between 0.0003 and 0.0036 A, while an
+illite that the fit reads as I/S 99/1 leaves 0.0165 and two montmorillonites
+leave 0.040 and 0.044.  Applying the solved correction to those three made every
+one of their fits worse, by 2 to 4 points of Rwp, and applying it to the five
+made four of them better.  The gap between 0.004 and 0.016 is where the line
+goes.
+"""
+
 MAXIMUM_DISPLACEMENT = 1.0
 """Largest |s| in mm the solver will report, beyond which it refuses.
 
@@ -314,10 +330,27 @@ class DisplacementResult:
     """Largest minus smallest d(001) implied by the orders, uncorrected, in A."""
 
     spread_after: float
-    """The same spread once the displacement is removed."""
+    """The same spread once the displacement is removed.
+
+    Also the test of whether the answer means anything: a series that will not
+    reconcile is not a series with an offset, it is an irrational one, and
+    :data:`RATIONAL_SERIES_SPREAD` is where this stops reporting.
+    """
 
     radius: float = DEFAULT_GONIOMETER_RADIUS
     detected: bool = True
+    verified: bool = True
+    """Whether the answer was checked against an order it did not use to fit.
+
+    Two orders and two unknowns - a spacing and a correction - is an exact
+    system: it reconciles perfectly whatever the two peaks are, including two
+    peaks that are not orders of one spacing at all.  So a two-order solve has no
+    residual to judge it by and :attr:`spread_after` is zero by construction,
+    which is not evidence.  From three orders on, the correction is
+    over-determined and what it leaves behind means something; that is when this
+    is True.
+    """
+
     note: str = ""
 
     @property
@@ -442,6 +475,7 @@ def estimate_displacement(
     wavelength: float = CU_KA1,
     window: float = 0.45,
     limit: float = MAXIMUM_DISPLACEMENT,
+    rational_spread: float = RATIONAL_SERIES_SPREAD,
 ) -> DisplacementResult:
     """Solve the specimen displacement from two or more orders of one series.
 
@@ -469,6 +503,17 @@ def estimate_displacement(
     specimen with no quartz, where :func:`estimate_zero_error` has no reference
     line to work from and the axis was simply left uncorrected.  A basal series
     is its own reference, because its orders have to be consistent.
+
+    **Two cases where it must not be used, both learned by trying it.** The
+    first is an interstratified clay, which has no rational series at all, and
+    is refused here through ``rational_spread`` - but only where three orders
+    showed, because two orders and two unknowns reconcile exactly whatever the
+    peaks are, and :attr:`DisplacementResult.verified` says which case this was.  The second this cannot detect
+    and the caller must: a specimen whose axis is *already* corrected from a
+    reference line does not need this, and applying it anyway adds a second
+    correction on top of a good one.  On a separate whose zero error came from
+    quartz, solving a further 0.042 mm off its chlorite series and applying it
+    cost two points of Rwp.  Where a reference line exists, use it and stop.
 
     ``first`` is where to look for the 001 of the series to solve from; the
     default is the 7.15 A window, the strongest line most clay separates have.
@@ -517,6 +562,18 @@ def estimate_displacement(
             break
     solved = 0.5 * (a + b)
     after = spread(solved)
+    verified = len(positions) >= 3
+    if verified and after > rational_spread:
+        return DisplacementResult(
+            displacement=0.0, orders=positions, spacing=float("nan"),
+            spread_before=before, spread_after=after, radius=radius,
+            detected=False, verified=True,
+            note=(f"the orders still imply layer repeats spread over {after:.4f} A "
+                  f"after the best correction, more than the {rational_spread:g} A "
+                  f"a rational series leaves; this is an interstratified clay, whose "
+                  f"orders are not orders of one spacing, and no angular correction "
+                  f"makes them agree"),
+        )
     if abs(solved) >= limit * 0.999:
         return DisplacementResult(
             displacement=0.0, orders=positions, spacing=float("nan"),
@@ -534,9 +591,14 @@ def estimate_displacement(
         spread_after=after,
         radius=radius,
         detected=True,
+        verified=verified,
         note=(f"{len(positions)} orders at "
               + ", ".join(f"{p:.3f}" for p in positions)
               + f" deg imply layer repeats spread over {before:.4f} A; a specimen "
               f"{solved:+.3f} mm off the focusing circle brings them to "
-              f"{after:.4f} A at {float(np.mean(spacings(solved))):.4f} A"),
+              f"{after:.4f} A at {float(np.mean(spacings(solved))):.4f} A"
+              + ("" if verified else
+                 " - but two orders and two unknowns is an exact system, so this"
+                 " reconciles whatever the two peaks are and nothing here checks"
+                 " that they are orders of one spacing at all")),
     )
