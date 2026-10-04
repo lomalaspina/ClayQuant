@@ -174,6 +174,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-54">A.54 Restraining both halves of a shared window</a>
 <a href="#a-55">A.55 Calibrating 2&theta; without quartz</a>
 <a href="#a-56">A.56 What the standards are for, and where that had been failing</a>
+<a href="#a-57">A.57 Two tests the pure standards failed, and what they found</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6844,6 +6845,75 @@ radius and the slit are in every data file. A specimen length guessed at 35&nbsp
 the calculated chlorite 001/002 from 0.389 to 0.552 and apparently resolved a discrepancy that is
 really in the structure model. The geometry is a measurement; it is never the explanation of last
 resort.</p>
+
+
+<h3 id="a-57">A.57 Two tests the pure standards failed, and what they found</h3>
+
+<p>Every fit of a standard shown up to &sect;<a href="#a-56">A.56</a> used the glycolated mount
+alone, and a pure chlorite came out as 41&nbsp;% illite/smectite. The program already has the device
+that should stop that: <code>shift_evidence</code> measures how far each basal reflection moved
+between the air-dried and the glycolated mount, and <code>expandable_bound</code> turns &ldquo;nothing
+moved&rdquo; into a ceiling on how much expandable layer an entry may carry. Both GUI checkboxes
+default to on. The fits were missing it because the test harness was not using it, which is a fault
+in the testing and not in the program &mdash; but running the eight standards through the verdict
+itself found two faults that are.</p>
+
+<p><strong>A weak line was allowed to set the mount offset.</strong> The two mounts are put on a
+common angular scale by a reflection no treatment moves, and that offset is then subtracted from
+every displacement. A wrong offset therefore does not add noise &mdash; it <em>manufactures</em>
+movement. On Kaolinite 12, which contains no quartz, the window around the quartz 101 held a weak
+kaolinite line at 26.734&nbsp;&deg;, 1.7&nbsp;% of the pattern maximum; the two scans placed that
+broad feature 0.056&nbsp;&deg; apart, and subtracting it turned the kaolinite 001's true
+&minus;0.003&nbsp;&deg; into +0.053. A pure kaolinite was read as swelling and left unrestrained.
+<code>REFERENCE_MINIMUM_SHARE</code> now requires 5&nbsp;% of the pattern, measured against the whole
+scan and not against the search window &mdash; the first attempt used <code>_peaks</code>'s
+<code>minimum_share</code>, which is a share of the window's own maximum and so is satisfied by
+anything that is the tallest thing in an empty stretch.</p>
+
+<p><strong>A reflection that shrank was counted as swelling.</strong> Glycolation replaces interlayer
+water with a larger complex, so an expandable 001 moves to <em>larger</em> d. Illite 10's only
+movement was a 10.073&nbsp;&Aring; line going to 10.055 &mdash; a reflection that shrank &mdash; and
+taking its magnitude read a pure illite as swelling. Displacements now count only where d increased.
+Appearances are untouched, which matters because that is what both montmorillonite standards actually
+rest on: neither shows a displacement the measurement can distinguish from its own placement, and
+both show a new 17&nbsp;&Aring; line. The caveat is Mering's rule &mdash; a mixed layer's higher
+orders can move either way &mdash; so this discards evidence a 002 or 003 might have carried; it
+cannot discard the 001's, nor an appearance.</p>
+
+<p>With both corrected the verdict is right on all eight: no swelling on the two kaolinites, the
+dickite, the illite and the two chlorites; swelling on both montmorillonites. It had been wrong on
+two.</p>
+
+<p><strong>What the restraint then does, and what it costs.</strong></p>
+
+<div class="tablewrap"><table>
+<tr><th>standard</th><th>mixed-layer, glycol alone &rarr; restrained</th><th>R<sub>wp</sub></th><th>first phase reported</th></tr>
+<tr><td>Kaolinite 12</td><td>31.9 &rarr; 14.8&nbsp;%</td><td>40.03 &rarr; 40.82</td><td>kaolinite_1M 52.8</td></tr>
+<tr><td>Kaolinite 43</td><td>29.6 &rarr; 13.1</td><td>33.98 &rarr; 34.60</td><td>kaolinite_1M 51.6</td></tr>
+<tr><td>Dickite 7</td><td>20.8 &rarr; 11.4</td><td>48.07 &rarr; 48.12</td><td>kaolinite_1M 72.4</td></tr>
+<tr><td>Chlorite 16</td><td>68.0 &rarr; 35.3</td><td>35.26 &rarr; <strong>43.09</strong></td><td>chlorite 46.5 <em>(was I/S 60/40)</em></td></tr>
+<tr><td>Prochlorite 15</td><td>43.4 &rarr; 19.2</td><td>77.57 &rarr; 78.92</td><td>chlorite 51.0</td></tr>
+</table></div>
+
+<p>On Chlorite 16 the chlorite goes from 28&nbsp;% behind an illite/smectite to 46&nbsp;% and first
+place, and it costs <strong>7.8 points of R<sub>wp</sub></strong>. That is the third time in this
+work that the truer answer has fitted worse than the false one, after the 7.10&nbsp;&Aring; kaolinite
+column (&sect;<a href="#a-53">A.53</a>) and the window-split restraint
+(&sect;<a href="#a-54">A.54</a>). It is not a coincidence and it is not a reason to doubt the
+restraint: a mixed-layer entry has more freedom than a discrete mineral, so it will always absorb
+residual better, and a criterion that rewards it is selecting for the wrong thing.</p>
+
+<p><strong>What is still wrong.</strong> The restraint is not sufficient. A pure chlorite still
+reports 35&nbsp;% I/S and 15&nbsp;% kaolinite; a pure prochlorite still reports 29&nbsp;% kaolinite.
+Half of each chlorite standard is still being given to minerals it does not contain, and that is with
+the composition axis corrected and the swelling verdict right.</p>
+
+<p><strong>And the alternative CIF is not the answer.</strong> A TOPAS-refined clinochlore from the
+same coordinates was tested against the standards and is markedly worse: the largest error on any
+basal order is 52&nbsp;% and 66&nbsp;% against the two chlorites, where ICSD 164234 gives 33 and 19.
+It also carries a diagnosable defect &mdash; its tetrahedral sites refined to Si&nbsp;0 and
+Al&nbsp;1, where a chlorite's tetrahedra are about 60&nbsp;% silicon, which is a refinement that
+reached a bound rather than a composition. It is not used.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

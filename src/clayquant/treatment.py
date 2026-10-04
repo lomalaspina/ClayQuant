@@ -512,6 +512,30 @@ the humidity, and it usually shows more than one at once.
 SHIFT_SEARCH_WINDOW = 0.30
 """How far from a glycol peak to look for its air-dried partner, in degrees."""
 
+REFERENCE_MINIMUM_SHARE = 0.05
+"""How tall a line must stand, as a share of the pattern maximum, to set the offset.
+
+The two mounts are put on a common angular scale by a reflection no treatment
+moves, quartz by default, and the offset is then subtracted from every measured
+displacement.  So a wrong offset does not merely add noise: it *manufactures*
+movement, and on the specimens that have no expandable clay at all - which is
+where the air-dried restraint matters - it switches that restraint off.
+
+Taking the tallest thing in the search window is how that happens.  On a pure
+kaolinite standard, which contains no quartz, the window around the quartz 101
+held a weak kaolinite line at 26.734 deg standing at 1.7 per cent of the pattern
+maximum.  The two scans placed that broad weak feature 0.056 deg apart, which is
+placement noise on a line nobody should be calibrating with, and subtracting it
+turned the kaolinite 001's true displacement of -0.003 deg into +0.053 - marking
+a pure kaolinite as swelling and leaving it unrestrained, carrying 32 per cent
+mixed-layer clay.  Five per cent of the pattern is the floor below which a line
+is not a calibration reference; a specimen with no such line gets no offset and
+is told so.
+
+This is the same failure as the width anchor fitting the mica 003 instead of the
+quartz 101: a wide search window plus "take the tallest" picks the wrong line.
+"""
+
 SHIFT_RANGE = (4.0, 16.0)
 """Where expansion shows, and where the evidence is therefore read.
 
@@ -803,11 +827,19 @@ def shift_evidence(
     # Reflections that cannot move give the offset between the mounts and, from
     # their spread, how far apart the two scans place the same line anyway.
     offsets: list[float] = []
+    glycol_maximum = float(np.max(np.asarray(glycol.intensity, dtype=float))) or 1.0
+    air_maximum = float(np.max(np.asarray(air.intensity, dtype=float))) or 1.0
     for line in reference:
         if not (angles[0] <= line <= angles[-1]):
             continue
-        here = _peaks(glycol, line - window, line + window, 0.0, separation=window)
-        there = _peaks(air, line - window, line + window, 0.0, separation=window)
+        # An absolute floor, not a share of the window: `_peaks` takes
+        # ``minimum_share`` against the window's own maximum, which any feature
+        # satisfies by being the tallest thing in an otherwise empty stretch.
+        # The test has to be against the whole pattern.
+        here = _peaks(glycol, line - window, line + window, 0.0, separation=window,
+                      floor=REFERENCE_MINIMUM_SHARE * glycol_maximum)
+        there = _peaks(air, line - window, line + window, 0.0, separation=window,
+                       floor=REFERENCE_MINIMUM_SHARE * air_maximum)
         if here and there:
             offsets.append(here[0][0] - there[0][0])
     offset = float(np.median(offsets)) if offsets else 0.0
@@ -856,8 +888,24 @@ def shift_evidence(
         )
         for here, there, height, together in pairs
     ]
+    # Glycolation *expands*: it replaces the interlayer water of a swelling clay
+    # with a larger ethylene glycol complex, so an expandable 001 moves to
+    # larger d.  A reflection that moved the other way is not evidence of
+    # expandable clay, and counting it as such is how a pure illite standard
+    # came to be read as swelling - its one "movement" was a 10.073 A line going
+    # to 10.055, a reflection that shrank.
+    #
+    # Only displacements are judged this way.  A peak that *appears* on
+    # glycolation is separate evidence and is not filtered here, which is what
+    # the two montmorillonite standards rest on: neither shows a displacement
+    # the measurement can distinguish from its own placement, and both show a
+    # new 17 A line.  The caveat is Mering's rule - a mixed layer's higher
+    # orders can move in either direction - so this discards evidence that a
+    # 002 or a 003 might have carried.  It cannot discard the 001's, which is
+    # the reflection the argument rests on, nor an appearance.
     moved = [item for item in shifts
-             if abs(item.displacement) > 2.0 * item.uncertainty]
+             if abs(item.displacement) > 2.0 * item.uncertainty
+             and item.d_glycol > item.d_air]
     # The largest movement that is actually a movement; a displacement smaller
     # than its own peak can be placed is not one.
     largest = max((abs(item.displacement) for item in moved), default=0.0)
@@ -1008,7 +1056,8 @@ def air_dried_observation(
     ------
     ValueError
         If the library carries no air-dried counterparts.  Falling back to the
-        glycol patterns would assert that nothing expands, which is the question
+        glycol patterns would a
+ssert that nothing expands, which is the question
         being asked, so this refuses instead and says to rebuild.
     """
     from .detection import quartz_zero_shift, treatment_peaks
