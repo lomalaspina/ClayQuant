@@ -37,6 +37,7 @@ from .emission import CU_KA_5LINE
 from .mixed_layer import MixedLayerStack, lognormal_csds
 from .optics import Divergence
 from .models import (
+    CHLORITE_PUBLISHED_IRON,
     AIR_DRIED_SMECTITE_D001,
     CIF_SOURCES,
     air_dried_smectite_layer,
@@ -156,15 +157,23 @@ little expandable component is described more coarsely; that is the existing
 spacing of this axis rather than anything new.
 """
 
-CHLORITE_IRON: tuple[tuple[float, float], ...] = tuple(
+CHLORITE_IRON: tuple[tuple[float, float], ...] = (CHLORITE_PUBLISHED_IRON,) + tuple(
     (two_one, hydroxide)
     for two_one in (0.0, 0.05, 0.10, 0.20, 0.30)
     for hydroxide in (0.0, 0.015, 0.035, 0.08, 0.15)
 )
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
 
-Both sheets, because the library has to reproduce the standards it is checked
-against and a one-sheet axis cannot.
+The refinement itself first, then both sheets, because the library has to be able
+to calculate the structure it is built from and to reproduce the standards it is
+checked against, and the axis as written did neither.
+
+:data:`~clayquant.models.CHLORITE_PUBLISHED_IRON` leads the series because
+``chlorite_crystal`` sets occupancies rather than adding to them, so (0, 0) is a
+magnesium end member and not ICSD 164234, whose own iron is 0.0877 and 0.0580.
+The axis this replaced held the 2:1 sheet at zero at every point, which put the
+published refinement outside it - a composition series built around a structure
+that did not contain that structure.
 
 A chlorite's octahedral iron varies from one deposit to the next and acts
 directly on its basal intensities, so one published clinochlore cannot describe
@@ -1140,9 +1149,14 @@ def build_library(
             # one is labelled.  Otherwise adding the iron series renames an
             # entry that was already there, and every reference to it - a saved
             # result, a test, a note in a lab book - stops matching.
+            # The plain name belongs to the published refinement, which is not
+            # (0, 0): chlorite_crystal *sets* the occupancies, so (0, 0) is a
+            # magnesium end member nobody measured.  Naming that one `chlorite`
+            # is how the library came to advertise a composition it had invented
+            # as the structure it was calculated from.
             variants = [
                 (chlorite_crystal(a, b),
-                 "" if (a, b) == (0.0, 0.0) else f" Fe={a:g}/{b:g}")
+                 "" if (a, b) == CHLORITE_PUBLISHED_IRON else f" Fe={a:g}/{b:g}")
                 for a, b in chlorite_iron
             ]
         for base, iron_tag in variants:

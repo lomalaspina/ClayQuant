@@ -6794,6 +6794,40 @@ Prochlorite 15's 004, at 0.750 of its 002, is outside what the entire compositio
 two statements are the honest limit of the current chlorite model, and unlike the 003 they are not
 fixed by widening anything.</p>
 
+<p><strong>The axis did not contain the structure it was built around.</strong> The entries are
+calculated from ICSD 164234, a single-crystal refinement at 298&nbsp;K of one particular clinochlore,
+and that structure is <em>not</em> iron-free: its formula is
+H<sub>16</sub>Al<sub>2.884</sub>Fe<sub>0.874</sub>Mg<sub>11.126</sub>O<sub>36</sub>Si<sub>5.116</sub>,
+with refined iron on four octahedral sites &mdash; 0.087 and 0.088 in the 2:1 sheet, 0.060 and 0.054
+in the hydroxide sheet, which average by multiplicity to 0.0877 and 0.0580.</p>
+
+<p><code>chlorite_crystal</code> <em>sets</em> those occupancies rather than adding to them, so
+<code>chlorite_crystal(0,&nbsp;0)</code> is a magnesium end member nobody refined. The build gave
+that entry the bare name <code>chlorite</code>, with a comment stating that the published structure
+keeps its plain name. It does not, and the old axis held the 2:1 sheet at zero at every point, so
+the refinement itself was outside the series calculated from it. Every chlorite entry in the library
+was an invented composition.</p>
+
+<p>The difference is not cosmetic. On a 240&nbsp;mm instrument:</p>
+
+<div class="tablewrap"><table>
+<tr><th></th><th>001</th><th>002</th><th>003</th><th>004</th><th>005</th></tr>
+<tr><td>ICSD 164234 as refined</td><td>0.348</td><td>1.000</td><td><strong>0.523</strong></td><td>0.608</td><td>0.166</td></tr>
+<tr><td>what the library called <code>chlorite</code> &mdash; (0,&nbsp;0)</td><td>0.389</td><td>1.000</td><td><strong>0.694</strong></td><td>0.676</td><td>0.203</td></tr>
+<tr><td>Chlorite 16 measured</td><td>0.503</td><td>1.000</td><td>0.423</td><td>0.617</td><td>0.125</td></tr>
+<tr><td>Prochlorite 15 measured</td><td>0.425</td><td>1.000</td><td>0.594</td><td>0.750</td><td>0.169</td></tr>
+</table></div>
+
+<p>On the 003 &mdash; the order that matters most, being the only chlorite reflection kaolinite does
+not share &mdash; the refinement at 0.523 sits between the two standards, and the magnesium end
+member at 0.694 is outside both. <strong>The structure actually validated against single-crystal data
+was the closest thing available and it was the one not on the axis.</strong>
+<code>CHLORITE_PUBLISHED_IRON</code> now leads the series and carries the plain name, and a test
+re-derives it from the CIF so the constant cannot drift from the file.</p>
+
+<p>Illite and both kaolinites are unaffected: their structures are fully ordered, with no partial
+occupancies for a composition axis to overwrite.</p>
+
 <p><strong>And a procedural note.</strong> Three times in this work a quantity was explained by
 geometry that the data already recorded: the mount area is in the standards table, the goniometer
 radius and the slit are in every data file. A specimen length guessed at 35&nbsp;mm would have moved

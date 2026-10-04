@@ -38,6 +38,7 @@ __all__ = [
     "illite_crystal",
     "chlorite_layer",
     "CHLORITE_OCTAHEDRA",
+    "CHLORITE_PUBLISHED_IRON",
     "CHLORITE_HYDROXYL",
     "MINERAL_HABIT",
     "MINERAL_CLEAVAGE",
@@ -209,6 +210,39 @@ CHLORITE_OCTAHEDRA: dict[str, tuple[str, ...]] = {
     "2:1": ("Mg1", "Fe1", "Mg2", "Fe2"),
     "hydroxide": ("Mg3", "Fe3", "Mg4", "Fe4"),
 }
+
+CHLORITE_PUBLISHED_IRON: tuple[float, float] = (0.0877, 0.0580)
+"""The octahedral iron of ICSD 164234 itself, as (2:1 sheet, hydroxide sheet).
+
+The structure the chlorite entries are calculated from is not an iron-free
+clinochlore.  It is a single-crystal refinement at 298 K of one particular
+specimen, and its formula is H16 Al2.884 Fe0.874 Mg11.126 O36 Si5.116 - the
+iron is already there, on four sites, and refined:
+
+====  =========  ========  ========
+site  Wyckoff    sheet     Fe occ.
+====  =========  ========  ========
+Fe1   2 a        2:1         0.087
+Fe2   4 i        2:1         0.088
+Fe3   4 i        OH          0.060
+Fe4   2 h        OH          0.054
+====  =========  ========  ========
+
+Averaged over each sheet by site multiplicity, (2x0.087 + 4x0.088)/6 = 0.0877
+and (4x0.060 + 2x0.054)/6 = 0.0580.
+
+This matters because :func:`chlorite_crystal` *sets* the occupancies rather than
+adding to them, so ``chlorite_crystal(0.0, 0.0)`` is not the published structure
+- it is a magnesium end member nobody refined.  The library called that entry by
+the plain name ``chlorite`` and its comment said the published structure keeps
+its plain name, which was not true, and the composition axis built around the
+refinement did not contain the refinement: it held the 2:1 sheet at zero while
+the published value is 0.0877.  The difference is not cosmetic.  Calculated on a
+240 mm instrument, the published structure gives basal orders 0.348 / 1 / 0.523 /
+0.608 / 0.166 and the magnesium end member 0.389 / 1 / 0.694 / 0.676 / 0.203,
+against 0.423 and 0.594 measured for the 003 on two chlorite standards: the
+refinement is much the closer of the two, and it was the one not on the axis.
+"""
 """The two octahedral sheets of the chlorite structure, by site label.
 
 A chlorite layer carries two of them: the octahedral sheet of the 2:1 layer, at
