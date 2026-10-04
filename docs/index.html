@@ -173,6 +173,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-53">A.53 The kaolin standards, and what they were really saying</a>
 <a href="#a-54">A.54 Restraining both halves of a shared window</a>
 <a href="#a-55">A.55 Calibrating 2&theta; without quartz</a>
+<a href="#a-56">A.56 What the standards are for, and where that had been failing</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6741,6 +6742,74 @@ displacement and then the zero error, in that order.</p>
 <p>The solve runs on the background-subtracted pattern, not the raw one. A peak sitting on the
 low-angle air scatter has its centroid dragged down the slope, and at 6&nbsp;&deg; that slope is
 steep enough to move the answer.</p>
+
+
+<h3 id="a-56">A.56 What the standards are for, and where that had been failing</h3>
+
+<p>The library is <em>calculated</em>, from published crystal structures. The standards are not
+fitted to; they decide the <em>ranges</em> the axes span, and then they check the result. That
+division is deliberate: a library curve-fitted to one chlorite describes that chlorite and nothing
+else, and the whole point of a reference library is to describe a mineral the operator has not
+measured yet. So the standards set the span and the span has to be wide enough to contain them.</p>
+
+<p><strong>The check had been failing and the failure was being recorded instead of acted on.</strong>
+The chlorite iron axis was calibrated on these two standards and its own documentation said, of the
+clinochloritic one, that its 003 was matched &ldquo;by nothing here, which is left standing rather
+than tuned away&rdquo;. Leaving a number standing is right when the alternative is tuning it away.
+It is not right when the axis simply has not been opened in the direction the standard needs, and
+that is what had happened.</p>
+
+<p>Measured on the glycol mounts, background removed and the angular offset solved out, as areas
+against the 002 &mdash; on the geometry the data actually record, a 240&nbsp;mm goniometer with a
+0.5&nbsp;&deg; slit and the 4.91&nbsp;cm<sup>2</sup> discs the standards table gives, which are
+25&nbsp;mm:</p>
+
+<div class="tablewrap"><table>
+<tr><th></th><th>001</th><th>002</th><th>003</th><th>004</th><th>005</th></tr>
+<tr><td>Chlorite 16, d(001) 14.169&nbsp;&Aring;</td><td>0.503</td><td>1.000</td><td>0.423</td><td>0.617</td><td>0.125</td></tr>
+<tr><td>Prochlorite 15, d(001) 14.181&nbsp;&Aring;</td><td>0.425</td><td>1.000</td><td>0.594</td><td>0.750</td><td>0.169</td></tr>
+<tr><td><em>hydroxide-only axis could reach</em></td><td><em>0.179&ndash;0.389</em></td><td><em>1.000</em></td><td><em>0.666&ndash;0.694</em></td><td><em>0.623&ndash;0.676</em></td><td><em>0.145&ndash;0.203</em></td></tr>
+</table></div>
+
+<p>Neither standard's 001 was reachable and neither 003 was close: whatever the iron content, the
+calculated 003 sat at 0.67 to 0.69 of the 002 while the standards measure 0.42 and 0.59. The axis
+moved the 001 strongly and the 003 hardly at all, and the standards differ mainly in the 003.</p>
+
+<p><strong>Why one sheet could not do it.</strong> A chlorite's odd orders come from the
+<em>contrast</em> between the 2:1 layer and the hydroxide sheet, its even orders from their
+<em>sum</em>. Iron in the 2:1 sheet raises the contrast; iron in the hydroxide sheet lowers it, and
+steeply, because the 001 passes through zero where the two scatter alike. Each sheet alone therefore
+trades one order against another. The axis had been tried as the 2:1 sheet alone (worse than the
+published structure everywhere) and then as the hydroxide sheet alone; the two together had never
+been tried, and that is what the standards want. Opening both, on a 5&nbsp;&times;&nbsp;5 grid:</p>
+
+<div class="tablewrap"><table>
+<tr><th>largest error on any order</th><th>Chlorite 16</th><th>Prochlorite 15</th></tr>
+<tr><td>hydroxide sheet only</td><td>59&nbsp;%</td><td>17&nbsp;%</td></tr>
+<tr><td>both sheets</td><td><strong>22&nbsp;%</strong></td><td><strong>14&nbsp;%</strong></td></tr>
+</table></div>
+
+<p>The prochlorite's 003 goes from unreachable to within half a per cent. That matters past the fit:
+the 003 is one of the three diagnostic windows and the only chlorite order kaolinite does not share,
+so it is what
+<code>chlorite_002_survival_from_003</code> (&sect;<a href="#a-52">A.52</a>) measures the chlorite's
+collapse on. A chlorite whose 003 the library cannot produce is a chlorite whose collapse cannot be
+measured, and the kaolinite bound that rests on it inherits the error.</p>
+
+<p><strong>What is still not reproduced.</strong> Neither standard is matched better than about
+15&nbsp;%, and Chlorite 16 not better than 22: at its best point the calculated 001, 003 and 004 are
+all 11 to 19&nbsp;% low while the 005 is 18&nbsp;% high, a systematic shape no iron content corrects.
+Prochlorite 15's 004, at 0.750 of its 002, is outside what the entire composition space reaches
+&mdash; 0.368 to 0.676 &mdash; so there it is the layer model that falls short, not the axis. Those
+two statements are the honest limit of the current chlorite model, and unlike the 003 they are not
+fixed by widening anything.</p>
+
+<p><strong>And a procedural note.</strong> Three times in this work a quantity was explained by
+geometry that the data already recorded: the mount area is in the standards table, the goniometer
+radius and the slit are in every data file. A specimen length guessed at 35&nbsp;mm would have moved
+the calculated chlorite 001/002 from 0.389 to 0.552 and apparently resolved a discrepancy that is
+really in the structure model. The geometry is a measurement; it is never the explanation of last
+resort.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

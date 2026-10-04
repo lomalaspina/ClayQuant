@@ -156,64 +156,56 @@ little expandable component is described more coarsely; that is the existing
 spacing of this axis rather than anything new.
 """
 
-CHLORITE_IRON: tuple[tuple[float, float], ...] = (
-    (0.0, 0.000),
-    (0.0, 0.006),
-    (0.0, 0.015),
-    (0.0, 0.025),
-    (0.0, 0.035),
-    (0.0, 0.050),
-    (0.0, 0.065),
-    (0.0, 0.085),
-    (0.0, 0.110),
+CHLORITE_IRON: tuple[tuple[float, float], ...] = tuple(
+    (two_one, hydroxide)
+    for two_one in (0.0, 0.05, 0.10, 0.20, 0.30)
+    for hydroxide in (0.0, 0.015, 0.035, 0.08, 0.15)
 )
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
 
-In the **hydroxide** sheet, and finely, and both of those are measurements
-rather than choices.
+Both sheets, because the library has to reproduce the standards it is checked
+against and a one-sheet axis cannot.
 
 A chlorite's octahedral iron varies from one deposit to the next and acts
 directly on its basal intensities, so one published clinochlore cannot describe
-two chlorites of different composition.  This axis used to span the 2:1 sheet,
-from 0 to 0.6 of an atom, and it ran the wrong way.  Chlorite's 001 comes from
-the *contrast* between the 2:1 layer and the hydroxide sheet and its even orders
-from their *sum*, so iron in the 2:1 sheet raises the contrast and lowers the
-even orders relative to the 001: the old series took 002/001 from 1.80 down to
-0.74, while two chlorite standards measured on this instrument want 1.87 and
-2.30.  Every value of it was further from both standards than the published
-structure.
+two chlorites of different composition.  The 001 comes from the *contrast*
+between the 2:1 layer and the hydroxide sheet and the even orders from their
+*sum*, so the two sheets pull in opposite directions: iron in the 2:1 sheet
+raises the contrast and lowers the even orders relative to the 001, iron in the
+hydroxide sheet raises them, and steeply, because the 001 passes through zero
+where the two sheets scatter alike.
 
-Iron in the hydroxide sheet raises the even orders, and steeply, because the 001
-passes through zero where the two sheets scatter alike - which is why so little
-of it does so much, and why the axis has to be fine near zero to be useful at
-all.  Calculated on this instrument's geometry:
+This axis spanned the 2:1 sheet alone first, and that was worse than the
+published structure at every value.  It then spanned the hydroxide sheet alone,
+0 to 0.11, which fitted the 002 and the 004 of both standards.  What neither
+tried was the two together, and that is what the standards need.  Measured on
+the two chlorite standards against what each axis can reach, as the largest
+error on any of the 001, 003, 004 and 005 relative to the 002:
 
-======  =======  =======  =======
- OH Fe  002/001  003/001  004/001
-======  =======  =======  =======
- 0.000    1.805    1.236    1.204
- 0.006    1.877    1.283    1.246
- 0.015    1.989    1.355    1.313
- 0.025    2.118    1.437    1.386
- 0.035    2.259    1.527    1.473
- 0.050    2.519    1.692    1.616
-======  =======  =======  =======
+====================  ============  ==============
+axis                  Chlorite 16   Prochlorite 15
+====================  ============  ==============
+hydroxide sheet only       59 %          17 %
+both sheets, 5 x 5         22 %          14 %
+====================  ============  ==============
 
-against 1.874 / 0.791 / 1.142 measured on a clinochloritic chlorite and 2.298 /
-1.357 / 1.701 on an iron-rich prochlorite.  The prochlorite's three higher orders
-are matched together to within 15 % at 0.035; the chlorite's 002 and 004 at
-0.006, its 003 by nothing here, which is left standing rather than tuned away.
+The 003 is what moves.  A hydroxide-only axis puts it between 0.666 and 0.694 of
+the 002 wherever it is set, while the standards measure 0.423 and 0.594, so no
+entry could reach either; with the 2:1 sheet opened, the prochlorite's 003 comes
+within half a per cent.  That matters beyond the fit, because the 003 is one of
+the three diagnostic windows and the only chlorite order kaolinite does not
+share (:func:`clayquant.diagnostics.chlorite_002_survival_from_003`): a chlorite
+whose 003 the library cannot produce is a chlorite whose collapse cannot be
+measured.
 
-The axis used to stop at 0.050, and that was too soon: offered the values above
-the prochlorite takes 0.085, and where the axis ended at 0.050 it took the
-boundary value and its 7.15 A intensity was left 26 % short.  A fit that lands on
-the end of an axis has not chosen that value, it has run out of room, and the
-three further values exist so that it can.
-
-Whether the parameter is literally iron, or the hydroxide sheet's height, or its
-occupancy, is not settled by this: it is one number that moves the sum of the two
-sheets against their contrast, and with it two real chlorites are describable and
-with the published structure alone neither is.
+**What is still not reproduced, and is left standing rather than tuned away.**
+Neither standard is matched better than about 15 %, and Chlorite 16 not better
+than 22: at its best point the calculated 001, 003 and 004 are all 11 to 19 per
+cent low while the 005 is 18 per cent high, a systematic shape no iron content
+corrects.  Prochlorite 15's 004, measured at 0.750 of its 002, is outside what
+the whole composition space reaches at all - 0.368 to 0.676 - so there it is the
+layer model that falls short and not the axis.  Scanning further in iron only
+moves the other orders away.
 """
 
 ILLITE_COMPOSITION: tuple[tuple[float, float], ...] = (
