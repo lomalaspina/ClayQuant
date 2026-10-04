@@ -56,3 +56,23 @@ def test_the_host_carries_its_own_width_axis_instead(host):
     assert min(finite) <= 200.0, (
         "the axis must reach the ~190 A that a 0.418 deg basal reflection implies"
     )
+
+
+def test_the_builder_applies_the_axis_without_being_asked():
+    """The default has to be wired, not merely defined.
+
+    A constant that no build path passes is a constant that does nothing, and the
+    operator rebuilding from the GUI does not pass one.
+    """
+    import inspect
+
+    from clayquant.library import DISCRETE_THICKNESSES, build_library
+
+    parameter = inspect.signature(build_library).parameters["domain_sizes"]
+    assert parameter.default is None, "the default is resolved inside, not in the signature"
+    source = inspect.getsource(build_library)
+    assert "DISCRETE_THICKNESSES if domain_sizes is None" in source, (
+        "build_library does not fall back to DISCRETE_THICKNESSES, so a caller "
+        "that passes nothing - which is every caller in the GUI and the CLI - "
+        "gets no width axis on the discrete phases"
+    )
