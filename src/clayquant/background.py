@@ -1116,6 +1116,7 @@ ESTIMATOR_LABELS = {
     "als": "asymmetric least squares",
     "percentile": "rolling percentile",
 }
+"""Human names for the non-parametric background estimators, by key."""
 
 
 def baseline_estimate(
@@ -1466,7 +1467,13 @@ free to eat the 001 reflections that sit on that rise.
 """
 
 CLAYFIT_ALS_SMOOTHNESS = 1.0
+"""Smoothness of the asymmetric least-squares baseline, as Clayfit sets it."""
 CLAYFIT_ALS_ASYMMETRY = 0.001
+"""Asymmetry of the asymmetric least-squares baseline, as Clayfit sets it.
+
+Carried over rather than chosen here; the pair with
+:data:`CLAYFIT_ALS_SMOOTHNESS` is what reproduces Clayfit's curve.
+"""
 CLAYFIT_ALS_ITERATIONS = 100
 """Clayfit's ``baseline_als_2d(lam=1, p=0.001, niter=100)``.
 
@@ -1476,10 +1483,21 @@ smoothing is comparable to ``lam`` of 10^7 on an unscaled grid.
 """
 
 QPA_PERCENTILE_WINDOW = 1.50
+"""Width of the window the QPA percentile is taken over, in points."""
 QPA_LOWER_PERCENTILE = 15.0
+"""Percentile of each window the QPA baseline is drawn through.
+
+Low enough to sit under the peaks and high enough not to chase the noise
+floor; both ends are judgement rather than measurement.
+"""
 QPA_BASELINE_SMOOTH = 0.30
+"""Smoothing applied before the QPA percentile filter, in points."""
 QPA_BASELINE_ORDER = 2
+"""Polynomial order of the QPA baseline. A choice, not a measurement: it is low
+enough that no order of it can follow a reflection.
+"""
 QPA_FINAL_SMOOTH = 0.08
+"""Smoothing applied to the QPA baseline after the percentile filter, in points."""
 QPA_FINAL_ORDER = 2
 """Clayfit's percentile/Savitzky-Golay defaults, in degrees and orders."""
 
@@ -1507,6 +1525,7 @@ CLAYFIT_MODEL_LABELS = {
     QPA_MODEL_NAME: "QPA percentile + Savitzky-Golay",
     "sonneveld-visser": "Sonneveld-Visser",
 }
+"""Human names for Clayfit's parametric background models, by key."""
 
 _ANCHOR_CACHE: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 

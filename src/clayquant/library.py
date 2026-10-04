@@ -72,6 +72,7 @@ __all__ = [
     "CSDS_MEANS",
     "DEFAULT_PEAK_SHAPE",
     "DISCRETE_STRAINS",
+    "DISCRETE_THICKNESSES",
     "HOST_THICKNESSES",
     "ILLITE_COMPOSITION",
     "ILLITE_SMECTITE_HOST",
@@ -296,18 +297,29 @@ two to two and a half.  A reference peak half as wide as the measured one cannot
 be scaled to it: the fit can match its height or its area but not both, and it
 is the area that carries the weight percent.
 
-Only the kaolinites carry the axis by default, and the reason is that they are
-the only clays without one already.  Illite and chlorite have their basal widths
-spanned through the crystallite thickness distribution of the interstratified
-series, which reaches the discrete end member at a host fraction of 1.00; the
-kaolinites have no such series, so without this they are fitted at essentially
-instrumental width.  Giving the discrete illite and chlorite a *second* width
-axis on top of that one was measured on a mount with an independent TOPAS
-refinement to answer against: it lowered ``R_wp`` by a further half point and
-moved the clay assemblage away from the refinement, the discrete illite
-outcompeting the interstratified entries and taking the illite share from 27 to
-43 % of the clay where the refinement says 5 %.  Span them here if your own
-standards call for it - the cost is a larger library, not a wrong one.
+Only the kaolinites carry *this* axis, because microstrain is the width term they
+need; illite and chlorite carry :data:`DISCRETE_THICKNESSES` instead, which is
+the crystallite-size term, and the two are different functions of angle.
+
+The reasoning that kept illite and chlorite off a width axis altogether is worth
+recording because it was sound and then stopped being true.  It ran: their basal
+widths are already spanned through the crystallite thickness distribution of the
+interstratified series, which reaches the discrete end member at a host fraction
+of 1.00, so a *second* width axis would only duplicate it - and measured on a
+mount with an independent TOPAS refinement to answer against, that duplicate
+lowered ``R_wp`` by half a point while moving the assemblage away from the
+refinement, the discrete illite outcompeting the interstratified entries and
+taking the illite share from 27 to 43 % of the clay where the refinement says 5 %.
+
+That argument rested entirely on the 1.00 end members existing.  They were since
+removed, because an I/S at a host fraction of 1.00 *is* illite and carrying one
+mineral under two names split it arbitrarily between them.  Removing them also
+removed the width freedom the discrete illite had been borrowing, and left the
+mixed-layer entries as the only ones in the library wide enough to be a real
+illite: a pure illite standard measures 0.418 deg at its 10 A reflection, the
+discrete illite entries span 0.080 to 0.100 deg, and the I/S entries span 0.180
+to 1.080.  The fit answered as it had to and reported a pure illite as 99 % I/S
+99/1 - not because it saw smectite, but because nothing else could be that wide.
 """
 
 NORMALIZATION_FLOOR = 4.0
@@ -403,6 +415,38 @@ far too much between samples to fix in advance: 10 layers give a 001 width near
 0.8 deg, while a well crystallised illite measures nearer 0.12 deg and needs
 about 70 layers.  The library therefore carries each interstratified composition
 at several thicknesses and lets the fit choose.
+"""
+
+DISCRETE_THICKNESSES: dict[str, tuple[float | None, ...]] = {
+    "illite": (None, 600.0, 250.0, 120.0),
+    "chlorite": (None, 600.0, 250.0, 120.0),
+}
+"""Coherent domain sizes along c* to span per discrete phase, in A.
+
+``None`` is no size broadening at all - the instrumental width alone, which is
+what these phases were calculated at before - and it leads each series so that
+the entry carrying the plain name is the one that was always there.
+
+This is the crystallite-size half of a clay's peak width, and the mixed-layer
+series has always had it through :data:`CSDS_MEANS`.  The discrete illite and
+chlorite did not, on the reasoning set out in :data:`DISCRETE_STRAINS`, which
+held only while those series reached a host fraction of 1.00.  They no longer
+do, and the gap this left is not marginal: a pure illite standard's 10 A
+reflection measures 0.418 deg where the widest discrete illite in the library is
+0.100, a factor of four.
+
+The values bracket that.  On this instrument's geometry the discrete illite
+calculates 0.100 deg at no size broadening, 0.140 at 600 A, 0.320 at 250 and
+0.660 at 120, so a measured 0.418 deg sits between the last two, at about 190 A
+or nineteen layers.  Four values rather than more because each one multiplies
+the whole phase: with the chlorite composition grid at twenty-six, the chlorite
+entries alone go from 1040 to 4160.
+
+Spanning a width is not the same as inventing one.  What is spanned here is a
+property every real specimen has and no published structure records - how many
+layers stack coherently - and the library's job is to offer the range so the
+measurement can pick from it, exactly as it does for the basal spacing and the
+octahedral iron.  What would be invention is naming one of these as measured.
 """
 
 
@@ -963,6 +1007,7 @@ def build_library(
     illite_smectite_host: tuple[float, float] | None = ILLITE_SMECTITE_HOST,
     csds_means: tuple[float, ...] = CSDS_MEANS,
     strains: dict[str, tuple[float, ...]] | None = None,
+    domain_sizes: "dict[str, tuple[float | None, ...]] | None" = None,
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
@@ -1069,6 +1114,7 @@ def build_library(
     )
     host_thicknesses = HOST_THICKNESSES if host_thicknesses is None else host_thicknesses
     strains = DISCRETE_STRAINS if strains is None else strains
+    domain_sizes = DISCRETE_THICKNESSES if domain_sizes is None else domain_sizes
     distributions = [lognormal_csds(float(mean), csds_beta) for mean in csds_means]
     if not distributions:
         raise ValueError("at least one CSDS mean is needed")
@@ -1118,6 +1164,7 @@ def build_library(
             "csds_means": [distribution.mean for distribution in distributions],
             "csds_beta": csds_beta,
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
+            "domain_sizes": {key: list(value) for key, value in domain_sizes.items()},
             "smectite_source": "Reynolds (1965) Am. Mineral. 50, 990-1001",
             "smectite_orientation": float(smectite_orientation),
             "air_dried_thickness": (None if air_dried_thickness is None
@@ -1162,34 +1209,42 @@ def build_library(
         for base, iron_tag in variants:
             spacings = host_thicknesses.get(key) or (base.d001 / source.layers_per_cell,)
             values = strains.get(key) or (0.0,)
+            sizes = domain_sizes.get(key) or (None,)
             announce(f"{key}{iron_tag}: {len(orientations)} orientations "
-                     f"x {len(spacings)} layer spacings x {len(values)} strains")
+                     f"x {len(spacings)} layer spacings x {len(values)} strains "
+                     f"x {len(sizes)} domain sizes")
             for thickness in spacings:
                 crystal = scaled_to_d001(base, source.layers_per_cell, thickness)
                 spacing_tag = f" d={thickness:g}" if len(spacings) > 1 else ""
                 for strain in values:
-                    strained = replace(
-                        instrument,
-                        peak_shape=replace(instrument.peak_shape, strain=float(strain)),
-                    )
-                    # Zero strain keeps the plain name, as the published
-                    # chlorite does in the iron series above: adding an axis
-                    # must not rename an entry that was already there, or every
-                    # reference to it - a saved result, a test, a note in a lab
-                    # book - stops matching.
-                    strain_tag = "" if not strain else f" e={strain:g}"
-                    for r in orientations:
-                        pattern = powder_pattern(
-                            crystal,
-                            extended,
-                            strained,
-                            r_march_dollase=r,
-                            name=f"{key}{iron_tag} PO={r:g}{spacing_tag}{strain_tag}",
+                    for domain in sizes:
+                        strained = replace(
+                            instrument,
+                            peak_shape=replace(instrument.peak_shape,
+                                               strain=float(strain), size_c=domain),
                         )
-                        library.add(pattern, phase=key, march_dollase=r, thickness=thickness,
-                                    strain=float(strain),
-                                    unit_mass=crystal.cell_mass, unit_volume=crystal.volume,
-                                    mass_attenuation=mass_attenuation_of(crystal))
+                        # Zero strain and no size broadening keep the plain
+                        # name, as the published chlorite does in the iron
+                        # series above: adding an axis must not rename an entry
+                        # that was already there, or every reference to it - a
+                        # saved result, a test, a note in a lab book - stops
+                        # matching.
+                        strain_tag = "" if not strain else f" e={strain:g}"
+                        size_tag = "" if domain is None else f" L={domain:g}"
+                        for r in orientations:
+                            pattern = powder_pattern(
+                                crystal,
+                                extended,
+                                strained,
+                                r_march_dollase=r,
+                                name=(f"{key}{iron_tag} PO={r:g}"
+                                      f"{spacing_tag}{strain_tag}{size_tag}"),
+                            )
+                            library.add(pattern, phase=key, march_dollase=r,
+                                        thickness=thickness, strain=float(strain),
+                                        unit_mass=crystal.cell_mass,
+                                        unit_volume=crystal.volume,
+                                        mass_attenuation=mass_attenuation_of(crystal))
 
     # Pure glycolated smectite.  One entry, and the reason is worth setting out
     # because the consequence is not obvious.  Every reflection of this phase is

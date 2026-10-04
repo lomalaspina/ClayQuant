@@ -94,6 +94,12 @@ carries the strongest lines.  The glycol scan stays the primary target.
 """
 
 MINIMUM_EXPANSION_GAIN = 0.08
+"""Least area glycolation must add to count, as a fraction of the window.
+
+Clayfit's, and paired with :data:`MINIMUM_PROFILE_AGREEMENT`; the two are
+documented together below because neither is a test on its own.
+"""
+
 MINIMUM_PROFILE_AGREEMENT = 0.10
 """Clayfit's two tests for calling the expansion real.
 

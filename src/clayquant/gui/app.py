@@ -137,6 +137,7 @@ from ..profile import PeakShape
 from ..quantification import Calibration, quantify
 from ..treatment import (
     expandable_bound,
+    expandable_entries,
     kaolinite_share_constraint,
     shift_evidence,
 )
@@ -144,6 +145,7 @@ from . import folder_dialog
 from .state import MOUNT_LABELS, MOUNTS, STATE
 
 COLORS = {"air": "#1f77b4", "glycol": "#2ca02c", "heated": "#d62728"}
+"""Trace colour per mount, so one mount is the same colour on every plot."""
 _PHASE_PALETTE = (
     "#ff7f0e",
     "#9467bd",
@@ -155,6 +157,7 @@ _PHASE_PALETTE = (
     "#2ca02c",
 )
 GRAPH_HEIGHT = 480
+"""Height of every plot in pixels, so the tabs do not jump as they are switched."""
 
 
 # --------------------------------------------------------------------------- #
@@ -519,14 +522,21 @@ def background_report(pattern, fit, background) -> str:
 
 
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"})
+"""Address the server binds to: the loopback interface only.
+
+The application holds a specimen's data and has no authentication, so it is
+not offered beyond this machine.
+"""
 
 REMOTE_CHOOSER = (
     "This page is open on a different computer from the one running ClayQuant, so "
     "a chooser here would appear on that other machine. Type the path as the "
     "computer running ClayQuant sees it."
 )
+"""Environment variable that forces the in-browser chooser over the native one."""
 
 FOLDER_DIALOG_TIMEOUT = 600.0
+"""How long to wait for the native folder chooser before giving up, in seconds."""
 
 
 def served_locally() -> bool:
@@ -964,8 +974,11 @@ CONTROL_PANEL = {
     "borderRadius": "6px",
     "fontSize": "0.9rem",
 }
+"""Style of the control column beside each plot."""
 ROW = {"display": "flex", "gap": "16px", "alignItems": "flex-start"}
+"""Style of a row holding a control panel and its plot."""
 GRAPH_BOX = {"flex": "1", "minWidth": "0"}
+"""Style of the box a plot sits in."""
 
 
 def load_tab() -> html.Div:
@@ -1414,6 +1427,31 @@ def smectite_tab() -> html.Div:
                         "as a shift that is not there. These move one mount against the "
                         "other here, without touching the zero error the fit uses.",
                         style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    dcc.Checklist(
+                        id="sme-exclude",
+                        options=[{"label": " Leave the expandable clays out of the fit "
+                                          "entirely", "value": "on"}],
+                        value=[],
+                        style={"marginTop": "10px"},
+                    ),
+                    html.Div(
+                        "Off by default, and a blunter instrument than the checkbox below "
+                        "it. The ceiling lets the fit use as much expandable layer as the "
+                        "unmoved reflections could have hidden; this removes every entry "
+                        "carrying any, so a specimen that really does hold a little is "
+                        "reported without it. Use it when the three mounts say plainly "
+                        "that there is none and you want the result to say so too.",
+                        style={"fontSize": "11px", "color": "#666", "marginTop": "4px"},
+                    ),
+                    html.Div(
+                        "It will usually make R\u1d65\u1d69\u209a worse, and that is not "
+                        "a reason to leave it off: a mixed-layer entry has more freedom "
+                        "than a discrete mineral and absorbs residual better whether or "
+                        "not it is there. On a pure chlorite standard, restraining them "
+                        "moved the chlorite from 28 % behind an illite/smectite to 46 % "
+                        "and first place, and cost 7.8 points.",
+                        style={"fontSize": "11px", "color": "#a15c00", "marginTop": "4px"},
                     ),
                     dcc.Checklist(
                         id="sme-constrain",
@@ -3304,6 +3342,7 @@ def register_callbacks(app: Dash) -> None:
         State("fit-lattice", "value"),
         State("kao-constrain", "value"),
         State("sme-constrain", "value"),
+        State("sme-exclude", "value"),
         State("fit-accompanying-cell", "value"),
         State("fit-accompanying-po", "value"),
         State("film-mass", "value"),
@@ -3313,7 +3352,7 @@ def register_callbacks(app: Dash) -> None:
     )
     def run_fit(_clicks, mount, fit_range, orientations, subtract, calibration_choice,
                 exclusive, use_air_dried, use_diagnostic, lattice,
-                constrain_kaolinite, trust_expandable,
+                constrain_kaolinite, trust_expandable, exclude_expandable,
                 accompanying_cell, accompanying_po, film_mass, film_area,
                 film_constants):
         blank = (no_update,) * 5
@@ -3397,6 +3436,19 @@ def register_callbacks(app: Dash) -> None:
                 air_note = bound.status
                 if not bound.unrestricted and bound.excluded:
                     library = _library_subset(library, bound.allowed)
+        if bool(exclude_expandable) and "on" in (exclude_expandable or []):
+            # Blunter than the ceiling and asked for separately: every entry
+            # carrying any expandable layer goes, rather than those above what
+            # the unmoved reflections could have hidden.
+            carrying = set(expandable_entries(library))
+            keep = [i for i in range(len(library.entries)) if i not in carrying]
+            if keep and carrying:
+                library = _library_subset(library, keep)
+                air_note = ((air_note + " ") if air_note else "") + (
+                    f"The expandable clays were then left out of the fit entirely: "
+                    f"{len(carrying)} of {len(carrying) + len(keep)} entries removed, "
+                    f"on the operator's instruction rather than on the evidence."
+                )
         elif wanted:
             air_note = (
                 "The air-dried mount was not used: it restrains the glycolated mount, and "

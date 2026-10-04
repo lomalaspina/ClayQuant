@@ -32,7 +32,9 @@ __all__ = [
 ]
 
 APP_NAME = "ClayQuant"
+"""Name the desktop entry and the menu show."""
 COMMENT = "Quantification of clay mineral assemblages from oriented mounts"
+"""One-line description shown by the desktop environment."""
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class Shortcut:
 
 
 MAIN = Shortcut(name=APP_NAME, slug="clayquant", comment=COMMENT)
+"""The desktop entry for the application itself."""
 
 TOOLS = (
     Shortcut(
@@ -82,8 +85,10 @@ TOOLS = (
         argument="build-library",
     ),
 )
+"""The desktop entries for the long-running tools."""
 
 ALL_SHORTCUTS = (MAIN,) + TOOLS
+"""Every desktop entry this installer writes, by name."""
 
 
 def project_root() -> Path:
@@ -112,7 +117,9 @@ def launch_command() -> list[str]:
 
 
 ICON_SUFFIXES = (".png", ".jpg", ".jpeg", ".ico", ".icns", ".bmp", ".gif", ".webp")
+"""Image suffixes accepted as an application icon, in order of preference."""
 PLACEHOLDER_STEM = "clayquant-placeholder"
+"""Stem of the placeholder icon written when none is supplied."""
 
 
 def icon_source() -> Path | None:

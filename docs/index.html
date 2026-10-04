@@ -175,6 +175,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-55">A.55 Calibrating 2&theta; without quartz</a>
 <a href="#a-56">A.56 What the standards are for, and where that had been failing</a>
 <a href="#a-57">A.57 Two tests the pure standards failed, and what they found</a>
+<a href="#a-58">A.58 Why a pure illite was reported as 99 % illite/smectite</a>
+<a href="#a-59">A.59 Leaving the expandable clays out, and an audit of where numbers come from</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -6914,6 +6916,70 @@ basal order is 52&nbsp;% and 66&nbsp;% against the two chlorites, where ICSD 164
 It also carries a diagnosable defect &mdash; its tetrahedral sites refined to Si&nbsp;0 and
 Al&nbsp;1, where a chlorite's tetrahedra are about 60&nbsp;% silicon, which is a refinement that
 reached a bound rather than a composition. It is not used.</p>
+
+
+<h3 id="a-58">A.58 Why a pure illite was reported as 99&nbsp;% illite/smectite</h3>
+
+<p>Not because anything looked like smectite. Because nothing else in the library was wide
+enough.</p>
+
+<p>Illite 10's 10&nbsp;&Aring; reflection measures <strong>0.418&nbsp;&deg;</strong> FWHM. The
+discrete illite entries span 0.080 to 0.100&nbsp;&deg;; the I/S entries span 0.180 to 1.080. The
+discrete illite is a factor of four too sharp and cannot be scaled to the measurement at all &mdash;
+a reference peak four times too narrow can match a height or an area but never both. The fit
+answered with the only columns that could be that wide, which happen to carry a smectite label.</p>
+
+<p>The cause is traceable to a decision made here and is worth setting out, because the decision was
+right and its consequence was not noticed. The discrete illite and chlorite were deliberately left
+without a width axis, on the reasoning &mdash; recorded in <code>DISCRETE_STRAINS</code> &mdash; that
+their widths were <em>already</em> spanned through the interstratified series' crystallite thickness
+distribution, "which reaches the discrete end member at a host fraction of 1.00". That was true. The
+1.00 end members were then removed, correctly: an I/S at a host fraction of 1.00 is illite, and
+carrying one mineral under two names split it arbitrarily between two columns no measurement can
+distinguish (cosine 0.963, and reporting the pair together proved thirteen times less reproducible
+than dropping one). Removing them also removed the width freedom the discrete illite had been
+borrowing, and nothing replaced it.</p>
+
+<p><code>DISCRETE_THICKNESSES</code> replaces it where it belongs: a coherent-domain axis on the
+discrete illite and chlorite themselves, in &aring;ngstr&ouml;ms along c*, spanning
+<code>None</code> &mdash; the unbroadened entry, which keeps the plain name &mdash; then 600, 250 and
+120&nbsp;&Aring;. On this instrument those calculate 0.100, 0.140, 0.320 and 0.660&nbsp;&deg; at the
+10&nbsp;&Aring; reflection, so the measured 0.418 sits between the last two, at about 190&nbsp;&Aring;
+or nineteen layers. The end members stay out.</p>
+
+<p><strong>This is spanning, not inventing.</strong> How many layers stack coherently is a property
+every real specimen has and no published structure records, so the library's job is to offer the
+range and let the measurement choose &mdash; exactly as it does for the basal spacing and the
+octahedral iron. What would be invention is naming one of those points as measured, which is the
+fault &sect;<a href="#a-56">A.56</a> describes and not this one.</p>
+
+<h3 id="a-59">A.59 Leaving the expandable clays out, and an audit of where numbers come from</h3>
+
+<p>The expansion tab now carries a second checkbox: <em>leave the expandable clays out of the fit
+entirely</em>. It is blunter than the ceiling beside it &mdash; the ceiling allows as much expandable
+layer as the unmoved reflections could have hidden, this removes every entry carrying any &mdash; so
+it is off by default and it is the operator's instruction rather than the evidence's. It will usually
+make R<sub>wp</sub> worse, and that is not a reason to leave it off: a mixed-layer entry has more
+freedom than a discrete mineral and absorbs residual better whether or not it is present.</p>
+
+<p><strong>The audit.</strong> Every module-level constant was checked for whether it says where its
+value came from. Two faults found by hand had the same shape &mdash; the chlorite composition axis
+naming an invented point as the published structure (&sect;<a href="#a-56">A.56</a>), and the heated
+mount labelled 500&nbsp;&deg;C where every bracket in the program was measured at 550 &mdash; and
+neither was a wrong formula. Both were a number that said less about itself than it should have. The
+label is corrected, and <code>tests/test_constants_are_sourced.py</code> now requires a docstring on
+every public module-level constant: forty had none. A test cannot check that a docstring is true
+&mdash; only a measurement does that &mdash; but it can stop a bare literal appearing with nothing
+attached to it.</p>
+
+<p>One distinction the audit has to keep, because collapsing it would do real damage. A parameter
+that is <em>spanned</em> is not invented: the octahedral iron, the basal spacing, the crystallite
+thickness and the preferred orientation all vary between real specimens, no published structure
+records them for the specimen in hand, and offering a range for the measurement to choose from is the
+method rather than a shortcut around it. What must never happen is a spanned point being presented as
+a measured one, or a range chosen so that it excludes the structure it was built from. Where a value
+here is a judgement rather than a measurement, its docstring now says so and says what changes if it
+moves.</p>
 
 
 <h3 id="a-13">A.13 Summary</h3>

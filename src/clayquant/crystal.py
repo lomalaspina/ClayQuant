@@ -39,6 +39,7 @@ from .scattering import debye_waller, f0
 __all__ = ["AtomSite", "Crystal", "LayerModel", "read_cif", "U_TO_B"]
 
 U_TO_B = 8.0 * math.pi**2
+"""Factor converting a U displacement parameter to a B one: 8 pi^2."""
 
 
 @dataclass(frozen=True)

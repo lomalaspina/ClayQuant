@@ -63,6 +63,15 @@ __all__ = [
 ]
 
 DEFAULT_RANGE = (4.0, 38.0)
+"""2theta range the standards are read over, in degrees.
+
+The low end clears the air scatter that dominates below about 4 deg; the high
+end stops short of 40 because a clay separate has almost no net intensity
+there and what little it has is dominated by the accompanying minerals'
+particle statistics - on one specimen the quartz 102 measured an eighth of
+its powder value.  Both ends are choices about where the measurement is
+informative, not properties of any mineral.
+"""
 
 
 @dataclass

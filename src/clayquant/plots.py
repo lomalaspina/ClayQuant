@@ -42,7 +42,16 @@ __all__ = [
 ]
 
 MOUNT_COLORS = {"air": "#1f77b4", "glycol": "#2ca02c", "heated": "#d62728"}
-MOUNT_LABELS = {"air": "Air-dried", "glycol": "Ethylene glycol", "heated": "Heated (500 C)"}
+"""Trace colour per mount, matching the GUI so a figure reads the same way."""
+MOUNT_LABELS = {"air": "Air-dried", "glycol": "Ethylene glycol",
+                "heated": "Heated (550 \u00b0C)"}
+"""How each mount is named wherever one is named to the operator.
+
+550 and not 500: every bracket in this program - the chlorite survival ranges,
+the kaolinite collapse, the dehydroxylation span - was measured on standards held
+1.5 h at 550 C, and a label naming a different temperature describes a
+measurement nobody made.
+"""
 
 _PHASE_COLORS = (
     "#1f77b4",

@@ -46,6 +46,7 @@ __all__ = [
 ]
 
 CU_KA1 = 1.540596
+"""Cu K-alpha1 wavelength in A."""
 
 
 @dataclass

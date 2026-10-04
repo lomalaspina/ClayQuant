@@ -66,6 +66,7 @@ import numpy as np
 __all__ = ["lorentz_polarization", "march_dollase", "Divergence", "LP_MODES"]
 
 LP_MODES = ("powder", "crystal", "none")
+"""The Lorentz-polarisation forms available, by name."""
 
 
 def lorentz_polarization(

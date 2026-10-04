@@ -48,6 +48,7 @@ QUARTZ_101_D = 3.34346
 """d(101) of quartz in A, the strongest quartz reflection."""
 
 CU_KA1 = 1.540596
+"""Cu K-alpha1 wavelength in A."""
 
 
 def reference_two_theta(d: float = QUARTZ_100_D, wavelength: float = CU_KA1) -> float:

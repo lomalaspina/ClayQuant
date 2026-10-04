@@ -1265,6 +1265,10 @@ be three-quarters of the phase's evidence only if they are really resolved.
 """
 
 CLAYFIT_MIN_MATCHES = 2
+"""Reflections a candidate must match before Clayfit's triplet screen keeps it.
+
+Carried over from Clayfit; three is what makes the screen a triplet.
+"""
 CLAYFIT_MIN_COVERAGE = 0.30
 """Clayfit's reporting thresholds: two stable reflections and 30 % coverage."""
 

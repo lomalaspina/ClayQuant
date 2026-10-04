@@ -73,6 +73,7 @@ __all__ = [
 ]
 
 CU_KA1 = 1.540596
+"""Cu K-alpha1 wavelength in A."""
 
 KAOLINITE_001_WINDOW = (11.6, 13.2)
 """2theta window around the kaolinite 001 / chlorite 002 reflection at ~7.15 A."""

@@ -155,6 +155,7 @@ SUPPORTED_SUFFIXES = (
     ".xrdml",
     ".raw",
 )
+"""File suffixes this reader accepts, lowercased."""
 
 _NUMBER_RE = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 

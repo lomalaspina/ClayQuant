@@ -115,6 +115,12 @@ CIF_SOURCES: dict[str, CifSource] = {
         ),
     ]
 }
+"""Where each phase's structure comes from, and how many layers its cell holds.
+
+The layer count is what lets a published cell be rescaled to a different basal
+spacing: a 2M structure holds two layers per cell, so its d(001) is twice the
+layer repeat.  Getting it wrong rescales by a factor of two.
+"""
 
 
 def structure_directories() -> list[Path]:
@@ -210,6 +216,14 @@ CHLORITE_OCTAHEDRA: dict[str, tuple[str, ...]] = {
     "2:1": ("Mg1", "Fe1", "Mg2", "Fe2"),
     "hydroxide": ("Mg3", "Fe3", "Mg4", "Fe4"),
 }
+"""The octahedral site labels of each chlorite sheet, as the CIF names them.
+
+Which sheet a site belongs to is read off its z coordinate in ICSD 164234 - the
+2:1 layer's octahedra sit at z ~ 0 and the interlayer hydroxide sheet's at
+z ~ 0.5 - and it is recorded here rather than re-derived because the two sheets
+act on the basal orders in opposite directions and mixing them up would be
+invisible in the result.
+"""
 
 CHLORITE_PUBLISHED_IRON: tuple[float, float] = (0.0877, 0.0580)
 """The octahedral iron of ICSD 164234 itself, as (2:1 sheet, hydroxide sheet).
@@ -689,6 +703,13 @@ REYNOLDS_1965_EG_SMECTITE_ROWS: list[tuple[float, str, float, float]] = [
     (7.94, "H", 1.60, 1.68),
     (7.94, "Ca", 0.20, 1.68),
 ]
+"""The glycolated smectite layer, as Reynolds (1965) tabulated it.
+
+Am. Mineral. 50, 990-1001.  Transcribed rather than recalculated: the electron
+density of an ethylene glycol complex is not something this program models from
+first principles, and substituting a guess for the table would be inventing the
+one layer the whole expandable-clay method rests on.
+"""
 
 
 AIR_DRIED_SMECTITE_D001 = 12.4

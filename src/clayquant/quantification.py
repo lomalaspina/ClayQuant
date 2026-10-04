@@ -1066,6 +1066,14 @@ def quantify(
 # --- Clayfit's family calibration, carried over ------------------------------
 
 CLAYFIT_ANCHOR_ORIENTATION = 0.1
+"""The March-Dollase value Clayfit's family calibration is expressed at.
+
+Carried over from Clayfit rather than chosen here, which is why it is not a
+range: the calibration factors that go with it were measured at this one
+orientation, and reading them at another would be using a number at a
+condition it was not measured at.  :func:`rebase_fixed_orientation` is what
+moves a result off it, and it is cubic.
+"""
 
 FIXED_ORIENTATION_PHASES = ("smectite_EG",)
 """Phases whose library pattern is one entry at one assumed orientation.

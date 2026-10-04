@@ -34,7 +34,9 @@ import sys
 from pathlib import Path
 
 TITLE = "Select the folder holding the diffraction scans"
+"""Title of the native folder chooser."""
 FILE_TITLE = "Select a file"
+"""Title of the native file chooser."""
 
 
 def choose_folder(initial: str | None = None) -> str | None:

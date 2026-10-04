@@ -38,6 +38,7 @@ TITLES = {
     "import-structures": "ClayQuant - import a structure library",
     "build-library": "ClayQuant - build the reference library",
 }
+"""Window titles for the two long-running jobs, by job name."""
 
 
 def _require_tkinter():
@@ -198,6 +199,7 @@ JOBS = {
     "import-structures": import_structures_job,
     "build-library": build_library_job,
 }
+"""The long-running jobs this tool can run, by name."""
 
 
 def _panel(step: str):

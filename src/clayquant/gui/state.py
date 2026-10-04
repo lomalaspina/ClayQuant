@@ -24,8 +24,15 @@ MOUNTS = ("air", "glycol", "heated")
 MOUNT_LABELS = {
     "air": "Air-dried",
     "glycol": "Ethylene glycol",
-    "heated": "Heated (500 C)",
+    "heated": "Heated (550 \u00b0C)",
 }
+"""How each mount is named wherever one is named to the operator.
+
+550 and not 500: every bracket in this program - the chlorite survival ranges,
+the kaolinite collapse, the dehydroxylation span - was measured on standards
+held 1.5 h at 550 C, and a label naming a different temperature describes a
+measurement nobody made.
+"""
 
 
 @dataclass

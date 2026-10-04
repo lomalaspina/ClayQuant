@@ -138,8 +138,14 @@ CU_KA_5LINE = EmissionProfile.from_topas(
     ],
     name="Cu Ka (5 lines, Holzer et al. 1997)",
 )
+"""The Cu K-alpha emission profile as five Lorentzians.
+
+The five-line decomposition rather than a K-alpha1/K-alpha2 pair, because the
+satellite structure is what sets the shape of a strong reflection's flanks.
+"""
 
 CU_KA1 = EmissionProfile(
     [EmissionLine(1.0, 1.540596, 0.4370)],
     name="Cu Ka1",
 )
+"""Cu K-alpha1 wavelength in A."""
