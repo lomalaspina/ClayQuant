@@ -97,6 +97,19 @@ class FitResult:
     """
     """The texture parameter each entry was calculated with."""
 
+    ordering: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    """How far towards maximum ordering each entry's stack was calculated.
+
+    0 for random stacking and for everything that has no stacking statistics to
+    order - every discrete phase, and every entry from a library written before
+    the axis existed - and 1 for the most ordering stationarity allows at that
+    composition, which for a host-rich stack is the Reichweite 1 ideal.
+
+    Carried through to the report because an illite/smectite that is ordered and
+    one that is random are different minerals to anyone reading the result, and
+    a table that gives only the composition says neither.
+    """
+
     relative_mass: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
     """Mass of each entry in the specimen, in arbitrary but common units.
 
@@ -476,6 +489,8 @@ def nnls_fit(
             np.nan if entry.fraction is None else float(entry.fraction)
             for entry in library.entries
         ]),
+        ordering=np.array([float(getattr(entry, "ordering", 0.0) or 0.0)
+                           for entry in library.entries]),
         r_wp=r_wp,
         r_p=r_p,
         mask=selection,
