@@ -71,7 +71,7 @@ from .background import snip_baseline
 from .bern import is_clay_phase
 from .calibration import QUARTZ_100_D, QUARTZ_101_D, reference_two_theta
 from .crystal import Crystal
-from .models import MINERAL_HABIT, habit_pole
+from .models import FIBRE_ORIENTATION, MINERAL_HABIT, habit_axis, habit_pole
 from .pattern import Instrument, Pattern, peak_list, powder_pattern
 
 __all__ = [
@@ -382,11 +382,16 @@ def _habit_peak_list(name, crystal, two_theta_range, instrument):
     amphibole plainly present at 9592 counts went undetected, its 8.4 A (110)
     being the only line of it the mount showed (Sec. A.48).
     """
-    pole = habit_pole(name, crystal)
+    habit = habit_axis(name, crystal)
+    if habit is None:
+        return peak_list(crystal, two_theta_range, instrument, r_march_dollase=1.0)
+    axis, space = habit
+    # A needle is the expansion case and a plate the compression one, so the
+    # two go to opposite sides of 1; see :data:`clayquant.models.FIBRE_AXES`.
     return peak_list(
         crystal, two_theta_range, instrument,
-        r_march_dollase=0.5 if pole is not None else 1.0,
-        po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
+        r_march_dollase=FIBRE_ORIENTATION if space == "direct" else 0.5,
+        po_axis=axis, po_axis_space=space,
     )
 
 def detect_phases(
@@ -697,11 +702,13 @@ def screen_phases(
             # palygorskite carry no axis in a typical structure database, so
             # reading the pole from there left them screened as random powders,
             # which is the one thing this block exists to prevent.
-            pole = habit_pole(name, crystal)
-            one = powder_pattern(crystal, grid, reference,
-                                 r_march_dollase=0.5 if pole is not None else 1.0,
-                                 po_axis=(0.0, 0.0, 1.0) if pole is None else pole,
-                                 name=name)
+            habit = habit_axis(name, crystal)
+            axis, space = habit if habit is not None else ((0.0, 0.0, 1.0), "reciprocal")
+            one = powder_pattern(
+                crystal, grid, reference,
+                r_march_dollase=(1.0 if habit is None
+                                 else FIBRE_ORIENTATION if space == "direct" else 0.5),
+                po_axis=axis, po_axis_space=space, name=name)
         except Exception:  # noqa: BLE001 - a broken database entry must not stop the screen
             continue
         if float(np.max(one.intensity)) <= 0.0:

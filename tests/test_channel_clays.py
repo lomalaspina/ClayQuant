@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from clayquant.library import FIBROUS_SPACINGS, scaled_in_plane
-from clayquant.models import FIBROUS_CIF_SOURCES, habit_pole, load_crystal
+from clayquant.models import FIBROUS_CIF_SOURCES, habit_axis, load_crystal
 from clayquant.pattern import reflections
 from clayquant.quantification import CLAY_LIBRARY_PHASES
 from clayquant.treatment import (
@@ -36,7 +36,7 @@ def test_both_channel_clays_load_and_know_their_fibre_axis():
         assert key in FIBROUS_CIF_SOURCES
         crystal = load_crystal(key)
         assert len(crystal.sites) > 0
-        assert habit_pole(key) == (1.0, 1.0, 0.0)
+        assert habit_axis(key) == ((0.0, 0.0, 1.0), "direct")
 
 
 def test_the_110_is_the_strongest_long_spacing_reflection():

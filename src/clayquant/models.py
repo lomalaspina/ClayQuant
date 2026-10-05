@@ -40,6 +40,9 @@ __all__ = [
     "CHLORITE_OCTAHEDRA",
     "CHLORITE_PUBLISHED_IRON",
     "CHLORITE_HYDROXYL",
+    "FIBRE_AXES",
+    "FIBRE_ORIENTATION",
+    "habit_axis",
     "MINERAL_HABIT",
     "MINERAL_CLEAVAGE",
     "ILLITE_OCTAHEDRON_TOLERANCE",
@@ -294,9 +297,59 @@ will not be the same, is still read correctly or refused outright.
 """
 
 
+FIBRE_AXES: dict[str, tuple[int, int, int]] = {
+    "sepiolite": (0, 0, 1),
+    "palygorskite": (0, 0, 1),
+}
+"""Minerals whose crystallites are needles, and the direction they are long in.
+
+In *direct* space, because that is what the long axis of a needle is - see
+:meth:`clayquant.crystal.Crystal.angle_to_direction`.  Both chain clays are
+elongated along ``c``.
+
+They are here rather than in :data:`MINERAL_HABIT` because a needle and a plate
+settle differently and the March model treats them as opposite cases.  A plate
+lies on its face, which is axially symmetric *compression* of the orientation
+distribution: the pole of that face points along the specimen normal, and
+``r < 1``.  A needle lies with its long axis in the specimen plane and is free
+to roll about it, which is *expansion*: the fibre axis is pushed away from the
+specimen normal, and ``r > 1`` (Dollase 1986, J. Appl. Cryst. 19, 267-272).
+
+The distinction is not academic and the duality makes it exact.  A needle along
+``c`` lying in the plane can only diffract from planes whose normal is
+perpendicular to ``c``, and ``g . c = l``, so the set it shows is ``hk0``
+precisely, whatever the cell angles.  Measured instead from ``c*`` - which for
+the monoclinic palygorskite here is 17 degrees away - the 110 comes out at 76
+degrees rather than 90 and is under-enhanced.
+
+Measured on the sepiolite standard: with the 110 pole and ``r < 1`` the best
+agreement with the measured pattern is a cosine of 0.623, and the fitted ``r``
+runs to the bottom of its range because the pattern then collapses to the single
+110 line and nothing is left to determine ``r`` with.  About the fibre axis with
+``r > 1`` the best is 0.756, at ``r = 1.5``.
+"""
+
+
+FIBRE_ORIENTATION = 1.5
+"""The March-Dollase value a needle is calculated at, everywhere.
+
+Above 1 because a needle lies with its long axis *in* the specimen plane, which
+is the expansion case of the March model and not the compression case of a
+plate.  One value rather than a range because an oriented basal scan cannot
+measure it: over the whole needle range the calculated pattern keeps its shape
+to a cosine of 0.998 while the mass it implies scales as ``r^3``, so a spanned
+``r`` is a free multiplier on the weight rather than a parameter the fit
+determines (Sec. A.65).  1.5 is where agreement with the sepiolite standard is
+best; the optimum is shallow and what the value fixes is the basis the weight
+percent is on.
+"""
+
+
 MINERAL_HABIT: dict[str, tuple[int, int, int]] = {
-    "sepiolite": (1, 1, 0),
-    "palygorskite": (1, 1, 0),
+    # Sepiolite and palygorskite were here once, on the (110) pole with r < 1.
+    # They are needles, not plates, and they are now in FIBRE_AXES; the
+    # amphiboles below keep this pole because a prism thick enough to settle on
+    # a face really is plate-like, and that was measured rather than assumed.
     # The amphiboles, for the same reason and with the same pole.  They are
     # prismatic, they settle on a prism face, and (110) is the face they settle
     # on, so an oriented mount shows the 8.4 A (110) and very little else.  On a
@@ -1027,6 +1080,26 @@ def air_dried_saponite_layer(
     return LayerModel.from_table(thickness=thickness, rows=rows, name="saponite_air",
                                  source=SAPONITE_SOURCE + ", glycol replaced by one water layer",
                                  mirror=True)
+
+
+def habit_axis(name: str, crystal=None) -> tuple[tuple[float, float, float], str] | None:
+    """The texture axis of a mineral and which lattice it is given in.
+
+    Returns ``(axis, space)`` with ``space`` either ``"direct"`` - a needle's
+    long axis, from :data:`FIBRE_AXES` - or ``"reciprocal"`` - a plate or prism
+    face normal, from :data:`MINERAL_HABIT`.  ``None`` for a mineral with no
+    habit worth describing, which is most of them.
+
+    Callers that cannot carry the space through should prefer this and pass the
+    space on; one that takes only an axis will read a direct one as reciprocal,
+    which is exact for an orthorhombic cell and 17 degrees out for the
+    monoclinic palygorskite.
+    """
+    fibre = FIBRE_AXES.get(name.strip().lower())
+    if fibre is not None:
+        return tuple(float(v) for v in fibre), "direct"
+    pole = habit_pole(name, crystal)
+    return None if pole is None else (pole, "reciprocal")
 
 
 def habit_pole(name: str, crystal=None) -> tuple[float, float, float] | None:

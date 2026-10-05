@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from clayquant.crystal import Crystal, read_cif
-from clayquant.models import MINERAL_HABIT, load_crystal
+from clayquant.models import FIBRE_AXES, MINERAL_HABIT, load_crystal
 from clayquant.pattern import powder_pattern, reflections, two_theta_grid
 
 
@@ -66,8 +66,11 @@ def test_the_pole_changes_which_reflection_is_enhanced():
 
 
 def test_the_habit_table_names_the_fibrous_clays_and_nothing_else():
-    assert MINERAL_HABIT["sepiolite"] == (1, 1, 0)
-    assert MINERAL_HABIT["palygorskite"] == (1, 1, 0)
+    # They are needles and moved to FIBRE_AXES, which is a direct-space
+    # direction and not a plate pole; see Sec. A.65.
+    assert FIBRE_AXES["sepiolite"] == (0, 0, 1)
+    assert FIBRE_AXES["palygorskite"] == (0, 0, 1)
+    assert "sepiolite" not in MINERAL_HABIT
     assert "quartz" not in MINERAL_HABIT
     assert "illite" not in MINERAL_HABIT
 

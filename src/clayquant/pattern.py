@@ -168,7 +168,10 @@ class Reflections:
 
 
 def reflections(
-    crystal: Crystal, d_min: float, po_axis: Sequence[float] = (0.0, 0.0, 1.0)
+    crystal: Crystal,
+    d_min: float,
+    po_axis: Sequence[float] = (0.0, 0.0, 1.0),
+    po_axis_space: str = "reciprocal",
 ) -> Reflections:
     """Enumerate all reflections of ``crystal`` with ``d >= d_min``.
 
@@ -199,7 +202,8 @@ def reflections(
         hkl=grid,
         d=1.0 / inv_d,
         f_squared=np.abs(f) ** 2,
-        alpha=crystal.angle_to(grid, po_axis),
+        alpha=(crystal.angle_to_direction(grid, po_axis)
+               if po_axis_space == "direct" else crystal.angle_to(grid, po_axis)),
     )
 
 
@@ -242,6 +246,7 @@ def powder_pattern(
     r_march_dollase: float = 1.0,
     name: str = "",
     po_axis: Sequence[float] = (0.0, 0.0, 1.0),
+    po_axis_space: str = "reciprocal",
 ) -> Pattern:
     """Simulate the powder pattern of a crystal structure.
 
@@ -254,18 +259,28 @@ def powder_pattern(
         opposite - that axis lying *in* the mount plane, which is what a lath
         or a needle does when it settles.
     po_axis:
-        The pole the orientation is about, in Miller indices.  ``c*`` describes
-        a platelet flattened on 001, which is every layer silicate and so the
-        default.  It is not every clay mineral: sepiolite and palygorskite are
-        chain silicates whose crystallites are laths, and on the specimen
-        measured here a sepiolite settles on its 110 face - about ``c*``,
-        nothing describes it (Sec. A.37).
+        The axis the orientation is about.  ``c*`` describes a platelet
+        flattened on 001, which is every layer silicate and so the default.
+
+        It is not every clay mineral.  Sepiolite and palygorskite are chain
+        silicates whose crystallites are needles elongated along ``c``, and a
+        needle is not a plate: it settles with its long axis *in* the specimen
+        plane, which is the expansion case of the March model rather than the
+        compression case, so ``r`` above 1 and not below.  Its axis is the fibre
+        direction and must be given in direct space, with
+        ``po_axis_space="direct"``: by the duality of the two lattices the set
+        at 90 degrees to ``c`` is exactly ``hk0``, whatever the cell angles, and
+        ``hk0`` is what such a mount shows (Sec. A.65).
+    po_axis_space:
+        ``"reciprocal"`` to read ``po_axis`` as Miller indices - a plate normal
+        - or ``"direct"`` to read it as a crystallographic direction, which is
+        what the long axis of a needle is.
     """
     grid = two_theta_grid() if grid is None else np.asarray(grid, dtype=float)
     instrument = instrument or Instrument()
     wavelengths, _ = instrument.sample_emission()
     d_min = float(np.max(wavelengths)) / (2.0 * math.sin(math.radians(grid[-1] / 2.0)))
-    found = reflections(crystal, d_min, po_axis=po_axis)
+    found = reflections(crystal, d_min, po_axis=po_axis, po_axis_space=po_axis_space)
     intensity = _build_from_reflections(found, grid, instrument, r_march_dollase)
     return Pattern(
         two_theta=grid,
@@ -290,6 +305,7 @@ def peak_list(
     r_march_dollase: float = 1.0,
     merge_within: float = 0.06,
     po_axis: "Sequence[float]" = (0.0, 0.0, 1.0),
+    po_axis_space: str = "reciprocal",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merged reflection positions and relative intensities of a crystal.
 
@@ -311,7 +327,7 @@ def peak_list(
     low, high = float(two_theta_range[0]), float(two_theta_range[1])
     wavelength = instrument.emission.principal_wavelength
     d_min = wavelength / (2.0 * math.sin(math.radians(high / 2.0)))
-    found = reflections(crystal, d_min, po_axis=po_axis)
+    found = reflections(crystal, d_min, po_axis=po_axis, po_axis_space=po_axis_space)
 
     argument = wavelength / (2.0 * found.d)
     visible = argument < 1.0

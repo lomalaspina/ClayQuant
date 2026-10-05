@@ -399,6 +399,47 @@ class Crystal:
             cosine = np.clip(numerator / denominator, -1.0, 1.0)
         return np.arccos(cosine)
 
+    @property
+    def metric_direct(self) -> np.ndarray:
+        """Direct metric tensor ``G`` such that ``|t|**2 = t G t`` for ``t = uvw``."""
+        a, b, c = self.a, self.b, self.c
+        ca, cb, cg = (math.cos(x) for x in self._angles_rad)
+        return np.array([
+            [a * a, a * b * cg, a * c * cb],
+            [a * b * cg, b * b, b * c * ca],
+            [a * c * cb, b * c * ca, c * c],
+        ])
+
+    def angle_to_direction(self, hkl: np.ndarray, uvw: Sequence[float]) -> np.ndarray:
+        """Angle in radians between each reflection vector and a *direct* direction.
+
+        The distinction from :meth:`angle_to` is not pedantry and it is not
+        always small.  That method takes its axis in reciprocal space, where
+        ``(0, 0, 1)`` means ``c*``; this one takes it in direct space, where
+        ``(0, 0, 1)`` means the crystallographic ``c`` axis.  In a monoclinic
+        cell the two differ by ``beta - 90``, which for the palygorskite here is
+        17 degrees.
+
+        It is what a needle needs.  A crystallite elongated along ``c`` and
+        lying in the specimen plane can only diffract from planes whose normal
+        is perpendicular to ``c``, and by the duality of the two lattices
+        ``g . t = hu + kv + lw`` exactly - so for ``t = c`` that dot product is
+        ``l``, and the reflections at 90 degrees to the fibre axis are the
+        ``hk0`` set, precisely and whatever the cell angles.  Measured from
+        ``c*`` instead, ``hk0`` would not be the set at 90 degrees at all.
+        """
+        hkl = np.atleast_2d(np.asarray(hkl, dtype=float))
+        uvw = np.asarray(uvw, dtype=float)
+        length_squared = float(uvw @ self.metric_direct @ uvw)
+        if length_squared <= 0.0:
+            raise ValueError(f"{tuple(uvw)} is not a direction")
+        # g . t = hu + kv + lw, because a* . a = 1 and a* . b = 0.
+        numerator = hkl @ uvw
+        denominator = self.inv_d(hkl) * math.sqrt(length_squared)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cosine = np.clip(numerator / denominator, -1.0, 1.0)
+        return np.arccos(cosine)
+
     def angle_to_cstar(self, hkl: np.ndarray) -> np.ndarray:
         """Angle in radians between each reflection vector and the ``c*`` axis."""
         return self.angle_to(hkl, (0.0, 0.0, 1.0))

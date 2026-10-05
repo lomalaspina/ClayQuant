@@ -45,7 +45,8 @@ from .models import (
     available_phases,
     chlorite_crystal,
     eg_smectite_layer,
-    habit_pole,
+    FIBRE_ORIENTATION,
+    habit_axis,
     saponite_layer,
     illite_crystal,
     load_crystal,
@@ -95,6 +96,7 @@ __all__ = [
     "ordered_transition",
     "orderings_for",
     "CORRENSITE_FRACTION",
+    "FIBROUS_ORIENTATION",
     "FIBROUS_SPACINGS",
     "scaled_in_plane",
     "SMECTITE_SPECIES",
@@ -193,6 +195,28 @@ CORRENSITE_FRACTION = 0.5
 Not a spanned composition and not a fitted one: corrensite *is* the one-for-one
 alternation, and the 50:50 is what the name means.  See :func:`orderings_for`
 for why it is a phase here rather than a point on the chlorite/smectite axis.
+"""
+
+FIBROUS_ORIENTATION = FIBRE_ORIENTATION
+"""The one March-Dollase value the channel clays are calculated at.
+
+One value and not an axis, for the reason the glycolated smectite is one entry:
+spanning it would be spanning something the measurement cannot see.  Over the
+whole needle range the calculated pattern of a sepiolite keeps its shape to a
+cosine of 0.998 or better while the mass it implies scales as ``r^3``, from 1 to
+1000.  Nothing in an oriented basal scan determines ``r``, so an axis in it is
+not a parameter the fit measures but a free multiplier on the weight, and the
+fit will take it: spanning downwards about the 110 pole, it reported a sepiolite
+carrying 46 per cent of the calculated intensity at 0.3 per cent by weight.
+
+Above 1 because these are needles - a needle lies with its long axis in the
+specimen plane, which is the expansion case of the March model rather than the
+compression case of a plate (:data:`clayquant.models.FIBRE_AXES`).  1.5 because
+that is where agreement with the sepiolite standard is best, at a cosine of
+0.756 against 0.623 for the best the plate model reaches; the optimum is shallow
+and what the value really fixes is the basis the weight percent is on, which is
+why it is a parameter of :func:`build_library` and is recorded in the library's
+metadata rather than being buried.
 """
 
 FIBROUS_SPACINGS: dict[str, tuple[float, ...]] = {
@@ -1237,6 +1261,7 @@ def build_library(
     smectite_orientation: float = 0.1,
     smectite_species: str = "dioctahedral",
     fibrous_spacings: dict[str, tuple[float, ...]] | None = None,
+    fibrous_orientation: float = FIBROUS_ORIENTATION,
     air_dried_thickness: float | None = AIR_DRIED_SMECTITE_D001,
     progress: bool = False,
 ) -> PatternLibrary:
@@ -1396,6 +1421,7 @@ def build_library(
             "strains": {key: list(value) for key, value in strains.items()},
             "smectite_species": smectite_species,
             "fibrous_spacings": {k: list(v) for k, v in (fibrous_spacings or {}).items()},
+            "fibrous_orientation": fibrous_orientation,
             "ordering_degrees": list(ORDERING_DEGREES),
             "illite_smectite_ordering_onset": ILLITE_SMECTITE_ORDERING_ONSET,
             "csds_means": [distribution.mean for distribution in distributions],
@@ -1661,16 +1687,17 @@ def build_library(
     # non-negative fit has to use what it is given.
     for key, spacings in (fibrous_spacings or {}).items():
         base_fibrous = load_crystal(key)
-        pole = habit_pole(key) or (1.0, 1.0, 0.0)
-        announce(f"{key}: {len(orientations)} orientations x {len(spacings)} "
-                 f"(110) spacings, pole {tuple(int(v) for v in pole)}")
+        axis, space = habit_axis(key) or ((0.0, 0.0, 1.0), "direct")
+        announce(f"{key}: 1 orientation r = {fibrous_orientation:g} x {len(spacings)} "
+                 f"(110) spacings, about {tuple(int(v) for v in axis)} in {space} space")
         for spacing in spacings:
             crystal = scaled_in_plane(base_fibrous, float(spacing))
             spacing_tag = f" d110={spacing:g}" if len(spacings) > 1 else ""
-            for r in orientations:
+            for r in (fibrous_orientation,):
                 library.add(
                     powder_pattern(crystal, extended, instrument, r_march_dollase=r,
-                                   po_axis=pole, name=f"{key} PO={r:g}{spacing_tag}"),
+                                   po_axis=axis, po_axis_space=space,
+                                   name=f"{key} PO={r:g}{spacing_tag}"),
                     phase=key,
                     march_dollase=r,
                     thickness=float(spacing),

@@ -133,8 +133,12 @@ def test_cleavage_and_habit_are_different_lists():
     """A lath is oriented whether asked or not; a flake only if asked."""
     for name in MINERAL_HABIT:
         assert name not in MINERAL_CLEAVAGE
-    assert habit_of("Sepiolite", a_crystal()) is not None
-    assert may_orient("Sepiolite", a_crystal()) is None
+    # The chain clays left this path when they became library phases with a
+    # fibre texture of their own: a needle must not be spanned as a plate
+    # (Sec. A.65).  The amphiboles, which really are prismatic, stay.
+    assert habit_of("Hornblende", a_crystal()) is not None
+    assert may_orient("Hornblende", a_crystal()) is None
+    assert habit_of("Sepiolite", a_crystal()) is None
 
 
 # --------------------------------------------------------------------------- #

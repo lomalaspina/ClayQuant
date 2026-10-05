@@ -16,7 +16,7 @@ import pytest
 from clayquant.bern import load_phase_database
 from clayquant.crystal import Crystal
 from clayquant.gui.app import habit_of
-from clayquant.models import MINERAL_HABIT
+from clayquant.models import FIBRE_AXES, MINERAL_HABIT
 
 
 def a_database(tmp_path, poles: dict[str, list[int] | None]):
@@ -74,20 +74,26 @@ def test_a_refined_axis_is_not_a_habit(tmp_path):
 
 
 def test_a_mineral_with_a_habit_takes_the_database_axis(tmp_path):
-    database = a_database(tmp_path, {"Sepiolite": [1, 1, 0]})
-    assert habit_of("Sepiolite", database["Sepiolite"]) == (1.0, 1.0, 0.0)
+    database = a_database(tmp_path, {"Hornblende": [1, 1, 0]})
+    assert habit_of("Hornblende", database["Hornblende"]) == (1.0, 1.0, 0.0)
 
 
 def test_a_mineral_with_a_habit_and_no_axis_falls_back_on_the_table(tmp_path):
+    database = a_database(tmp_path, {"Riebeckite": None})
+    assert database["Riebeckite"].po_axis is None
+    assert habit_of("Riebeckite", database["Riebeckite"]) == MINERAL_HABIT["riebeckite"]
+
+
+def test_a_needle_is_not_offered_the_plate_path(tmp_path):
+    """Its axis is a direct-space direction in FIBRE_AXES (Sec. A.65)."""
     database = a_database(tmp_path, {"Palygorskite": None})
-    assert database["Palygorskite"].po_axis is None
-    assert habit_of("Palygorskite", database["Palygorskite"]) == (1.0, 1.0, 0.0)
-    assert MINERAL_HABIT["palygorskite"] == (1, 1, 0)
+    assert habit_of("Palygorskite", database["Palygorskite"]) is None
+    assert FIBRE_AXES["palygorskite"] == (0, 0, 1)
 
 
 def test_the_name_is_matched_however_it_is_capitalised(tmp_path):
-    database = a_database(tmp_path, {"SEPIOLITE": [1, 1, 0]})
-    assert habit_of("SEPIOLITE", database["SEPIOLITE"]) is not None
+    database = a_database(tmp_path, {"HORNBLENDE": [1, 1, 0]})
+    assert habit_of("HORNBLENDE", database["HORNBLENDE"]) is not None
 
 
 def test_a_zero_pole_no_longer_stops_a_pattern(tmp_path):

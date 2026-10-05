@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from clayquant.crystal import AtomSite, Crystal
-from clayquant.models import MINERAL_HABIT, habit_pole
+from clayquant.models import MINERAL_HABIT, habit_axis, habit_pole
 from clayquant.pattern import peak_list
 
 
@@ -31,13 +31,13 @@ def test_the_pole_comes_from_the_table_and_not_from_the_database():
     database, so the pole came back None and they were screened as random
     powders - the one thing the habit mechanism exists to prevent.
     """
-    assert habit_pole("Sepiolite") == (1.0, 1.0, 0.0)
-    assert habit_pole("Sepiolite", crystal=None) == (1.0, 1.0, 0.0)
+    assert habit_axis("Sepiolite") == ((0.0, 0.0, 1.0), "direct")
+    assert habit_axis("Sepiolite", crystal=None) == ((0.0, 0.0, 1.0), "direct")
 
     class Bare:
         po_axis = None
 
-    assert habit_pole("Palygorskite", Bare()) == (1.0, 1.0, 0.0)
+    assert habit_axis("Palygorskite", Bare()) == ((0.0, 0.0, 1.0), "direct")
 
 
 def test_a_mineral_with_no_habit_gets_no_pole():

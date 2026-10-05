@@ -172,6 +172,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-62">A.62 What the illite/smectite is doing in a pure chlorite</a>
 <a href="#a-63">A.63 Corrensite, saponite, and a distinction a basal scan cannot make</a>
 <a href="#a-64">A.64 The channel clays, and a reflection that will not move</a>
+<a href="#a-65">A.65 A needle is not a plate, and its orientation cannot be measured here</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7655,6 +7656,66 @@ of the air-dried mount by this program's author put 3.94&nbsp;per&nbsp;cent sepi
 an <var>R</var><sub>Bragg</sub> of 1.71 at
 <var>R</var><sub>wp</sub>&nbsp;9.84&nbsp;per&nbsp;cent. The evidence was there in all three mounts
 and in the refinement, and what ClayQuant lacked was a column to put it in.</p>
+
+<h3 id="a-65">A.65 A needle is not a plate, and its orientation cannot be measured here</h3>
+
+<p>The channel clays were added (A.64) with the texture model every other mineral in this
+library uses: a March&ndash;Dollase factor about a plane normal, with <var>r</var> spanned from
+0.1 to 1. That is the model for a plate, and it is wrong twice over for a needle.</p>
+
+<p>The March model describes the orientation distribution as an axially symmetric compression
+or expansion of a random one (Dollase 1986, <i>J. Appl. Cryst.</i> <b>19</b>, 267&ndash;272). A
+plate lies on its face: that is compression about the face normal, and
+<var>r</var>&nbsp;&lt;&nbsp;1. A needle lies with its long axis <em>in</em> the specimen plane
+and rolls freely about it: that is expansion about the fibre axis, and
+<var>r</var>&nbsp;&gt;&nbsp;1. Using the first where the second belongs does not merely
+mis-weight the reflections, it picks the wrong family altogether.</p>
+
+<p>And the axis has to be given in direct space. A needle elongated along <var>c</var> and lying
+in the plane can only diffract from planes whose normal is perpendicular to <var>c</var>, and by
+the duality of the two lattices <b>g</b>&middot;<b>t</b>&nbsp;=&nbsp;<var>hu</var>&nbsp;+&nbsp;<var>kv</var>&nbsp;+&nbsp;<var>lw</var>
+exactly &mdash; so for <b>t</b>&nbsp;=&nbsp;<var>c</var> that product is <var>l</var>, and the set
+at 90&nbsp;degrees to the fibre is <var>hk</var>0, precisely and whatever the cell angles.
+Measured from <var>c</var>* instead, which for the monoclinic palygorskite here is 17&nbsp;degrees
+away, the 110 comes out at 76&nbsp;degrees and is under-enhanced.
+<code>Crystal.angle_to_direction</code> is that angle, and
+<code>po_axis_space="direct"</code> selects it.</p>
+
+<p>What the plate model did on the sepiolite standard is worth stating plainly, because the
+symptom was not a wrong number but an unidentifiable one. At
+<var>r</var>&nbsp;=&nbsp;0.1 about the 110 pole the factor multiplies that family by
+<var>r</var><sup>&minus;3</sup>&nbsp;=&nbsp;1000 and every other reflection disappears: only one
+line is left above a tenth of the maximum. The pattern's <em>shape</em> then stops depending on
+<var>r</var> while the mass it implies goes on scaling as <var>r</var><sup>3</sup>. The fit took
+what it was offered &mdash; sepiolite carried 46&nbsp;per&nbsp;cent of the calculated intensity and
+was reported at 0.3&nbsp;per&nbsp;cent by weight.</p>
+
+<p>Correcting the model does not remove that, and this is the finding rather than a
+disappointment. Over the whole needle range the calculated pattern of a sepiolite keeps its shape
+to a cosine of 0.998 or better while the implied mass runs over three orders of magnitude:</p>
+
+<table><caption>Calculated sepiolite about the fibre axis: the shape against
+<var>r</var>&nbsp;=&nbsp;1.5, and the mass the same fitted coefficient implies.</caption>
+<tr><th><var>r</var></th><th>1.00</th><th>1.25</th><th>1.50</th><th>2.00</th><th>3.00</th>
+<th>5.00</th><th>10.0</th></tr>
+<tr><td>cosine with <var>r</var>&nbsp;=&nbsp;1.5</td><td>0.9916</td><td>0.9990</td><td>1.0000</td>
+<td>0.9993</td><td>0.9984</td><td>0.9982</td><td>0.9982</td></tr>
+<tr><td>mass, as <var>r</var><sup>3</sup></td><td>1.0</td><td>2.0</td><td>3.4</td><td>8.0</td>
+<td>27</td><td>125</td><td>1000</td></tr>
+</table>
+
+<p>So the orientation of a channel clay is not something an oriented basal scan measures, in
+either direction, and an axis in it would not be a parameter the fit determines but a free
+multiplier on the weight. It is therefore fixed at one value, for the reason the glycolated
+smectite is one entry: what the single value decides is the basis the weight percent is on, and
+that is recorded rather than buried. 1.5 is where agreement with the sepiolite standard is best
+&mdash; a cosine of 0.756, against 0.623 for the best the plate model reaches &mdash; and the
+optimum is shallow.</p>
+
+<p>With the texture corrected, the sepiolite entry's share of the calculated intensity and its
+share of the mass agree: 3.7 and 3.5&nbsp;per&nbsp;cent, against 46 and 0.3 before. The weight is
+no longer free. That the fit still does not identify the sepiolite standard as sepiolite is a
+separate matter and is not yet resolved.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
