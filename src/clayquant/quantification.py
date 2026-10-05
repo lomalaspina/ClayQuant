@@ -70,9 +70,15 @@ __all__ = [
 ]
 
 CLAY_LIBRARY_PHASES = frozenset(
-    {"illite", "chlorite", "kaolinite_1M", "kaolinite_2M", "smectite_EG", "I/S", "C/S"}
+    {"illite", "chlorite", "kaolinite_1M", "kaolinite_2M", "smectite_EG", "I/S", "C/S",
+     "corrensite", "sepiolite", "palygorskite"}
 )
-"""Library phase keys that are clay minerals by construction."""
+"""Library phase keys that are clay minerals by construction.
+
+The channel clays are clay minerals and belong in the clay total even though
+they are not layer silicates in the stacking sense, and corrensite is one
+whether it is read as a phase or as a regular chlorite/smectite.
+"""
 
 
 INTERSTRATIFIED_HOSTS = {"I/S": "illite", "C/S": "chlorite"}

@@ -39,6 +39,13 @@ from .diagnostics import scale_to_reference
 from .pattern import Pattern
 
 __all__ = [
+    "ILLITE_001_MARGIN",
+    "ILLITE_001",
+    "channel_clay_evidence",
+    "ChannelClayFinding",
+    "ChannelClayEvidence",
+    "CHANNEL_CLAY_MINIMUM_HEIGHT",
+    "CHANNEL_CLAY_110",
     "AIR_DRIED_STATES",
     "ExpandableBound",
     "LEAST_MOVING_HYDRATION",
@@ -968,6 +975,140 @@ disagree; zero is the same as not passing the constraint at all.
 
 MINIMUM_AIR_OVERLAP = 0.5
 """Fraction of the fitted range the air-dried mount must cover to be usable."""
+
+
+
+ILLITE_001 = 10.02
+"""Illite basal spacing in A, which does not move on glycolation either.
+
+Named here because it is the one false positive this test has to worry about:
+it sits 0.2 A below the palygorskite 110 and is held just as firmly.
+"""
+
+ILLITE_001_MARGIN = 0.25
+"""How close to the illite 001 a held reflection may be before it is said so."""
+
+CHANNEL_CLAY_110: dict[str, tuple[float, float]] = {
+    "sepiolite": (11.70, 12.80),
+    "palygorskite": (10.20, 10.80),
+}
+"""Where each channel clay's 110 may fall, in A.
+
+Wide, because the 110 of a channel clay is not a fixed number: the channels hold
+zeolitic water and the cell follows what is in them.  The published sepiolite
+(COD 9014723) gives 11.93 A, a freely refined cell on one of these specimens
+reached 12.35 A, and the measured maximum across three mounts sits at 12.44 to
+12.52 A.  The window spans that and no more.
+
+The sepiolite window deliberately covers the air-dried smectite 001 near 12.4 A.
+That overlap is the entire difficulty and the reason this test exists: the two
+minerals put a reflection in the same place, and what separates them is that one
+of them moves on glycolation and the other cannot.
+
+The palygorskite window is harder and is bounded below at 10.20 A to keep the
+illite 001 at 10.02 A out of it.  Illite does not move either, so an illite
+counted here would be a false positive; the margin is only about 0.2 A and a
+held reflection at the bottom of that window is reported with that said.
+"""
+
+CHANNEL_CLAY_MINIMUM_HEIGHT = 0.02
+"""Share of the tallest matched reflection a line must reach to be evidence.
+
+A held maximum far down in the noise is not a mineral.
+"""
+
+
+@dataclass
+class ChannelClayFinding:
+    """One reflection that sits where a channel clay's 110 does and did not move."""
+
+    mineral: str
+    shift: PeakShift
+    near_illite: bool = False
+    """Whether this sits close enough to the illite 001 to be that instead."""
+
+    @property
+    def d_spacing(self) -> float:
+        return self.shift.d_air
+
+
+@dataclass
+class ChannelClayEvidence:
+    """Positive evidence for a channel clay: a 110 that glycol could not move.
+
+    The expandable-clay tests ask whether a candidate *moved*.  This asks the
+    opposite question of the same measurement, and it is not the same as the
+    first one failing: a reflection that stays put where no 00l of the common
+    clays falls is evidence *for* a mineral with channels rather than an
+    interlayer, because the channels of a sepiolite or a palygorskite take water
+    but are too narrow for ethylene glycol.
+
+    Without this the only column in the library that could carry a 12.4 A
+    reflection was the air-dried smectite, and a non-negative fit has to use
+    what it is given.
+    """
+
+    findings: list[ChannelClayFinding] = field(default_factory=list)
+    status: str = ""
+
+    @property
+    def found(self) -> bool:
+        return bool(self.findings)
+
+    @property
+    def minerals(self) -> list[str]:
+        """The candidates, strongest reflection first, each named once."""
+        seen: list[str] = []
+        for finding in sorted(self.findings, key=lambda f: -f.shift.height):
+            if finding.mineral not in seen:
+                seen.append(finding.mineral)
+        return seen
+
+
+def channel_clay_evidence(
+    shift: ShiftEvidence,
+    windows: dict[str, tuple[float, float]] | None = None,
+    minimum_height: float = CHANNEL_CLAY_MINIMUM_HEIGHT,
+) -> ChannelClayEvidence:
+    """Read :func:`shift_evidence` for reflections that held their position.
+
+    Takes the measurement already made rather than repeating it, so the two
+    tests cannot disagree about what moved.  A reflection counts when it lies in
+    one of ``windows``, is tall enough to be a line at all, and did not move by
+    more than its own placement uncertainty - that last being
+    :attr:`PeakShift.moved`, the same test the expandable side uses.
+    """
+    windows = CHANNEL_CLAY_110 if windows is None else windows
+    if not shift.shifts:
+        return ChannelClayEvidence([], "No matched reflections, so nothing could be held.")
+    tallest = max(item.height for item in shift.shifts) or 1.0
+    findings: list[ChannelClayFinding] = []
+    for item in shift.shifts:
+        if item.height < minimum_height * tallest or item.moved:
+            continue
+        for mineral, (low, high) in windows.items():
+            if low <= item.d_air <= high:
+                findings.append(ChannelClayFinding(
+                    mineral=mineral,
+                    shift=item,
+                    near_illite=abs(item.d_air - ILLITE_001) < ILLITE_001_MARGIN,
+                ))
+    if not findings:
+        return ChannelClayEvidence(
+            [], "No reflection held its position where a channel clay's 110 would be.")
+    parts = []
+    for finding in sorted(findings, key=lambda f: -f.shift.height):
+        parts.append(
+            f"{finding.d_spacing:.2f} A held to within {2.0 * finding.shift.uncertainty:.3f} deg"
+            f" ({finding.mineral}"
+            + (", though the illite 001 is only 0.2 A away" if finding.near_illite else "")
+            + ")"
+        )
+    return ChannelClayEvidence(
+        findings,
+        "A reflection that glycolation did not move, where a smectite 001 would have "
+        "moved to about 16.9 A: " + "; ".join(parts) + ".",
+    )
 
 
 @dataclass

@@ -181,6 +181,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-61">A.61 Stacking order on an axis, and which compositions each series mixes at</a>
 <a href="#a-62">A.62 What the illite/smectite is doing in a pure chlorite</a>
 <a href="#a-63">A.63 Corrensite, saponite, and a distinction a basal scan cannot make</a>
+<a href="#a-64">A.64 The channel clays, and a reflection that will not move</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7606,6 +7607,64 @@ built on. Corrensite ignores the switch, because its smectite half is a saponite
 001 near 11.7&nbsp;&Aring; and no usable higher order, and a single reflection constrains a
 spacing rather than a structure. That is said here because the alternative is to let a layer that
 has never been tested look as though it has been.</p>
+
+<h3 id="a-64">A.64 The channel clays, and a reflection that will not move</h3>
+
+<p>A sepiolite is not a stack of layers with an interlayer. It is a 2:1 ribbon structure with
+channels running along the fibre, and the channels hold zeolitic water. The channels are too
+narrow for ethylene glycol, so a sepiolite does not move between the air-dried and the glycolated
+mount &mdash; and that, not anything in the glycol pattern alone, is what tells one from a
+smectite.</p>
+
+<p>Sepiolite and palygorskite are now library phases. They are built from the three-dimensional
+structure like any other mineral rather than from a layer model, with the fibre axis as the
+texture pole, and they have no air-dried counterpart because they have nothing to collapse.
+Before this the library had no column that could carry a 12.4&nbsp;&Aring; reflection except the
+air-dried smectite, and a non-negative fit has to use what it is given: a line that could not
+possibly be expandable was fitted as expandable clay, every time, and the fit was never choosing
+wrongly between the two because it was never offered the choice.</p>
+
+<p>The 110 is spanned, because it is not a fixed number. The published sepiolite (COD 9014723)
+gives 11.93&nbsp;&Aring;; a freely refined cell on the specimen below reached 12.35&nbsp;&Aring;,
+and the measured maximum sits at 12.44 to 12.52&nbsp;&Aring; across three mounts. A library
+holding 11.93&nbsp;&Aring; alone would put the line a third of a degree from where the specimen
+has it. The axis scales <var>a</var> and <var>b</var> together, which moves the 110 by exactly
+that factor whatever the cell angles &mdash; every term of 1/<var>d</var><sup>2</sup> for a
+reflection with <var>l</var>&nbsp;=&nbsp;0 carries 1/<var>a</var><sup>2</sup> or
+1/<var>b</var><sup>2</sup> and nothing else &mdash; and leaves the fibre repeat alone. The
+published value is the first point on the axis.</p>
+
+<p>The test reads the measurement that :func:`shift_evidence` already makes, rather than
+repeating it, so the two cannot disagree about what moved. A reflection counts as a channel clay
+when it lies in the 110 window, is tall enough to be a line at all, and did not move by more than
+its own placement uncertainty &mdash; the same criterion the expandable side uses, asked the other
+way round.</p>
+
+<table><caption>The test on three mount pairs. The sepiolite-bearing specimen is the one its
+author identified as such from the start.</caption>
+<tr><th>specimen</th><th>reflections matched between the mounts</th><th>verdict</th></tr>
+<tr><td>M26-1240</td><td>14.31, 12.47, 10.01, 8.50, 7.12, 6.41&nbsp;&Aring;; the
+12.47&nbsp;&Aring; held to within 0.265&nbsp;deg</td><td><b>sepiolite</b></td></tr>
+<tr><td>M_26_1041</td><td>14.28, 10.01, 8.46, 7.11, 6.41&nbsp;&Aring;</td><td>none</td></tr>
+<tr><td>M_26_1042</td><td>14.28, 10.02, 8.48, 7.11, 6.41&nbsp;&Aring;</td><td>none</td></tr>
+</table>
+
+<p>Two overlaps are built into this and are stated rather than hidden. The sepiolite window
+deliberately covers the air-dried smectite 001 near 12.4&nbsp;&Aring;: the two minerals put a
+reflection in the same place and only the movement separates them, which is the whole reason the
+test exists. The palygorskite window is the harder one, because the illite 001 at
+10.02&nbsp;&Aring; is held just as firmly and sits only 0.2&nbsp;&Aring; below it; the window is
+bounded at 10.20&nbsp;&Aring; to keep illite out, and a reflection found near that bound is
+reported with the caveat attached.</p>
+
+<p>On the specimen above the measured 12.5&nbsp;&Aring; line does not move from air to glycol
+&mdash; it strengthens, from an area of 39.7 to 66.5 against the quartz 101 &mdash; while the
+16.9&nbsp;&Aring; region where a glycolated smectite would have to appear gains 0.6 of area, which
+is noise. It then survives 550&nbsp;&deg;C still at 12.41&nbsp;&Aring;. A full Rietveld refinement
+of the air-dried mount by this program's author put 3.94&nbsp;per&nbsp;cent sepiolite in it with
+an <var>R</var><sub>Bragg</sub> of 1.71 at
+<var>R</var><sub>wp</sub>&nbsp;9.84&nbsp;per&nbsp;cent. The evidence was there in all three mounts
+and in the refinement, and what ClayQuant lacked was a column to put it in.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

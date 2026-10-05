@@ -65,6 +65,11 @@ class CifSource:
     icsd: int
     description: str
     layers_per_cell: int
+    cod: int | None = None
+    """COD number, for a structure that comes from the Crystallography Open
+    Database rather than from the ICSD.  ``icsd`` is then 0 and this carries the
+    identifier, so that a message about a missing file names the right database
+    and the right number to go and fetch."""
     synonyms: tuple[str, ...] = ()
     """Other names the same mineral goes under, for finding a file.
 
@@ -76,6 +81,14 @@ class CifSource:
     instead - the user drops in the refined file, sees no change, and has
     nothing to go on.
     """
+
+
+    @property
+    def reference(self) -> str:
+        """How to name this structure's source in a message to the user."""
+        if self.cod:
+            return f"COD {self.cod}"
+        return f"ICSD {self.icsd}"
 
 
 CIF_SOURCES: dict[str, CifSource] = {
@@ -188,7 +201,7 @@ def find_structure_file(source: "CifSource") -> Path | None:
     beats a looser one and a nearer directory beats a further one.
     """
     canonical = source.filename.lower()
-    code = str(source.icsd)
+    code = str(source.cod or source.icsd)
     names = [_normalised(source.key), *(_normalised(name) for name in source.synonyms)]
 
     for directory in structure_directories():
@@ -363,6 +376,63 @@ CHLORITE_HYDROXYL: dict[str, tuple[str, ...]] = {
 
 Not the 2:1 layer's own hydroxyl (O6, H1), which sits inside the layer and
 survives to a higher temperature than the interlayer sheet does.
+"""
+
+
+
+FIBROUS_CIF_SOURCES: dict[str, CifSource] = {
+    source.key: source
+    for source in [
+        CifSource(
+            key="sepiolite",
+            filename="sepiolite_COD_9014723.cif",
+            icsd=0,
+            cod=9014723,
+            description=(
+                "Sepiolite, Pncn, Post, Bish & Heaney (2007) Am. Mineral. 92, 91-97"
+            ),
+            layers_per_cell=1,
+        ),
+        CifSource(
+            key="palygorskite",
+            filename="palygorskite_COD_1533365.cif",
+            icsd=0,
+            cod=1533365,
+            description=(
+                "Palygorskite, C2/m, Giustetto & Chiari (2004) Eur. J. Mineral. 16, 521-532"
+            ),
+            layers_per_cell=1,
+            synonyms=("attapulgite",),
+        ),
+    ]
+}
+"""The two channel clays, which are built differently from everything else.
+
+A sepiolite or a palygorskite is not a stack of layers with an interlayer: it is
+a 2:1 ribbon structure with channels running along the fibre, and the channels
+hold zeolitic water.  That has three consequences and all of them matter here.
+
+Its strongest reflection is the 110 and not a 00l, so it is built from the
+three-dimensional structure like any other mineral rather than from a layer
+model, and its texture pole is the fibre axis - :data:`MINERAL_HABIT` already
+carries (110) for both.  There is no layer spacing to span and no
+interstratification to model.
+
+And the channels take water but not ethylene glycol, so a channel clay does not
+move between the air-dried and the glycolated mount.  That is what separates it
+from a smectite, whose 001 goes from about 12.4 to 16.9 A, and it is a positive
+test rather than an absence: see
+:func:`clayquant.treatment.channel_clay_evidence`.
+"""
+
+
+
+ALL_CIF_SOURCES: dict[str, CifSource] = {**CIF_SOURCES, **FIBROUS_CIF_SOURCES}
+"""Every structure ClayQuant knows how to load, basal clays and channel clays.
+
+:data:`CIF_SOURCES` alone drives the interstratified and basal-series machinery,
+which the channel clays have no part in; this is for looking a structure up by
+name.
 """
 
 
@@ -574,7 +644,7 @@ def describe_structure_search() -> str:
     lines = []
     for key, source in CIF_SOURCES.items():
         found = find_structure_file(source)
-        lines.append(f"  {key}: {found if found else 'not found'} (ICSD {source.icsd})")
+        lines.append(f"  {key}: {found if found else 'not found'} ({source.reference})")
     searched = "\n".join(f"  {directory}" for directory in structure_directories())
     return "Searched:\n" + searched + "\nStructures:\n" + "\n".join(lines)
 
@@ -635,16 +705,17 @@ def load_crystal(key: str) -> Crystal:
     if key in _REFINED:
         return _REFINED[key]
     try:
-        source = CIF_SOURCES[key]
+        source = ALL_CIF_SOURCES[key]
     except KeyError:
         raise KeyError(
-            f"unknown phase {key!r}; expected one of {sorted(CIF_SOURCES)}"
+            f"unknown phase {key!r}; expected one of {sorted(ALL_CIF_SOURCES)}"
         ) from None
     path = find_structure_file(source)
     if path is None:
         raise FileNotFoundError(
             f"No CIF for {key} was found.\n"
-            f"ClayQuant does not redistribute ICSD data. Export ICSD {source.icsd} "
+            f"ClayQuant does not redistribute licensed structure data. Export "
+            f"{source.reference} "
             f"({source.description}) as CIF and put it in {structure_directory()}, or set "
             f"$CLAYQUANT_STRUCTURE_DIR. The name need only carry the ICSD code or the phase "
             f"name; {source.filename} is the expected spelling.\n"

@@ -45,6 +45,7 @@ from .models import (
     available_phases,
     chlorite_crystal,
     eg_smectite_layer,
+    habit_pole,
     saponite_layer,
     illite_crystal,
     load_crystal,
@@ -94,6 +95,8 @@ __all__ = [
     "ordered_transition",
     "orderings_for",
     "CORRENSITE_FRACTION",
+    "FIBROUS_SPACINGS",
+    "scaled_in_plane",
     "SMECTITE_SPECIES",
     "NORMALIZATION_FLOOR",
     "main",
@@ -190,6 +193,27 @@ CORRENSITE_FRACTION = 0.5
 Not a spanned composition and not a fitted one: corrensite *is* the one-for-one
 alternation, and the 50:50 is what the name means.  See :func:`orderings_for`
 for why it is a phase here rather than a point on the chlorite/smectite axis.
+"""
+
+FIBROUS_SPACINGS: dict[str, tuple[float, ...]] = {
+    "sepiolite": (11.93, 12.10, 12.25, 12.40, 12.55),
+    "palygorskite": (10.37, 10.50, 10.65),
+}
+"""(110) spacings to span for the channel clays, in A, published value first.
+
+The 110 is the reflection these minerals are recognised by and the only one a
+clay separate shows strongly, so it is the one quantity a pattern determines and
+the one worth spanning.  It is not fixed in nature: the channels hold zeolitic
+water and the cell follows what is in them.  The published sepiolite here (COD
+9014723) gives 11.93 A; a TOPAS refinement of one of these specimens against a
+freely refined cell reached 12.35 A, and the measured maximum sits at 12.44 to
+12.52 A across three mounts.  A library holding only 11.93 A would put the line
+0.3 deg away from where the specimen has it and the fit would not find it.
+
+Spanned by scaling ``a`` and ``b`` together, which moves the 110 by the same
+factor and leaves ``c`` - the fibre axis, which the 110 does not involve - alone.
+That is a span of the quantity the pattern measures and not a refinement of the
+cell: the published value is the first point on the axis and is named plainly.
 """
 
 CONTINUUM_WINDOW = 6.0
@@ -1122,6 +1146,26 @@ def _layer_footprint(crystal) -> float:
 
 
 
+
+def scaled_in_plane(crystal: Crystal, spacing: float) -> Crystal:
+    """The crystal with ``a`` and ``b`` scaled so its 110 sits at ``spacing``.
+
+    For a channel clay the 110 is what the pattern determines, and ``c`` runs
+    along the fibre and does not enter it.  Scaling the two in-plane axes
+    together moves the 110 by exactly that factor and leaves the fibre repeat
+    alone: every term of ``1/d^2`` for a reflection with ``l = 0`` carries
+    ``1/a^2`` or ``1/b^2`` and nothing else, whatever the cell angles, so the
+    spacing is proportional to the scale.
+
+    The current spacing is taken from the crystal's own reciprocal metric and
+    not from an orthorhombic shortcut: palygorskite is monoclinic with beta near
+    107 deg, where the shortcut is wrong by 0.3 A.
+    """
+    current = float(np.atleast_1d(crystal.d_spacing(np.array([[1.0, 1.0, 0.0]])))[0])
+    factor = float(spacing) / current
+    return replace(crystal, a=crystal.a * factor, b=crystal.b * factor)
+
+
 def ordered_transition(fraction: float, ordering: float) -> "np.ndarray | None":
     """Stacking statistics at this composition and this much ordering.
 
@@ -1192,6 +1236,7 @@ def build_library(
     smectite_thickness: float | None = None,
     smectite_orientation: float = 0.1,
     smectite_species: str = "dioctahedral",
+    fibrous_spacings: dict[str, tuple[float, ...]] | None = None,
     air_dried_thickness: float | None = AIR_DRIED_SMECTITE_D001,
     progress: bool = False,
 ) -> PatternLibrary:
@@ -1301,6 +1346,8 @@ def build_library(
     host_thicknesses = HOST_THICKNESSES if host_thicknesses is None else host_thicknesses
     strains = DISCRETE_STRAINS if strains is None else strains
     domain_sizes = DISCRETE_THICKNESSES if domain_sizes is None else domain_sizes
+    fibrous_spacings = (FIBROUS_SPACINGS if fibrous_spacings is None
+                        else fibrous_spacings)
     distributions = [lognormal_csds(float(mean), csds_beta) for mean in csds_means]
     if not distributions:
         raise ValueError("at least one CSDS mean is needed")
@@ -1348,6 +1395,7 @@ def build_library(
                                      else list(illite_smectite_host)),
             "strains": {key: list(value) for key, value in strains.items()},
             "smectite_species": smectite_species,
+            "fibrous_spacings": {k: list(v) for k, v in (fibrous_spacings or {}).items()},
             "ordering_degrees": list(ORDERING_DEGREES),
             "illite_smectite_ordering_onset": ILLITE_SMECTITE_ORDERING_ONSET,
             "csds_means": [distribution.mean for distribution in distributions],
@@ -1597,6 +1645,39 @@ def build_library(
                 + (1.0 - CORRENSITE_FRACTION) * corrensite_smectite.thickness
             ),
         )
+
+    # The channel clays.  Not basal-series minerals at all: a sepiolite or a
+    # palygorskite is a 2:1 ribbon structure with channels along the fibre, its
+    # strongest reflection is the 110 and its texture pole is the fibre axis, so
+    # it is built from the three-dimensional structure like any other mineral.
+    # There is no layer spacing to span, no interlayer, and no
+    # interstratification - and, because the channels take water but not
+    # ethylene glycol, no shift between the two mounts.  That last is what tells
+    # one from a smectite, and it is a positive test rather than an absence:
+    # :func:`clayquant.treatment.channel_clay_evidence`.
+    #
+    # Without these entries a 12.4 A reflection that does not move had only one
+    # column in the library that could carry it, the air-dried smectite, and a
+    # non-negative fit has to use what it is given.
+    for key, spacings in (fibrous_spacings or {}).items():
+        base_fibrous = load_crystal(key)
+        pole = habit_pole(key) or (1.0, 1.0, 0.0)
+        announce(f"{key}: {len(orientations)} orientations x {len(spacings)} "
+                 f"(110) spacings, pole {tuple(int(v) for v in pole)}")
+        for spacing in spacings:
+            crystal = scaled_in_plane(base_fibrous, float(spacing))
+            spacing_tag = f" d110={spacing:g}" if len(spacings) > 1 else ""
+            for r in orientations:
+                library.add(
+                    powder_pattern(crystal, extended, instrument, r_march_dollase=r,
+                                   po_axis=pole, name=f"{key} PO={r:g}{spacing_tag}"),
+                    phase=key,
+                    march_dollase=r,
+                    thickness=float(spacing),
+                    unit_mass=crystal.cell_mass,
+                    unit_volume=crystal.volume,
+                    mass_attenuation=mass_attenuation_of(crystal),
+                )
 
     # Interstratified series, at each layer spacing and crystallite thickness.
     for host_key, fractions, label in (
