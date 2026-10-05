@@ -34,7 +34,7 @@ from .absorption import (
 )
 from .crystal import Crystal
 from .emission import CU_KA_5LINE
-from .mixed_layer import MixedLayerStack, lognormal_csds
+from .mixed_layer import MixedLayerStack, lognormal_csds, markov_transition
 from .optics import Divergence
 from .models import (
     CHLORITE_PUBLISHED_IRON,
@@ -87,6 +87,10 @@ __all__ = [
     "DEFAULT_DIVERGENCE_SLIT",
     "DEFAULT_BEAM_WIDTH",
     "DEFAULT_GONIOMETER_RADIUS",
+    "ORDERING_DEGREES",
+    "ILLITE_SMECTITE_ORDERING_ONSET",
+    "ordered_transition",
+    "orderings_for",
     "NORMALIZATION_FLOOR",
     "main",
 ]
@@ -116,6 +120,45 @@ Read from the measurements: the standards were collected with the 14.0 mm mask
 there it matters: on a 25 mm disc at 240 mm with a 0.5 deg slit, 14 mm puts
 full illumination at 11.61 deg and 10 mm at 12.47 deg, which is the difference
 between a chlorite 001 scaled by 0.610 and by 0.567.
+"""
+
+ORDERING_DEGREES: tuple[float, ...] = (0.0, 1.0)
+"""How far towards maximum ordering each interstratified entry is calculated.
+
+A two-component stack's stacking statistics are a first-order Markov chain, and
+:func:`clayquant.mixed_layer.markov_transition` writes it from the layer
+proportion and one junction probability ``P_AB``.  Two values of that
+probability are *defined* rather than chosen: ``P_AB = W_B`` is random stacking,
+Reichweite 0, and ``P_AB = W_B / W_A`` is the largest ordering stationarity
+allows, which for a host-rich stack is the Reichweite 1 ideal - no two guest
+layers adjacent.  This axis is the position between those two limits, 0 for
+random and 1 for maximum ordering, so both of its ends are published structures
+and not fitted numbers.
+
+Two degrees rather than three: the pair already spans the axis end to end, and
+the entry count is multiplied by whatever this holds.
+
+A first-order chain reaches R0 and R1 and no further.  R2 and R3 need a
+higher-order chain - eight states rather than two - which the stacking model
+does not have; an R3 specimen is therefore fitted with the closest R1 entry, and
+the error that costs is in Sec. A.61.
+"""
+
+ILLITE_SMECTITE_ORDERING_ONSET = 0.55
+"""Illite fraction above which ordered illite/smectite occurs at all.
+
+Interstratified illite/smectite orders as it illitises, and the correspondence
+between composition and Reichweite is one of the better established facts about
+the series: the transition from random to R1 ordering occurs at 60-70 per cent
+illite layers in shales and 55-67 per cent in bentonites, R2 appears gradually
+between 65 and 80 per cent, and above 85 per cent the ordering may be strongly
+R3 (Srodon 1984; Srodon et al., *Pathways of smectite illitization*).  A random
+stack of 95 per cent illite layers is not a thing the series makes.
+
+So the ordering axis is not a free cross-product with composition: below this
+fraction only the random entry is calculated, and above it both.  The onset is
+put at the bottom of the quoted range, 0.55, so that the band the literature
+disagrees within is spanned rather than cut through.
 """
 
 CONTINUUM_WINDOW = 6.0
@@ -505,6 +548,16 @@ class LibraryEntry:
     fraction: float | None = None
     csds_mean: float | None = None
     thickness: float | None = None
+    ordering: float = 0.0
+    """How far towards maximum ordering this stack was calculated, 0 to 1.
+
+    0 is random stacking, Reichweite 0; 1 is the most ordering stationarity
+    allows at this composition, which for a host-rich stack is the Reichweite 1
+    ideal.  See :data:`ORDERING_DEGREES`.  Always 0 for a discrete phase, which
+    has no stacking statistics to order, and for any entry from a library
+    written before the axis existed.
+    """
+
     strain: float = 0.0
     """Microstrain the pattern was calculated with, in deg at ``tan(theta) = 1``.
 
@@ -605,6 +658,7 @@ class PatternLibrary:
         csds_mean: float | None = None,
         thickness: float | None = None,
         strain: float = 0.0,
+        ordering: float = 0.0,
         unit_mass: float | None = None,
         unit_volume: float | None = None,
         mass_attenuation: float | None = None,
@@ -664,6 +718,7 @@ class PatternLibrary:
                 csds_mean=csds_mean,
                 thickness=thickness,
                 strain=strain,
+                ordering=ordering,
                 normalization=scale,
                 unit_mass=unit_mass,
                 unit_volume=unit_volume,
@@ -900,6 +955,7 @@ class PatternLibrary:
                 [np.nan if entry.thickness is None else entry.thickness for entry in self.entries]
             ),
             strain=np.array([entry.strain for entry in self.entries]),
+            ordering=np.array([entry.ordering for entry in self.entries]),
             normalization=np.array([entry.normalization for entry in self.entries]),
             unit_mass=np.array(
                 [np.nan if entry.unit_mass is None else entry.unit_mass for entry in self.entries]
@@ -932,6 +988,11 @@ class PatternLibrary:
             # carry the instrumental width alone.
             strains = (
                 data["strain"] if "strain" in data.files else np.zeros(len(fractions))
+            )
+            # Libraries written before stacking order became a library dimension
+            # hold random stacks only.
+            orderings = (
+                data["ordering"] if "ordering" in data.files else np.zeros(len(fractions))
             )
             # Libraries written before weight percent was possible carry neither
             # column; without them a fit still runs and reports shares, and the
@@ -973,6 +1034,7 @@ class PatternLibrary:
                     csds_mean=None if np.isnan(size) else float(size),
                     thickness=None if np.isnan(spacing) else float(spacing),
                     strain=0.0 if np.isnan(strain) else float(strain),
+                    ordering=0.0 if np.isnan(ordering) else float(ordering),
                     normalization=float(scale),
                     unit_mass=None if np.isnan(mass) else float(mass),
                     unit_volume=None if np.isnan(volume) else float(volume),
@@ -980,7 +1042,7 @@ class PatternLibrary:
                     metadata=metadata,
                 )
                 for (name, phase, row, air_row, orientation, fraction, size, spacing,
-                     strain, scale, mass, volume, attenuation, metadata) in zip(
+                     strain, ordering, scale, mass, volume, attenuation, metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -990,6 +1052,7 @@ class PatternLibrary:
                     sizes,
                     spacings,
                     strains,
+                    orderings,
                     scales,
                     masses,
                     volumes,
@@ -1025,6 +1088,60 @@ def _layer_footprint(crystal) -> float:
     the two routes give the same mass for the same specimen.
     """
     return crystal.volume / crystal.d001
+
+
+
+def ordered_transition(fraction: float, ordering: float) -> "np.ndarray | None":
+    """Stacking statistics at this composition and this much ordering.
+
+    ``ordering`` runs from 0 to 1 between the two junction probabilities that
+    are defined rather than chosen: random stacking at ``P_AB = W_B``, and the
+    most ordering stationarity permits at ``P_AB = W_B / W_A``, which for a
+    host-rich stack is the Reichweite 1 ideal of no two guest layers adjacent.
+    See :data:`ORDERING_DEGREES`.
+
+    ``None`` for a random stack, so the caller passes nothing and
+    :class:`~clayquant.mixed_layer.MixedLayerStack` builds its own; and ``None``
+    for an end member, which has one kind of layer and so no junctions to order.
+    """
+    if ordering <= 0.0 or not 0.0 < fraction < 1.0:
+        return None
+    host, guest = float(fraction), 1.0 - float(fraction)
+    random = guest
+    most = min(1.0, guest / host)
+    return markov_transition(host, random + float(ordering) * (most - random))
+
+
+def orderings_for(series: str, fraction: float) -> tuple[float, ...]:
+    """Which ordering degrees to calculate for one composition of one series.
+
+    Not a free cross-product with composition, because the two series do not
+    order alike and neither orders at every composition.
+
+    Illite/smectite orders as it illitises, and below
+    :data:`ILLITE_SMECTITE_ORDERING_ONSET` illite layers the series is random;
+    above it both the random and the ordered stack are calculated, because the
+    composition at which the transition happens is quoted over a band (55 to 70
+    per cent illite) rather than as a number, and because an R3 specimen - which
+    a first-order chain cannot build - is better served by having the R1 entry
+    to reach for than by having it withheld.
+
+    Chlorite/smectite is random only.  Its ordered member is corrensite, the
+    50:50 R1 stack, and the literature treats corrensite as a phase in its own
+    right with its own stability field rather than as a point on a chlorite to
+    smectite join: there is a compositional gap between saponite and corrensite,
+    and between corrensite and chlorite the intergrowth of discrete domains
+    dominates over interstratification (Beaufort et al. 1997, Am. Mineral. 82,
+    109-124; Shau et al. 1990, Contrib. Mineral. Petrol. 105, 123-142).  The
+    chlorite-rich random stacks this library spans are the metastable branch
+    that is observed; an ordered one at those compositions is not.  Corrensite
+    would be a phase to add, not a degree of this axis.
+    """
+    if not 0.0 < fraction < 1.0:
+        return (0.0,)
+    if series == "I/S":
+        return ORDERING_DEGREES if fraction >= ILLITE_SMECTITE_ORDERING_ONSET else (0.0,)
+    return (0.0,)
 
 
 def build_library(
@@ -1198,6 +1315,8 @@ def build_library(
             "illite_smectite_host": (None if illite_smectite_host is None
                                      else list(illite_smectite_host)),
             "strains": {key: list(value) for key, value in strains.items()},
+            "ordering_degrees": list(ORDERING_DEGREES),
+            "illite_smectite_ordering_onset": ILLITE_SMECTITE_ORDERING_ONSET,
             "csds_means": [distribution.mean for distribution in distributions],
             "csds_beta": csds_beta,
             "host_thicknesses": {key: list(value) for key, value in host_thicknesses.items()},
@@ -1378,7 +1497,8 @@ def build_library(
         spacings = host_thicknesses.get(host_key) or (base_layer.thickness,)
         announce(
             f"{label}: {len(fractions)} compositions x {len(orientations)} orientations "
-            f"x {len(distributions)} crystallite sizes x {len(spacings)} layer spacings"
+            f"x {len(distributions)} crystallite sizes x {len(spacings)} layer spacings "
+            f"x {sum(len(orderings_for(label, f)) for f in fractions)} composition-orderings"
         )
 
         for thickness in spacings:
@@ -1389,24 +1509,29 @@ def build_library(
             for csds in distributions:
                 scale = basal_scale_factor(host, layers_per_cell, extended, instrument, csds)
                 for fraction in fractions:
-                    composition = f"{fraction:.2f}/{1.0 - fraction:.2f}"
+                  composition = f"{fraction:.2f}/{1.0 - fraction:.2f}"
+                  for ordering in orderings_for(label, fraction):
+                    transition = ordered_transition(fraction, ordering)
+                    order_tag = "" if not ordering else f" R1x{ordering:g}"
                     stack = MixedLayerStack(
                         host_layer,
                         smectite,
                         fraction_a=fraction,
+                        transition=transition,
                         csds=csds,
-                        name=f"{label} {composition}",
+                        name=f"{label} {composition}{order_tag}",
                     )
                     air_stack = None if air_smectite is None else MixedLayerStack(
                         host_layer,
                         air_smectite,
                         fraction_a=fraction,
+                        transition=transition,
                         csds=csds,
-                        name=f"{label} {composition} air",
+                        name=f"{label} {composition}{order_tag} air",
                     )
                     for r in orientations:
                         entry_name = (
-                            f"{label} {composition} PO={r:g}"
+                            f"{label} {composition}{order_tag} PO={r:g}"
                             + (f" N={csds.mean:g}" if len(distributions) > 1 else "")
                             + spacing_tag
                         )
@@ -1444,6 +1569,7 @@ def build_library(
                             phase=label,
                             march_dollase=r,
                             fraction=fraction,
+                            ordering=ordering,
                             csds_mean=csds.mean,
                             thickness=thickness,
                             # The interstratification model computes intensity

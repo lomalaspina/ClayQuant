@@ -168,6 +168,8 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-58">A.58 Why a pure illite was reported as 99 % illite/smectite</a>
 <a href="#a-59">A.59 Leaving the expandable clays out, and an audit of where numbers come from</a>
 <a href="#a-60">A.60 The geometry read from the file, and a chlorite axis the standards ruled out</a>
+<a href="#a-61">A.61 Stacking order on an axis, and which compositions each series mixes at</a>
+<a href="#a-62">A.62 What the illite/smectite is doing in a pure chlorite</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7452,6 +7454,87 @@ open; what it is not is the iron, because the 002 and the 004 are both even orde
 moves the odd ones, nor the hydroxide sheet's height, by this table, nor the displacement
 parameters, which at <var>B</var>&nbsp;=&nbsp;0 would raise the ratio by three per cent against
 the forty needed.</p>
+
+<h3 id="a-61">A.61 Stacking order on an axis, and which compositions each series mixes at</h3>
+
+<p>The interstratification model has always taken a Markov transition matrix and has always
+been given the random one. That left the library spanning composition, texture, crystallite
+thickness and layer spacing, but only ever random stacking &mdash; and the measured Clayfit3
+database is half ordered. The three members ClayQuant fitted worse than Clayfit3 did
+(ISR0_60, ISR1_65, ISR1_70) are the three where the fit split its answer between an
+illite/smectite and thirty to forty-five per cent of free illite, which is what a random model
+does when the specimen's reflections sit where no random stack puts one.</p>
+
+<p>The axis runs between two junction probabilities that are <em>defined</em> and not fitted:
+<var>P</var><sub>AB</sub>&nbsp;=&nbsp;<var>W</var><sub>B</sub> is random stacking, Reichweite 0,
+and <var>P</var><sub>AB</sub>&nbsp;=&nbsp;<var>W</var><sub>B</sub>/<var>W</var><sub>A</sub> is
+the most ordering stationarity permits, which for a host-rich stack is the Reichweite 1 ideal of
+no two guest layers adjacent. Calculated at 70/30 the ordered stack reflects at about 31&nbsp;&Aring;
+&mdash; the pair of layers &mdash; where the random one has no maximum at all. At 85/15 the two
+nearly coincide, because a first-order chain has almost no room left to order an illite-rich
+stack; that is exactly why R2 and R3 exist, and a first-order chain reaches neither. An R3
+specimen is fitted with the nearest R1 entry, and what that costs is in the table below.</p>
+
+<p>The axis is <em>not</em> a free cross-product with composition, because the two series do not
+order alike and neither orders at every composition.</p>
+
+<p><b>Illite/smectite.</b> The correspondence between composition and Reichweite is one of the
+better established facts about the series: random gives way to R1 at 60&ndash;70&nbsp;per&nbsp;cent
+illite layers in shales and 55&ndash;67&nbsp;per&nbsp;cent in bentonites, R2 appears gradually
+between 65 and 80, and above 85 the ordering may be strongly R3 (Srodon 1984; Srodon and others,
+<i>Pathways of smectite illitization</i>). A random stack of 95&nbsp;per&nbsp;cent illite layers
+is not something the series makes. So below 0.55 illite only the random entry is calculated and
+above it both &mdash; the onset at the bottom of the quoted range, so that the band the
+literature disagrees within is spanned rather than cut through. The composition range itself is
+continuous, and spanning it is right: the smectite-to-illite series runs the whole way.</p>
+
+<p><b>Chlorite/smectite.</b> Here the composition range is <em>not</em> continuous, and the
+library is right to span only the chlorite-rich end. The ordered member of this series is
+corrensite, the 50:50 stack, and the literature treats corrensite as a phase in its own right
+with a discrete stability field rather than as a point on a join: there is a compositional gap
+between saponite and corrensite, and between corrensite and chlorite the intergrowth of discrete
+domains dominates over true interstratification, with the smectite proportion falling
+discontinuously as grade rises (Beaufort and others 1997, <i>Am. Mineral.</i> <b>82</b>, 109&ndash;124;
+Shau and others 1990, <i>Contrib. Mineral. Petrol.</i> <b>105</b>, 123&ndash;142). The randomly
+interlayered chlorite/smectites that are observed are metastable, formed at low water/rock ratio,
+and chlorite-rich &mdash; which is what this library holds, and what the Clayfit3 table holds.
+Corrensite is therefore a phase to add, with its own entry, and not a degree of this axis. It is
+not in the library yet, and a specimen containing it will be fitted with something else.</p>
+
+<h3 id="a-62">A.62 What the illite/smectite is doing in a pure chlorite</h3>
+
+<p>Every one of the four measured chlorites takes some illite/smectite, and the natural objection
+is that there is no illite in them: the 8.8&nbsp;deg reflection that an illite layer would give is
+absent. It is absent. Measured over 8.3 to 9.4&nbsp;deg, Chlor1 reaches 0.10&nbsp;per&nbsp;cent of
+its chlorite 002 peak and Chlor4 0.25&nbsp;per&nbsp;cent &mdash; nothing.</p>
+
+<p>The fitted illite/smectite does not put intensity there either. Of its own calculated area it
+spends twenty per cent below 4.5&nbsp;deg and a further forty-seven per cent between 4.5 and
+8&nbsp;deg, and only about a tenth in the 8 to 11&nbsp;deg window where an illite layer would
+show. It is not being used as an illite-bearing phase at all. It is being used as a low-angle
+hump, underneath the chlorite 001.</p>
+
+<table><caption>Share of the observed intensity each phase accounts for, by window, in the fit to
+Chlor1. The chlorite is short at both ends of its own series.</caption>
+<tr><th>window (deg)</th><th>what it holds</th><th>chlorite</th><th>C/S</th><th>I/S</th>
+<th>smectite</th></tr>
+<tr><td>2&ndash;4.5</td><td>continuum</td><td>0.0&nbsp;%</td><td>2.6&nbsp;%</td><td>40.6&nbsp;%</td><td>14.3&nbsp;%</td></tr>
+<tr><td>4.5&ndash;8</td><td>chlorite 001</td><td>77.6&nbsp;%</td><td>11.5&nbsp;%</td><td>4.8&nbsp;%</td><td>3.0&nbsp;%</td></tr>
+<tr><td>8&ndash;11</td><td>where illite would be</td><td>0.0&nbsp;%</td><td>1.6&nbsp;%</td><td>22.1&nbsp;%</td><td>3.4&nbsp;%</td></tr>
+<tr><td>11&ndash;14</td><td>chlorite 002</td><td>83.9&nbsp;%</td><td>8.3&nbsp;%</td><td>0.1&nbsp;%</td><td>0.0&nbsp;%</td></tr>
+<tr><td>14&ndash;21</td><td>chlorite 003</td><td>69.0&nbsp;%</td><td>7.4&nbsp;%</td><td>0.5&nbsp;%</td><td>0.2&nbsp;%</td></tr>
+<tr><td>21&ndash;27</td><td>chlorite 004</td><td>51.9&nbsp;%</td><td>5.6&nbsp;%</td><td>0.4&nbsp;%</td><td>0.1&nbsp;%</td></tr>
+</table>
+
+<p>Two deficits are visible and they are the two this appendix has been circling. The 004 window
+is only three-fifths accounted for, which is the chlorite 004 the model cannot reach (A.60). The
+001 window is short by a fifth, and the measured 001 over 002 of these specimens is 0.366 to
+0.431 against the 0.335 the model calculates. An interstratified entry is the cheapest thing in
+the library with which to make up a low-angle shortfall, because at one orientation it carries
+several times more mass per unit of observable scattering than a discrete phase does, so a few
+per cent of the intensity converts into tens of per cent of the weight. The remedy is not to
+forbid the phase; it is to stop the chlorite being short, and until then to read a small
+interstratified share on a specimen with no reflections of its own as what it is.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
