@@ -13,7 +13,13 @@ import pytest
 
 from clayquant.gui.app import DEFAULT_PEAK_SHAPE, gui_instrument, instrument_from_measurement
 from clayquant.gui.state import STATE
-from clayquant.library import HOST_THICKNESSES
+from clayquant.library import (
+    DEFAULT_BEAM_WIDTH,
+    DEFAULT_DIVERGENCE_SLIT,
+    DEFAULT_GONIOMETER_RADIUS,
+    DEFAULT_SPECIMEN_LENGTH,
+    HOST_THICKNESSES,
+)
 from clayquant.pattern import Pattern
 from clayquant.profile import (
     KALPHA2_INTENSITY_RATIO,
@@ -75,8 +81,32 @@ def test_a_file_without_the_geometry_falls_back_rather_than_failing():
     pattern.metadata.pop("goniometer_radius")
     pattern.metadata.pop("divergence_slit")
     instrument, _ = instrument_from_measurement(pattern)
-    assert instrument.divergence.goniometer_radius == pytest.approx(280.0)
-    assert instrument.divergence.divergence == pytest.approx(0.5)
+    assert instrument.divergence.goniometer_radius == pytest.approx(
+        DEFAULT_GONIOMETER_RADIUS)
+    assert instrument.divergence.divergence == pytest.approx(DEFAULT_DIVERGENCE_SLIT)
+    assert instrument.divergence.beam_width == pytest.approx(DEFAULT_BEAM_WIDTH)
+
+
+def test_the_mask_is_read_from_the_file():
+    """The mask is the axial beam width, and a round mount needs it.
+
+    It used to be left at the dataclass default of 10 mm while the radius and
+    the slit were read, which put the low-angle overflow correction out by
+    about a tenth on exactly the 001 reflections the method rests on.
+    """
+    pattern = a_pattern()
+    pattern.metadata["beam_width"] = 14.0
+    instrument, note = instrument_from_measurement(pattern)
+    assert instrument.divergence.beam_width == pytest.approx(14.0)
+    assert "14 mm mask" in note
+
+
+def test_the_fallback_geometry_is_this_instrument():
+    """Not a textbook default: the numbers are read off the standards' files."""
+    assert DEFAULT_GONIOMETER_RADIUS == pytest.approx(240.0)
+    assert DEFAULT_DIVERGENCE_SLIT == pytest.approx(0.5)
+    assert DEFAULT_BEAM_WIDTH == pytest.approx(14.0)
+    assert DEFAULT_SPECIMEN_LENGTH == pytest.approx(25.0)
 
 
 def test_the_width_is_measured_on_the_quartz_doublet():

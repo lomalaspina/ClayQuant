@@ -434,6 +434,24 @@ def _read_xrdml(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
             metadata["counting_time"] = float(text)
         elif tag == "id" and text and "sample_id" not in metadata:
             metadata["sample_id"] = text
+    # The mask sets the axial width of the beam at the specimen, which is what
+    # a round mount needs to know: the irradiated strip has to fit inside the
+    # disc corners and all, and a 14 mm mask read as the 10 mm default puts the
+    # low-angle overflow correction out by about a tenth - landing on the 001
+    # reflections and on nothing else.  PANalytical masks are specified by the
+    # irradiated width at the specimen, so the setting is used as it stands.
+    # Several masks may be listed, at different distances; the narrowest is the
+    # one that limits the beam.
+    masks = []
+    for element in root.iter():
+        if _localname(element.tag) != "mask":
+            continue
+        for child in element:
+            if _localname(child.tag) == "width" and (child.text or "").strip():
+                masks.append(float(child.text))
+    if masks:
+        metadata["beam_width"] = min(masks)
+
     for element in root.iter():
         if _localname(element.tag) != "divergenceSlit":
             continue

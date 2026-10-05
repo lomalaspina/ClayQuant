@@ -99,6 +99,10 @@ from ..diagnostics import (
 from ..emission import CU_KA_5LINE
 from ..io import resolve_user_path
 from ..library import (
+    DEFAULT_BEAM_WIDTH,
+    DEFAULT_DIVERGENCE_SLIT,
+    DEFAULT_GONIOMETER_RADIUS,
+    DEFAULT_SPECIMEN_LENGTH,
     DEFAULT_PEAK_SHAPE,
     PREFERRED_ORIENTATIONS,
     PatternLibrary,
@@ -618,10 +622,11 @@ def _ask(arguments: list[str]) -> tuple[str | None, str | None]:
 
 
 def gui_instrument(
-    specimen_length: float = 25.0,
-    goniometer_radius: float = 280.0,
-    divergence_slit: float = 0.5,
+    specimen_length: float = DEFAULT_SPECIMEN_LENGTH,
+    goniometer_radius: float = DEFAULT_GONIOMETER_RADIUS,
+    divergence_slit: float = DEFAULT_DIVERGENCE_SLIT,
     size_ab: float = 400.0,
+    beam_width: float = DEFAULT_BEAM_WIDTH,
 ) -> Instrument:
     """The instrument to calculate with.
 
@@ -649,6 +654,7 @@ def gui_instrument(
             goniometer_radius=goniometer_radius,
             divergence=divergence_slit,
             shape="round",
+            beam_width=beam_width,
         ),
     )
 

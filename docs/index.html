@@ -177,6 +177,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-57">A.57 Two tests the pure standards failed, and what they found</a>
 <a href="#a-58">A.58 Why a pure illite was reported as 99 % illite/smectite</a>
 <a href="#a-59">A.59 Leaving the expandable clays out, and an audit of where numbers come from</a>
+<a href="#a-60">A.60 The geometry read from the file, and a chlorite axis the standards ruled out</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7396,6 +7397,71 @@ metadata.</td></tr>
 <tr><td><var>w<sub>i</sub></var></td><td>statistical weight of point <var>i</var></td><td>counts<sup>&minus;1</sup></td></tr>
 <tr><td><var>R</var><sub>wp</sub>, <var>R</var><sub>p</sub></td><td>weighted-profile and profile agreement factors</td><td>&mdash;</td></tr>
 </table></div>
+
+<h3 id="a-60">A.60 The geometry read from the file, and a chlorite axis the standards ruled out</h3>
+
+<p>Two things were asked of the beam-overflow correction: that the right geometry reach it, and
+that it be applied to every reflection and not only the first. The second was already true and is
+worth saying plainly, because the evidence for it looks at first like evidence against. The
+correction is the fraction of the beam the specimen intercepts, and it is applied to the whole
+calculated pattern as a function of 2&theta;. Above the angle at which the beam is fully
+intercepted that fraction is exactly one, so every line above it is unchanged &mdash; which is why
+a table of chlorite 00<var>l</var> ratios shows the 002, 003, 004 and 005 identical with the
+correction and without it, and only the 001 moved. On a 25&nbsp;mm disc at 240&nbsp;mm with a
+0.5&nbsp;deg slit and a 14&nbsp;mm mask, full illumination is reached at 11.61&nbsp;deg, below the
+chlorite 002.</p>
+
+<table><caption>Fraction of the beam intercepted, by line. The two columns differ by a constant
+1.102 below full illumination and not at all above it.</caption>
+<tr><th>line</th><th>2&theta; (deg)</th><th>280&nbsp;mm, rectangular</th><th>240&nbsp;mm, round,
+14&nbsp;mm mask</th></tr>
+<tr><td>chlorite 001</td><td>6.20</td><td>0.5533</td><td>0.6100</td></tr>
+<tr><td>smectite (EG) 001</td><td>5.24</td><td>0.4677</td><td>0.5156</td></tr>
+<tr><td>illite 001</td><td>8.84</td><td>0.7885</td><td>0.8693</td></tr>
+<tr><td>chlorite 002 and above</td><td>&ge;12.4</td><td>1.0000</td><td>1.0000</td></tr>
+</table>
+
+<p>The first was not true. The goniometer radius and the divergence slit were read from the data
+file, but the mask was not, so a round mount was corrected with the dataclass default of
+10&nbsp;mm while the measurements were collected with the 14&nbsp;mm mask; and the library's own
+build defaulted to 280&nbsp;mm and a rectangular specimen. The mask is now read from the XRDML
+(<code>beam_width</code>, the narrowest listed), and the fallback geometry is this instrument's:
+240&nbsp;mm, 0.5&nbsp;deg, 14&nbsp;mm, a 25&nbsp;mm disc. Because the factor below full
+illumination differs between the two geometries by a constant, the correction is a uniform
+10.2&nbsp;per&nbsp;cent on the low-angle lines and nothing above 11.6&nbsp;deg &mdash; so it moves
+weight between the phases that scatter mainly below that angle, the expandable ones, and those
+that do not.</p>
+
+<p>The second request was to put the interlayer hydroxide sheet's position on a spanned axis, as
+the octahedral iron already is, in the hope of reaching a chlorite 004 that six measured
+specimens put well above the model. The standards ruled it out. Moving the named sheet
+(Mg3, Fe3, Mg4, Fe4, O7&ndash;O9, H2&ndash;H4) along <var>c</var>* lowers the 004 in both
+directions &mdash; the published position is already the maximum the structure reaches &mdash;
+while the 001 collapses, because a chlorite's 001 reflects the <em>contrast</em> between the two
+sheets and sits near a node, so it is hypersensitive to exactly this parameter.</p>
+
+<table><caption>Calculated chlorite 00<var>l</var> areas over the 002, with the interlayer
+hydroxide sheet displaced along <var>c</var>*, against the six measured specimens.</caption>
+<tr><th>hydroxide sheet</th><th>001</th><th>003</th><th>004</th><th>005</th></tr>
+<tr><td>&minus;0.20 &Aring;</td><td>0.279</td><td>0.412</td><td>0.499</td><td>0.198</td></tr>
+<tr><td>&minus;0.10 &Aring;</td><td>0.193</td><td>0.461</td><td>0.517</td><td>0.126</td></tr>
+<tr><td><b>published</b></td><td><b>0.519</b></td><td>0.520</td><td><b>0.621</b></td><td>0.177</td></tr>
+<tr><td>+0.10 &Aring;</td><td>0.110</td><td>0.534</td><td>0.550</td><td>0.054</td></tr>
+<tr><td>+0.20 &Aring;</td><td>0.091</td><td>0.560</td><td>0.563</td><td>0.038</td></tr>
+<tr><td>+0.40 &Aring;</td><td>0.071</td><td>0.593</td><td>0.577</td><td>0.024</td></tr>
+<tr><td>measured, two standards</td><td>0.347, 0.407</td><td>0.388, 0.592</td><td>0.762,
+0.814</td><td>0.169, 0.197</td></tr>
+<tr><td>measured, four Clayfit3 chlorites</td><td>0.37&ndash;0.43</td><td>0.63&ndash;0.67</td>
+<td>0.91&ndash;0.94</td><td>&mdash;</td></tr>
+</table>
+
+<p>So the axis was not added. It would have multiplied the chlorite entries five-fold to give the
+fit a parameter that cannot reach the quantity it was meant to reach and that ruins one it
+currently gets right, which is a worse library and not a better one. The chlorite 004 remains
+open; what it is not is the iron, because the 002 and the 004 are both even orders and the iron
+moves the odd ones, nor the hydroxide sheet's height, by this table, nor the displacement
+parameters, which at <var>B</var>&nbsp;=&nbsp;0 would raise the ratio by three per cent against
+the forty needed.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

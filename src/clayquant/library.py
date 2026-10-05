@@ -83,9 +83,40 @@ __all__ = [
     "ACCOMPANYING_ORIENTATIONS",
     "CONTINUUM_WINDOW",
     "scaled_to_d001",
+    "DEFAULT_SPECIMEN_LENGTH",
+    "DEFAULT_DIVERGENCE_SLIT",
+    "DEFAULT_BEAM_WIDTH",
+    "DEFAULT_GONIOMETER_RADIUS",
     "NORMALIZATION_FLOOR",
     "main",
 ]
+
+from .calibration import DEFAULT_GONIOMETER_RADIUS  # noqa: E402  (one definition only)
+
+DEFAULT_SPECIMEN_LENGTH = 25.0
+"""Specimen diameter in mm assumed when nothing else is known.
+
+The oriented mounts this program was written for are 25 mm discs; the weighed
+standards record 4.91 cm^2 of irradiated area, which is a 25.0 mm circle.
+"""
+
+DEFAULT_DIVERGENCE_SLIT = 0.5
+"""Equatorial divergence in degrees assumed when the file does not record one.
+
+Read from the measurements themselves: every XRDML of the standards carries a
+``fixedDivergenceSlitType`` of 0.5 deg (PDS for iCore), with a matching fixed
+0.5 deg anti-scatter slit on the diffracted side.
+"""
+
+DEFAULT_BEAM_WIDTH = 14.0
+"""Axial width of the beam at the specimen in mm, i.e. the mask setting.
+
+Read from the measurements: the standards were collected with the 14.0 mm mask
+(id 22220007).  It matters only for a round mount, and only at low angle, but
+there it matters: on a 25 mm disc at 240 mm with a 0.5 deg slit, 14 mm puts
+full illumination at 11.61 deg and 10 mm at 12.47 deg, which is the difference
+between a chlorite 001 scaled by 0.610 and by 0.567.
+"""
 
 CONTINUUM_WINDOW = 6.0
 """Peak-stripping width in degrees used to take the continuum off a calculated pattern."""
@@ -1110,7 +1141,13 @@ def build_library(
         emission=CU_KA_5LINE,
         peak_shape=PeakShape(u=0.02, v=-0.005, w=0.01, eta=0.6, size_ab=400.0),
         lp_mode="powder",
-        divergence=Divergence(),
+        divergence=Divergence(
+            specimen_length=DEFAULT_SPECIMEN_LENGTH,
+            goniometer_radius=DEFAULT_GONIOMETER_RADIUS,
+            divergence=DEFAULT_DIVERGENCE_SLIT,
+            shape="round",
+            beam_width=DEFAULT_BEAM_WIDTH,
+        ),
     )
     host_thicknesses = HOST_THICKNESSES if host_thicknesses is None else host_thicknesses
     strains = DISCRETE_STRAINS if strains is None else strains
@@ -1537,7 +1574,7 @@ def main(argv: list[str] | None = None) -> int:
         help="sample points per emission line; >1 reproduces the natural line widths",
     )
     parser.add_argument(
-        "--specimen-length", type=float, default=25.0,
+        "--specimen-length", type=float, default=DEFAULT_SPECIMEN_LENGTH,
         help="size of the mount along the beam in mm, or the diameter of a round one. "
              "It sets where the beam stops overflowing the specimen, which for a 0.5 deg "
              "slit on a 240 mm goniometer is 6.9 deg at 35 mm and 12.0 deg at 20 mm - the "
@@ -1552,15 +1589,16 @@ def main(argv: list[str] | None = None) -> int:
              "(default: round)"
     )
     parser.add_argument(
-        "--beam-width", type=float, default=10.0,
+        "--beam-width", type=float, default=DEFAULT_BEAM_WIDTH,
         help="axial width of the beam at the specimen in mm, the mask setting. Only a "
              "round mount uses it, and barely (default: 10)"
     )
     parser.add_argument(
-        "--goniometer-radius", type=float, default=280.0, help="goniometer radius in mm"
+        "--goniometer-radius", type=float, default=DEFAULT_GONIOMETER_RADIUS,
+        help="goniometer radius in mm"
     )
     parser.add_argument(
-        "--divergence-slit", type=float, default=0.5, help="equatorial divergence in degrees"
+        "--divergence-slit", type=float, default=DEFAULT_DIVERGENCE_SLIT, help="equatorial divergence in degrees"
     )
     parser.add_argument(
         "--no-divergence-correction",
@@ -1919,8 +1957,9 @@ def instrument_from_measurement(
     from .profile import fit_peak_shape, quartz_line_width, shape_from_line_width
 
     metadata = getattr(pattern, "metadata", {}) or {}
-    radius = float(metadata.get("goniometer_radius", 280.0))
+    radius = float(metadata.get("goniometer_radius", DEFAULT_GONIOMETER_RADIUS))
     slit = float(metadata.get("divergence_slit", 0.5))
+    beam_width = float(metadata.get("beam_width", DEFAULT_BEAM_WIDTH))
     wavelength = float(metadata.get("wavelength", 1.540596))
     intensity = pattern.intensity
     if background is not None:
@@ -1962,13 +2001,14 @@ def instrument_from_measurement(
         peak_shape=shape,
         lp_mode="powder",
         divergence=Divergence(specimen_length=specimen_length,
-                              shape=specimen_shape,
+                              shape=specimen_shape, beam_width=beam_width,
                               goniometer_radius=radius, divergence=slit),
         width_source=width_source,
     )
     return instrument, (
         f"Geometry from the file: {radius:.0f} mm goniometer radius, "
-        f"{slit:g} deg divergence slit, specimen taken as {specimen_length:g} mm. "
+        f"{slit:g} deg divergence slit, {beam_width:g} mm mask, "
+        f"specimen taken as {specimen_length:g} mm. "
         f"{width_note}"
     )
 
