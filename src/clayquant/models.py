@@ -1031,6 +1031,14 @@ SAPONITE_SOURCE = (
     "2:1 layer of ICSD 164234 (clinochlore) with its hydroxide sheet removed, "
     "interlayer of Reynolds, R.C. Jr. (1965) Am. Mineral. 50, 990-1001, Table 1"
 )
+"""Where the trioctahedral smectite layer comes from, carried on every pattern.
+
+Two publications and no third thing, which is the point of writing it out: there
+is no saponite among the structures this program is given, and the layer is
+assembled from a published trioctahedral 2:1 sheet and a published glycol
+interlayer rather than invented.  See :func:`trioctahedral_two_one_rows` for
+what the assembly assumes and what it does not.
+"""
 
 
 def saponite_layer(thickness: float = REYNOLDS_1965_D001) -> LayerModel:
