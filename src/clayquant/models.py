@@ -828,6 +828,136 @@ def eg_smectite_layer(thickness: float = REYNOLDS_1965_D001) -> LayerModel:
     )
 
 
+
+# --------------------------------------------------------------------------- #
+# Trioctahedral smectite (saponite)
+# --------------------------------------------------------------------------- #
+
+MIRROR_PLANE_TOLERANCE = 0.05
+"""How close to the octahedral plane a site must be to count as sitting on it, in A.
+
+A site refined at ``z = 0.99987`` is on the mirror plane and folds to a height
+of about minus two thousandths of an angstrom.  Discarding it as negative loses
+a third of the octahedral sheet - four cations where there should be six - and
+the layer is then dioctahedral by accident.  The tolerance is far larger than
+the rounding it guards against and far smaller than the 1.05 A to the next
+plane, so nothing else can fall inside it.
+"""
+
+
+def trioctahedral_two_one_rows() -> list[tuple[float, str, float, float]]:
+    """The 2:1 sheet of the chlorite refinement, as half-layer rows.
+
+    A saponite is a trioctahedral smectite: a talc-like 2:1 layer with an
+    expandable interlayer.  There is no saponite among the structures this
+    program is given, and inventing a table for one is exactly what must not
+    happen - but the 2:1 layer is not something that needs inventing, because
+    the chlorite refinement already contains one.  A chlorite is a 2:1 layer
+    alternating with a hydroxide sheet, and :data:`CHLORITE_OCTAHEDRA` and
+    :data:`CHLORITE_HYDROXYL` already say which sites are which.  Take the 2:1
+    sites and leave the hydroxide sheet behind, and what is left is a published
+    trioctahedral 2:1 layer with published heights, occupancies and displacement
+    parameters.
+
+    It expands to six octahedral cations, eight tetrahedral and O20(OH)4, which
+    is the trioctahedral 2:1 formula; and its planes agree with the ones
+    Reynolds (1965) refined for the dioctahedral layer to within 0.06 A -
+    octahedral sheet on the mirror, apical oxygens and hydroxyls at 1.05-1.10
+    against his 1.06, tetrahedral cations at 2.74 against his 2.70, basal
+    oxygens at 3.33 against his 3.27.  The two refinements describe the same
+    object and disagree about it by less than a twentieth of an angstrom.
+
+    What differs between them, and what a basal series is actually sensitive to,
+    is the octahedral sheet: six magnesium against four aluminium is 72
+    electrons against 52 in the plane that sits at the centre of the layer.  The
+    tetrahedral sheet differs too - this one carries 1.44 Al per four cations
+    against Reynolds' none - but silicon and aluminium differ by one electron in
+    fourteen, so that difference is worth about two parts in a hundred of one
+    plane and is not what distinguishes the two minerals in a diffractogram.
+
+    The layer charge is therefore chlorite's, not a saponite analysis, and the
+    exchangeable cation that balances it is Reynolds' 0.2 Ca rather than one
+    computed from that charge.  Both affect the mass by a fraction of a per cent
+    and neither affects the 00l intensities measurably, but they are assumptions
+    and are named here rather than buried.
+    """
+    crystal = load_crystal("chlorite")
+    hydroxide = (set(CHLORITE_OCTAHEDRA["hydroxide"])
+                 | set(CHLORITE_HYDROXYL["oxygen"])
+                 | set(CHLORITE_HYDROXYL["hydrogen"]))
+    planes: dict[tuple[float, str], float] = {}
+    b_isos: dict[tuple[float, str], float] = {}
+    for site in crystal.expanded_sites():
+        if site.label in hydroxide:
+            continue
+        height = site.z * crystal.d001
+        if height > crystal.d001 / 2.0:
+            height -= crystal.d001
+        if height < -MIRROR_PLANE_TOLERANCE:
+            continue            # the far side of the mirror; from_table adds it
+        height = max(height, 0.0)
+        key = (round(height, 2), site.species)
+        planes[key] = planes.get(key, 0.0) + site.occupancy
+        b_isos[key] = site.b_iso
+    return [(z, species, occupancy, b_isos[(z, species)])
+            for (z, species), occupancy in sorted(planes.items())]
+
+
+SAPONITE_SOURCE = (
+    "2:1 layer of ICSD 164234 (clinochlore) with its hydroxide sheet removed, "
+    "interlayer of Reynolds, R.C. Jr. (1965) Am. Mineral. 50, 990-1001, Table 1"
+)
+
+
+def saponite_layer(thickness: float = REYNOLDS_1965_D001) -> LayerModel:
+    """A glycolated trioctahedral smectite layer.
+
+    The 2:1 sheet of :func:`trioctahedral_two_one_rows` carrying the ethylene
+    glycol interlayer Reynolds (1965) refined - his three interlayer planes at
+    6.12, 7.07 and 7.94 A, unchanged.  Glycolation acts on the interlayer and
+    leaves the 2:1 layer alone, so the two pieces are independent and joining
+    them is not a refinement of anything.
+
+    Neither this layer nor :func:`air_dried_saponite_layer` has been checked
+    against a measured trioctahedral smectite, because the saponite standard in
+    this collection shows one broad 001 near 11.7 A and no usable higher order,
+    and a single reflection constrains a spacing and not a layer model.
+    """
+    rows = trioctahedral_two_one_rows() + [
+        row for row in REYNOLDS_1965_EG_SMECTITE_ROWS if row[0] > 3.27
+    ]
+    return LayerModel.from_table(thickness=thickness, rows=rows, name="saponite_EG",
+                                 source=SAPONITE_SOURCE, mirror=True)
+
+
+def air_dried_saponite_layer(
+    thickness: float = AIR_DRIED_SMECTITE_D001,
+    water: float = WATER_PER_CELL,
+) -> LayerModel:
+    """The same trioctahedral layer with one water layer in place of the glycol.
+
+    Built exactly as :func:`air_dried_smectite_layer` is, and carrying the same
+    caveats: the 2:1 rows are not rescaled with the repeat, and the interlayer
+    plane at ``thickness / 2`` is halved because its mirror image one repeat
+    away is the same plane.
+    """
+    thickness = float(thickness)
+    if thickness <= 2.0 * 3.33:
+        raise ValueError(
+            f"an air-dried repeat of {thickness:g} A leaves no interlayer: the "
+            f"trioctahedral 2:1 layer alone reaches {2.0 * 3.33:.2f} A"
+        )
+    interlayer = thickness / 2.0
+    rows = trioctahedral_two_one_rows() + [
+        (interlayer, "O", 0.5 * float(water), 1.68),
+        (interlayer, "H", 1.0 * float(water), 1.68),
+        (interlayer, "Ca", 0.20, 1.68),
+    ]
+    return LayerModel.from_table(thickness=thickness, rows=rows, name="saponite_air",
+                                 source=SAPONITE_SOURCE + ", glycol replaced by one water layer",
+                                 mirror=True)
+
+
 def habit_pole(name: str, crystal=None) -> tuple[float, float, float] | None:
     """The texture pole of a mineral that has a crystal habit, or ``None``.
 

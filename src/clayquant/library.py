@@ -40,10 +40,12 @@ from .models import (
     CHLORITE_PUBLISHED_IRON,
     AIR_DRIED_SMECTITE_D001,
     CIF_SOURCES,
+    air_dried_saponite_layer,
     air_dried_smectite_layer,
     available_phases,
     chlorite_crystal,
     eg_smectite_layer,
+    saponite_layer,
     illite_crystal,
     load_crystal,
     load_layer,
@@ -91,6 +93,8 @@ __all__ = [
     "ILLITE_SMECTITE_ORDERING_ONSET",
     "ordered_transition",
     "orderings_for",
+    "CORRENSITE_FRACTION",
+    "SMECTITE_SPECIES",
     "NORMALIZATION_FLOOR",
     "main",
 ]
@@ -159,6 +163,33 @@ So the ordering axis is not a free cross-product with composition: below this
 fraction only the random entry is calculated, and above it both.  The onset is
 put at the bottom of the quoted range, 0.55, so that the band the literature
 disagrees within is spanned rather than cut through.
+"""
+
+SMECTITE_SPECIES: tuple[str, ...] = ("dioctahedral", "trioctahedral")
+"""Which smectite the expandable entries are built from.
+
+A choice made when the library is built and not by the fit, because the fit
+cannot make it.  The two differ by 0.13 per cent in a glycolated basal series
+and 0.15 per cent dried - cosine similarity 0.9987 and 0.9985 - so two columns
+of them would be two near-duplicates and a non-negative fit would divide the
+smectite between them on noise.  What separates a trioctahedral smectite from a
+dioctahedral one is the 060 reflection near 1.53 A against 1.50 A, which is at
+about 60 deg 2theta on an unoriented mount; an oriented basal scan never reaches
+it and never could.
+
+So it is set from what is known about the specimen - a saponite or hectorite
+separate is trioctahedral, a montmorillonite or bentonite dioctahedral - and
+recorded in the library's metadata.  ``"dioctahedral"`` is the default because
+it is the Reynolds (1965) layer the method was built on.  Corrensite is
+unaffected either way: its smectite half is a saponite by definition.
+"""
+
+CORRENSITE_FRACTION = 0.5
+"""Chlorite layer proportion of corrensite.
+
+Not a spanned composition and not a fitted one: corrensite *is* the one-for-one
+alternation, and the 50:50 is what the name means.  See :func:`orderings_for`
+for why it is a phase here rather than a point on the chlorite/smectite axis.
 """
 
 CONTINUUM_WINDOW = 6.0
@@ -1160,6 +1191,7 @@ def build_library(
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
     smectite_orientation: float = 0.1,
+    smectite_species: str = "dioctahedral",
     air_dried_thickness: float | None = AIR_DRIED_SMECTITE_D001,
     progress: bool = False,
 ) -> PatternLibrary:
@@ -1315,6 +1347,7 @@ def build_library(
             "illite_smectite_host": (None if illite_smectite_host is None
                                      else list(illite_smectite_host)),
             "strains": {key: list(value) for key, value in strains.items()},
+            "smectite_species": smectite_species,
             "ordering_degrees": list(ORDERING_DEGREES),
             "illite_smectite_ordering_onset": ILLITE_SMECTITE_ORDERING_ONSET,
             "csds_means": [distribution.mean for distribution in distributions],
@@ -1422,15 +1455,22 @@ def build_library(
     # compared with each other.  Set it to the orientation the fit gives the
     # other platy clays in the same mount, which is the assumption that makes
     # them comparable; the value used is recorded in the library's metadata.
-    smectite = eg_smectite_layer(
-        smectite_thickness if smectite_thickness is not None else eg_smectite_layer().thickness
+    if smectite_species not in SMECTITE_SPECIES:
+        raise ValueError(
+            f"smectite_species is one of {SMECTITE_SPECIES}, not {smectite_species!r}"
+        )
+    trioctahedral = smectite_species == "trioctahedral"
+    expandable_layer = saponite_layer if trioctahedral else eg_smectite_layer
+    expandable_air = air_dried_saponite_layer if trioctahedral else air_dried_smectite_layer
+    smectite = expandable_layer(
+        smectite_thickness if smectite_thickness is not None else expandable_layer().thickness
     )
     # The same smectite before glycolation.  Every interstratified entry is
     # calculated with both, and the pair is what lets the air-dried mount say
     # whether a candidate expandable phase is really there.
     air_smectite = (
         None if air_dried_thickness is None
-        else air_dried_smectite_layer(float(air_dried_thickness))
+        else expandable_air(float(air_dried_thickness))
     )
     # On the same scale as everything else, which took finding.  The stacking
     # model returns intensity per layer on its own normalisation; every
@@ -1478,6 +1518,85 @@ def build_library(
         # own thickness; the smectite layer is modelled on the same footprint.
         unit_volume=_layer_footprint(load_crystal("illite")) * smectite.thickness,
     )
+
+    # Corrensite: the regular alternation of a chlorite layer and a trioctahedral
+    # smectite layer, one for one.  It is built by the same stacking engine as
+    # the interstratified series but it is a phase of its own and is reported as
+    # one, because that is what the literature makes it: a discrete stability
+    # field, a compositional gap between saponite and corrensite, and between
+    # corrensite and chlorite the intergrowth of discrete domains rather than
+    # true interstratification (Sec. A.61).  So it sits at exactly 0.50 with the
+    # ordering at its maximum - which at equal proportions means P_AB = P_BA = 1,
+    # strict alternation - and not on the chlorite/smectite composition axis.
+    #
+    # It has not been checked against a measured corrensite; there is none in
+    # this collection.
+    #
+    # Its air-dried counterpart follows ``air_dried_thickness`` like every other
+    # expandable entry, which defaults to the 12.4 A one-water interlayer and
+    # puts corrensite at 26.7 A dried.  A corrensite's smectite interlayer is
+    # trioctahedral and magnesian, and such an interlayer usually holds two
+    # water layers near 15 A, which would put it near 29 A; a mount known to
+    # carry corrensite is therefore better built with ``air_dried_thickness=15``.
+    # The glycolated 31.0 A is not affected, and that is the reflection the
+    # phase is recognised by.
+    # Corrensite is trioctahedral whichever way the switch is set: its smectite
+    # half is a saponite, and that is chemistry rather than a choice.
+    corrensite_smectite = saponite_layer(
+        smectite_thickness if smectite_thickness is not None else saponite_layer().thickness
+    )
+    corrensite_air_smectite = (
+        None if air_dried_thickness is None
+        else air_dried_saponite_layer(float(air_dried_thickness))
+    )
+    corrensite_host = load_crystal("chlorite")
+    corrensite_chlorite = load_layer("chlorite")
+    corrensite_scale = basal_scale_factor(corrensite_host, 1, extended, instrument, csds)
+    corrensite_reflections = reflections(
+        corrensite_host,
+        float(np.max(instrument.sample_emission()[0]))
+        / (2.0 * math.sin(math.radians(extended[-1] / 2.0))),
+    )
+    announce(f"corrensite: {len(orientations)} orientations, "
+             f"d(001) = {corrensite_chlorite.thickness + corrensite_smectite.thickness:.2f} A glycolated")
+    for r in orientations:
+        stack = MixedLayerStack(
+            corrensite_chlorite, corrensite_smectite, fraction_a=CORRENSITE_FRACTION,
+            transition=ordered_transition(CORRENSITE_FRACTION, 1.0),
+            csds=csds, name="corrensite",
+        )
+        air_stack = None if corrensite_air_smectite is None else MixedLayerStack(
+            corrensite_chlorite, corrensite_air_smectite, fraction_a=CORRENSITE_FRACTION,
+            transition=ordered_transition(CORRENSITE_FRACTION, 1.0),
+            csds=csds, name="corrensite air",
+        )
+        library.add(
+            mixed_layer_pattern(stack, corrensite_host, 1, extended, instrument,
+                                r_march_dollase=r, name=f"corrensite PO={r:g}",
+                                basal_scale=corrensite_scale,
+                                host_reflections=corrensite_reflections),
+            air_pattern=None if air_stack is None else mixed_layer_pattern(
+                air_stack, corrensite_host, 1, extended, instrument,
+                r_march_dollase=r, name=f"corrensite PO={r:g} air",
+                basal_scale=corrensite_scale, host_reflections=corrensite_reflections),
+            phase="corrensite",
+            march_dollase=r,
+            fraction=CORRENSITE_FRACTION,
+            ordering=1.0,
+            csds_mean=csds.mean,
+            unit_mass=(CORRENSITE_FRACTION * corrensite_chlorite.mass
+                       + (1.0 - CORRENSITE_FRACTION) * corrensite_smectite.mass),
+            mass_attenuation=mixture_mass_attenuation(
+                {"chlorite": CORRENSITE_FRACTION * corrensite_chlorite.mass,
+                 "saponite": (1.0 - CORRENSITE_FRACTION) * corrensite_smectite.mass},
+                {"chlorite": mass_attenuation_of_layer(corrensite_chlorite),
+                 "saponite": mass_attenuation_of_layer(corrensite_smectite)},
+            ),
+            unit_volume=_layer_footprint(corrensite_host) * (
+                CORRENSITE_FRACTION * corrensite_chlorite.thickness
+                + (1.0 - CORRENSITE_FRACTION) * corrensite_smectite.thickness
+            ),
+        )
 
     # Interstratified series, at each layer spacing and crystallite thickness.
     for host_key, fractions, label in (
@@ -1724,6 +1843,11 @@ def main(argv: list[str] | None = None) -> int:
         help="goniometer radius in mm"
     )
     parser.add_argument(
+        "--smectite-species", choices=SMECTITE_SPECIES, default="dioctahedral",
+        help="which smectite the expandable entries are built from; a saponite or "
+             "hectorite separate is trioctahedral, a montmorillonite dioctahedral",
+    )
+    parser.add_argument(
         "--divergence-slit", type=float, default=DEFAULT_DIVERGENCE_SLIT, help="equatorial divergence in degrees"
     )
     parser.add_argument(
@@ -1941,6 +2065,7 @@ def main(argv: list[str] | None = None) -> int:
         strains=_parse_strains(arguments.strains),
         smectite_thickness=arguments.smectite_thickness,
         smectite_orientation=arguments.smectite_orientation,
+        smectite_species=arguments.smectite_species,
         air_dried_thickness=(None if arguments.no_air_dried
                              else arguments.air_dried_thickness),
         progress=not arguments.quiet,

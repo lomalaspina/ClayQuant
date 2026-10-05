@@ -170,6 +170,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-60">A.60 The geometry read from the file, and a chlorite axis the standards ruled out</a>
 <a href="#a-61">A.61 Stacking order on an axis, and which compositions each series mixes at</a>
 <a href="#a-62">A.62 What the illite/smectite is doing in a pure chlorite</a>
+<a href="#a-63">A.63 Corrensite, saponite, and a distinction a basal scan cannot make</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7535,6 +7536,66 @@ several times more mass per unit of observable scattering than a discrete phase 
 per cent of the intensity converts into tens of per cent of the weight. The remedy is not to
 forbid the phase; it is to stop the chlorite being short, and until then to read a small
 interstratified share on a specimen with no reflections of its own as what it is.</p>
+
+<h3 id="a-63">A.63 Corrensite, saponite, and a distinction a basal scan cannot make</h3>
+
+<p>Two phases were asked for and they turned out to be different kinds of request.</p>
+
+<p><b>Corrensite</b> is worth adding and is now in the library. It is the one-for-one
+alternation of a chlorite layer and a trioctahedral smectite layer, built by the same stacking
+engine as the interstratified series but entered as a phase of its own, because that is what the
+literature makes it (A.61). It sits at exactly 0.50 with the ordering at its maximum, which at
+equal proportions means strict alternation, and it is reported as corrensite rather than as a
+point on the chlorite/smectite axis. Calculated, it gives a rational series on 31.0&nbsp;&Aring;
+&mdash; 31.0, 15.6, 10.4, 7.8 &mdash; collapsing to 26.7&nbsp;&Aring; on the 12.4&nbsp;&Aring;
+one-water interlayer this program defaults to. Its density falls at 2.34&nbsp;g/cm<sup>3</sup>,
+between the chlorite's 2.70 and the smectite's 2.06, as a one-for-one stack of the two must.</p>
+
+<p>It is also well separated from everything it might be confused with, which is the test that
+decides whether a phase earns its entries: cosine similarity 0.27 against chlorite, 0.23 against
+the smectite, 0.47 against a random chlorite/smectite at 90/10.</p>
+
+<p>A corrensite's smectite interlayer is magnesian and usually holds two water layers near
+15&nbsp;&Aring;, which would put the dried phase near 29&nbsp;&Aring; rather than the
+26.7&nbsp;&Aring; the default gives, so a mount known to carry corrensite is better built with
+<code>air_dried_thickness=15</code>. The glycolated 31.0&nbsp;&Aring; is unaffected, and that is
+the reflection the phase is recognised by. It has not been checked against a measured corrensite,
+because there is none in this collection.</p>
+
+<p><b>Saponite</b> is a different matter, and the measurement says so. A saponite is a
+trioctahedral smectite, and the layer is now built and tested: the 2:1 sheet of the chlorite
+refinement with its hydroxide sheet removed, carrying Reynolds' glycol interlayer unchanged. That
+sheet expands to six octahedral cations, eight tetrahedral and O20(OH)4, and its planes agree
+with the ones Reynolds refined for the dioctahedral layer to within 0.06&nbsp;&Aring;. Nothing in
+it is invented.</p>
+
+<p>But the two smectites are not separable here. Over a glycolated basal scan their patterns have
+a cosine similarity of 0.9987, and dried, 0.9985. What distinguishes a trioctahedral smectite from
+a dioctahedral one is the 060 reflection, near 1.53&nbsp;&Aring; against 1.50&nbsp;&Aring;, which
+sits at about 60&nbsp;deg 2&theta; on an unoriented mount; an oriented basal scan never reaches it
+and never could. Offering both to the fit as two columns would be offering two near-duplicates,
+and a non-negative least squares divides such a pair on noise &mdash; the same failure that puts
+tens of per cent of illite/smectite into a chlorite with no illite in it (A.62).</p>
+
+<table><caption>00<var>l</var> areas over the 001 of the two glycolated smectites. They differ in
+detail and not in a way a fit can use.</caption>
+<tr><th>layer</th><th>001</th><th>002</th><th>003</th><th>004</th><th>005</th><th>cosine</th></tr>
+<tr><td>trioctahedral (saponite)</td><td>1.000</td><td>0.077</td><td>0.020</td><td>0.001</td>
+<td>0.089</td><td rowspan="2">0.9987</td></tr>
+<tr><td>dioctahedral (Reynolds)</td><td>1.000</td><td>0.060</td><td>0.062</td><td>0.012</td>
+<td>0.088</td></tr>
+</table>
+
+<p>So the species is a switch set when the library is built, not a phase the fit chooses between:
+<code>smectite_species="trioctahedral"</code> for a saponite or hectorite separate,
+<code>"dioctahedral"</code> for a montmorillonite or bentonite, recorded in the library's
+metadata either way. The default stays dioctahedral, that being the Reynolds layer the method was
+built on. Corrensite ignores the switch, because its smectite half is a saponite by definition.</p>
+
+<p>Nor could the saponite standard in this collection settle the layer model: it shows one broad
+001 near 11.7&nbsp;&Aring; and no usable higher order, and a single reflection constrains a
+spacing rather than a structure. That is said here because the alternative is to let a layer that
+has never been tested look as though it has been.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
