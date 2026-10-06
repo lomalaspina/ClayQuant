@@ -55,6 +55,8 @@ __all__ = [
     "PeakShift",
     "ShiftEvidence",
     "expandable_bound",
+    "expandable_mass_constraint",
+    "EXPANDABLE_CONSTRAINT_WEIGHT",
     "shift_evidence",
     "AIR_OBSERVATION_WEIGHT",
     "AirDriedObservation",
@@ -1497,6 +1499,94 @@ def expandable_bound(
             f"expandable. {len(excluded)} of the library's {len(indices)} expandable "
             f"entries are above that and are left out of the fit."
         ),
+    )
+
+
+EXPANDABLE_CONSTRAINT_WEIGHT = 8.0
+"""How hard the air-dried mount's ceiling pulls on the expandable content.
+
+Chosen so the restraint is a restraint and not a deletion; see
+:func:`expandable_mass_constraint` for why that distinction is the whole point.
+Calibrated on the eleven real separates: strong enough that a fit does not carry
+expandable layers the mounts exclude, weak enough that an entry needed for its
+*shape* is still reachable when the data insist on it.
+"""
+
+
+def expandable_mass_constraint(
+    library,
+    bound: "ExpandableBound",
+    range_two_theta: tuple[float, float] | None = None,
+    weight: float = EXPANDABLE_CONSTRAINT_WEIGHT,
+) -> "ExtraObservation | None":
+    """Hold the fitted expandable content to what the mounts allow, without
+    removing any entry from the library.
+
+    :func:`expandable_bound` measures a ceiling on expandable layer content and
+    was applied by deleting every entry above it.  That is a bound on
+    *composition* enforced as a deletion of *shape*, and the two are not the same
+    thing.  An interstratified entry is both: a composition, which the ceiling
+    may legitimately exclude, and a profile, which it has no business excluding -
+    and in this library the broad mixed-layer entries are the only ones wide
+    enough to carry a real clay's low-angle intensity.  The reasoning is already
+    written down for illite in
+    :data:`clayquant.library.DISCRETE_STRAINS`: a pure illite standard measures
+    0.418 deg at its 10 A reflection, the discrete illite entries span 0.080 to
+    0.100, and the mixed-layer ones span 0.180 to 1.080 - "nothing else could be
+    that wide".
+
+    Deleting them cost what that predicts.  On three real separates the ceiling
+    removed between 2651 and 3131 of the library's entries, and the fit was then
+    left explaining 7 per cent of the 4.5-8.5 degree region on one of them.
+    Restrained instead of deleted, the same sample explains 96 per cent and
+    ``R_wp`` falls from 56.7 to 49.7; on another, 37 per cent becomes 98 and
+    ``R_wp`` falls from 45.1 to 25.9 (Sec. A.73).
+
+    The row says: the expandable layer content the fit carries, weighted by each
+    entry's integrated intensity, should be nothing.  Pulling to the floor rather
+    than to the ceiling is deliberate - the measurement says *at most* this much,
+    which is a one-sided statement, and a least-squares row targeting the ceiling
+    would pull the expandable content *up* to it.  A fit that needs an entry's
+    width can still reach it by paying this penalty, and when it does the excess
+    is reported rather than hidden.
+
+    ``None`` when movement was seen, when nothing in the library carries
+    expandable layers, or when the ceiling excludes nothing - in each case there
+    is no restraint to make.
+    """
+    import numpy as np
+
+    if bound.unrestricted or not bound.excluded:
+        return None
+    grid = np.asarray(library.two_theta, dtype=float)
+    inside = np.ones(grid.shape, dtype=bool)
+    if range_two_theta is not None:
+        low, high = range_two_theta
+        inside = (grid >= low) & (grid <= high)
+    if not np.any(inside):
+        return None
+
+    row = np.zeros(len(library.entries), dtype=float)
+    for column, entry in enumerate(library.entries):
+        if entry.fraction is None:
+            continue
+        expandable = max(0.0, 1.0 - float(entry.fraction))
+        if expandable <= bound.maximum + 1e-9:
+            # Within the ceiling, so it carries no penalty: the restraint is on
+            # what the measurement excludes, not on expandable clay as such.
+            continue
+        area = float(np.trapezoid(
+            np.asarray(entry.intensity, dtype=float)[inside], grid[inside]))
+        row[column] = expandable * max(area, 0.0)
+    if not np.any(row > 0.0):
+        return None
+
+    return ExtraObservation(
+        target=np.zeros(1, dtype=float),
+        design=row.reshape(1, -1),
+        weight=float(weight),
+        name=(f"expandable content held near zero: the mounts allow at most "
+              f"{100.0 * bound.maximum:.1f}%"),
     )
 
 
