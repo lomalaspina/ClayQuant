@@ -365,7 +365,8 @@ def instrument_strip():
     rows = []
     if STATE.instrument is None:
         rows.append(html.Span(
-            "Measurement: none loaded \u2014 calculations use the 280 mm / 0.5\u00b0 "
+            f"Measurement: none loaded \u2014 calculations use the "
+            f"{DEFAULT_GONIOMETER_RADIUS:g} mm / {DEFAULT_DIVERGENCE_SLIT:g}\u00b0 "
             "default and a generic peak width.",
             style={"color": "#a15c00"},
         ))
@@ -641,7 +642,7 @@ def gui_instrument(
     That it used to return the defaults unconditionally was a real defect, and
     the first one to look for when a fit is short of intensity at every strong
     peak at once: the goniometer radius and the divergence slit are recorded in
-    the data file, and calculating with 280 mm on a 240 mm instrument mis-states
+    the data file, and calculating with the wrong radius for the instrument mis-states
     how much of the beam the specimen intercepts at low angle, which lands
     directly on the 001 reflections that the whole method rests on.
     """
@@ -3289,8 +3290,8 @@ def register_callbacks(app: Dash) -> None:
                 # The library has to be calculated with the instrument the
                 # measurement was made on, and the only way to know that is to
                 # have a measurement.  Building before loading one is the easy
-                # mistake here and it is not a small one: it used the 280 mm
-                # default on a 240 mm instrument and a generic peak width, and
+                # mistake here and it is not a small one: it uses the default
+                # geometry rather than the instrument's, and a generic peak width, and
                 # the whole library then has reference peaks of the wrong width,
                 # which the fit can only absorb as missing intensity.
                 built_blind = STATE.instrument is None
@@ -3306,7 +3307,8 @@ def register_callbacks(app: Dash) -> None:
         if built_blind:
             children.append(html.Div(
                 "Built before any measurement was loaded, so it uses the default "
-                "geometry (280 mm goniometer radius, 0.5\u00b0 divergence slit) and a "
+                f"geometry ({DEFAULT_GONIOMETER_RADIUS:g} mm goniometer radius, "
+                f"{DEFAULT_DIVERGENCE_SLIT:g}\u00b0 divergence slit) and a "
                 "generic peak width rather than yours. Load a mount in step 1 and "
                 "build again if you want the reference peaks to have the width of "
                 "your diffractometer.",

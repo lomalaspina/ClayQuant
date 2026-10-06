@@ -305,11 +305,18 @@ def a_library(radius=240.0, slit=0.5, width=0.09, length=25.0):
 
 
 def test_the_strip_says_so_when_nothing_is_loaded():
+    """The default the strip quotes has to be the default the code uses.
+
+    This test asserted the literal "280 mm", which is how the stale message
+    survived: the number in the strip disagreed with DEFAULT_GONIOMETER_RADIUS
+    and the test held the strip to the wrong one (Sec. A.71).
+    """
     from clayquant.gui.app import instrument_strip
+    from clayquant.optics import DEFAULT_GONIOMETER_RADIUS
 
     said = _text(instrument_strip())
     assert "none loaded" in said
-    assert "280 mm" in said
+    assert f"{DEFAULT_GONIOMETER_RADIUS:g} mm" in said
 
 
 def test_the_strip_shows_the_measurement_geometry_and_widths():

@@ -188,6 +188,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</a>
 <a href="#a-69">A.69 A channel breathes, and the test that finds one should admit it</a>
 <a href="#a-70">A.70 The weights, and a fault in the test harness rather than the program</a>
+<a href="#a-71">A.71 One number, six sentences, and a tool that lied about itself</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -8216,6 +8217,72 @@ points.</p>
 measurement, and that remains a real and unexplained difference between this specimen and any
 published structure. What has changed is its standing: it was reported as the thing preventing
 identification, and it is not &mdash; identification works. It is a residual.</p>
+
+<h3 id="a-71">A.71 One number, six sentences, and a tool that lied about itself</h3>
+
+<p>An operator opened the desktop Build-library window, ran it, and read this in the log:</p>
+
+<blockquote><p>No scan given, so the library is calculated for a 280&nbsp;mm goniometer radius, a
+0.5&nbsp;deg divergence slit and a generic peak width. If that is not your instrument, run this
+again with a scan from it&hellip;</p></blockquote>
+
+<p>Their instrument is 240&nbsp;mm. They had pulled the latest revision, checked, and asked why the
+program was still building for somebody else's diffractometer.</p>
+
+<p>It was not. Every library this program has ever built used 240&nbsp;mm, because
+<code>build_library</code> passes <code>DEFAULT_GONIOMETER_RADIUS</code> explicitly and that
+constant is 240. The calculation was right and the sentence describing it was wrong, which is the
+worst way round: the number that governs the physics was correct, and the only thing the operator
+could see said otherwise. They were about to rebuild a correct library against a geometry they do
+not own.</p>
+
+<table><caption>The radius, as the program held it.</caption>
+<tr><th>where</th><th>said</th><th>did</th></tr>
+<tr><td><code>calibration.DEFAULT_GONIOMETER_RADIUS</code></td><td>240</td><td>&mdash;</td></tr>
+<tr><td><code>optics.Divergence</code> field default</td><td><b>280</b></td>
+<td>never reached &mdash; <code>build_library</code> passes the constant</td></tr>
+<tr><td>desktop builder log</td><td><b>280</b></td><td>240</td></tr>
+<tr><td>desktop builder dialog text</td><td><b>280</b></td><td>240</td></tr>
+<tr><td>web GUI status strip</td><td><b>280</b></td><td>240</td></tr>
+<tr><td>web GUI &ldquo;built blind&rdquo; warning</td><td><b>280</b></td><td>240</td></tr>
+<tr><td><code>scripts/inspect_library.py</code></td><td><b>280</b></td><td>240</td></tr>
+</table>
+
+<p>Two definitions and six literals. The constant moved to <code>clayquant.optics</code>, which is
+the lowest module in the import order &mdash; <code>calibration</code> imports
+<code>pattern</code> imports <code>optics</code>, so it could not go the other way &mdash;
+<code>calibration</code> re-exports it, <code>Divergence</code>'s own default reads it, and every
+message is now an f-string on it.</p>
+
+<h4>The test that held the bug in place</h4>
+
+<p>There was a test on the status strip. It asserted <code>"280 mm" in said</code>. It passed for
+as long as the message was wrong and failed the moment it was fixed &mdash; so the one check that
+touched this behaviour was pinning the defect rather than the requirement.</p>
+
+<p>That is the general lesson and it is worth more than the fix. A test that writes down the
+current output, rather than the property the output must have, converts a bug into a
+specification. The repaired version asserts that the strip quotes
+<code>DEFAULT_GONIOMETER_RADIUS</code>, whatever that is, which is the thing actually required.</p>
+
+<p>The new guard, <code>tests/test_geometry_is_one_number.py</code>, scans every source file for a
+three-digit number written beside the words &ldquo;goniometer&rdquo; or &ldquo;radius&rdquo; and
+fails if any of them disagrees with the constant. It carries the exact sentence the operator read
+as a fixture, so the guard is itself tested against the fault it exists to prevent.</p>
+
+<h4>Where this sits among the other faults in this appendix</h4>
+
+<p>It is the third of a kind in close succession, and the pattern is sharper than any one of
+them. A.70 was a fit weighted by the wrong array because a driver passed a subtracted pattern where
+counts were required; the diagnosis that followed it was a report of parameters at an axis edge,
+computed by zipping one library's entries against another library's coefficients, which named a
+spacing bound in all eleven samples that did not exist. This one is a message that contradicted
+the code beside it.</p>
+
+<p>In all three the computation was sound and the thing reporting on the computation was not, and
+in all three the error was invisible precisely because the report is what one reads instead of the
+code. The remedy is the same each time and is now applied in each place: the reporting is given a
+test of its own, against the property rather than against yesterday's output.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

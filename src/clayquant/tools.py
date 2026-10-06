@@ -182,10 +182,15 @@ def build_library_job(values: dict[str, str], say=print):
         say(f"Instrument taken from {Path(measurement).name}:")
         say(f"  {note}")
     else:
-        say("No scan given, so the library is calculated for a 280 mm goniometer radius,")
-        say("a 0.5 deg divergence slit and a generic peak width. If that is not your")
-        say("instrument, run this again with a scan from it: the reference peaks will")
-        say("otherwise be the wrong width for every fit made against this library.")
+        from .library import (DEFAULT_DIVERGENCE_SLIT, DEFAULT_GONIOMETER_RADIUS,
+                              DEFAULT_SPECIMEN_LENGTH)
+        say(f"No scan given, so the library is calculated for the default geometry: a "
+            f"{DEFAULT_GONIOMETER_RADIUS:g} mm goniometer")
+        say(f"radius, a {DEFAULT_DIVERGENCE_SLIT:g} deg divergence slit, a "
+            f"{DEFAULT_SPECIMEN_LENGTH:g} mm specimen and a generic peak width.")
+        say("If that is not your instrument, run this again with a scan from it: the")
+        say("reference peaks will otherwise be the wrong width for every fit made")
+        say("against this library.")
     say("Calculating; this takes a few minutes.")
     library = build_library(instrument=instrument)
     Path(output).parent.mkdir(parents=True, exist_ok=True)
@@ -206,6 +211,7 @@ def _panel(step: str):
     """Build the window for one step and return it."""
     tkinter, filedialog, ttk = _require_tkinter()
     from .desktop import project_root
+    from .library import DEFAULT_DIVERGENCE_SLIT, DEFAULT_GONIOMETER_RADIUS
 
     root = tkinter.Tk()
     root.title(TITLES[step])
@@ -274,7 +280,8 @@ def _panel(step: str):
                   "It is read for the goniometer radius and the divergence slit, which the\n"
                   "file records, and its peaks are measured for the width - and nothing\n"
                   "else: no data from it goes into the library. Without it the library is\n"
-                  "calculated for a 280 mm radius, a 0.5 deg slit and a generic width, and\n"
+                  f"calculated for a {DEFAULT_GONIOMETER_RADIUS:g} mm radius, a "
+                  f"{DEFAULT_DIVERGENCE_SLIT:g} deg slit and a generic width, and\n"
                   "if that is not your instrument the reference peaks are the wrong width\n"
                   "for every fit you do with it."),
             justify="left",

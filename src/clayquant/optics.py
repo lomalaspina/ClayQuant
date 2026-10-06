@@ -110,6 +110,24 @@ def lorentz_polarization(
     return np.where(np.isfinite(result), result, 0.0)
 
 
+DEFAULT_GONIOMETER_RADIUS = 240.0
+"""Goniometer radius in mm assumed when nothing records one.
+
+240 mm is this program's instrument, read from the XRDML files it was written
+for.  Other common values are 280 mm (Bruker D8) and 300 mm, and a library
+calculated for one radius and fitted against a measurement from another has
+reference peaks of the wrong width at every angle, which the fit can only
+absorb as missing intensity.
+
+It lives here, in the lowest-level module, because it has to be *one* number.
+It was previously two: this value in :mod:`clayquant.calibration`, and a 280.0
+written into :class:`Divergence`'s own default, with user-facing messages in
+four more places quoting 280 as a literal.  The calculation used 240 throughout
+and every message said 280, so the desktop builder told an operator their
+library had been built for the wrong instrument when it had not (Sec. A.71).
+"""
+
+
 @dataclass(frozen=True)
 class Divergence:
     """Beam overflow correction for a flat specimen in Bragg-Brentano geometry.
@@ -119,14 +137,14 @@ class Divergence:
     specimen_length:
         Length of the specimen along the beam in mm.
     goniometer_radius:
-        Goniometer radius in mm (280 mm on a Bruker D8, 240 mm on a D2).
+        Goniometer radius in mm; see :data:`DEFAULT_GONIOMETER_RADIUS`.
     divergence:
         Equatorial divergence of the incident beam in degrees, i.e. the
         divergence slit setting.
     """
 
     specimen_length: float = 20.0
-    goniometer_radius: float = 280.0
+    goniometer_radius: float = DEFAULT_GONIOMETER_RADIUS
     divergence: float = 0.5
     shape: str = "rectangular"
     """``"rectangular"`` or ``"round"``.

@@ -7,7 +7,7 @@ made on::
 
 The three things worth checking are the layer spacings spanned, the peak width
 and the geometry.  A library built before any measurement was loaded carries the
-defaults - 280 mm and a generic width - and its reference peaks are then the
+defaults - the default radius and a generic width - and its reference peaks are then the
 wrong width for the data, which a fit can only absorb as intensity missing at
 every strong peak.
 """
@@ -19,6 +19,7 @@ import sys
 
 import numpy as np
 
+from clayquant.optics import DEFAULT_GONIOMETER_RADIUS
 from clayquant.library import PatternLibrary
 from clayquant.profile import PeakShape
 
@@ -63,10 +64,11 @@ def describe(path: str) -> int:
               f"{geometry['goniometer_radius']:.0f} mm radius, "
               f"{geometry['divergence']:g} deg slit, "
               f"{geometry['specimen_length']:g} mm specimen")
-        if abs(float(geometry["goniometer_radius"]) - 280.0) < 1e-6 and \
+        if abs(float(geometry["goniometer_radius"]) - DEFAULT_GONIOMETER_RADIUS) < 1e-6 and \
                 abs(float(geometry["divergence"]) - 0.5) < 1e-6:
             print("\n  This is the default geometry, which means the library was built "
-                  "before\n  a measurement was loaded. If your instrument is not a 280 mm "
+                  f"before\n  a measurement was loaded. If your instrument is not a "
+                  f"{DEFAULT_GONIOMETER_RADIUS:g} mm "
                   "one with a\n  0.5 deg slit, load a mount first and build again.")
     else:
         print("  geometry               : not recorded (built before this was stored)")

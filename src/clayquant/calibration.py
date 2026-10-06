@@ -280,8 +280,13 @@ def apply_zero_error(pattern: Pattern, shift: float) -> Pattern:
 # Specimen displacement
 # --------------------------------------------------------------------------
 
-DEFAULT_GONIOMETER_RADIUS = 240.0
-"""Goniometer radius in mm used when a pattern's file does not record one."""
+from .optics import DEFAULT_GONIOMETER_RADIUS  # noqa: E402,F401  (one definition only)
+"""Re-exported from :mod:`clayquant.optics`, which is where it is defined.
+
+Imported here because this module's callers have always taken it from here, and
+because a second definition is what let the geometry drift apart in the first
+place (Sec. A.71).
+"""
 
 RATIONAL_SERIES_SPREAD = 0.015
 """How well the orders must reconcile before the answer is reported, in A.
