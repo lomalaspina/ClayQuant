@@ -174,6 +174,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-64">A.64 The channel clays, and a reflection that will not move</a>
 <a href="#a-65">A.65 A needle is not a plate, and its orientation cannot be measured here</a>
 <a href="#a-66">A.66 One orientation for the mount, and what the standards say about it</a>
+<a href="#a-67">A.67 Which kaolinite bound to apply, and when not to apply one</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7791,6 +7792,52 @@ at 72&nbsp;per&nbsp;cent kaolinite against 26 illite, Montmorillonite_9 divided 
 illite and smectite, and the sepiolite standard at 75&nbsp;per&nbsp;cent illite with sepiolite
 recovered only to 24. The last of those is the open problem of A.65: the calculated sepiolite
 reaches a cosine of 0.756 against the measured pattern and no orientation improves it.</p>
+
+<h3 id="a-67">A.67 Which kaolinite bound to apply, and when not to apply one</h3>
+
+<p>The heated mount's measurement of the 7.15&nbsp;&Aring; window is applied as a restraint at
+weight 50 against a single pattern. A restraint that strong is not a neutral thing to pass a
+wrong bound to, and running the nine standards found two ways of passing one.</p>
+
+<p><b>The collapse route is not always the tighter measurement.</b> Two numbers describe the same
+quantity: the envelope of every usable estimate, and the collapse route, which is a measurement
+where the envelope is the span of several. Preferring the route is right nearly always and was
+what the program did. On the dickite standard the route gives 25 to 67&nbsp;per&nbsp;cent of a
+mineral the specimen is entirely made of, where the envelope gives 100 to 100; applied, that drove
+<var>R</var><sub>wp</sub> to 582&nbsp;per&nbsp;cent and returned 52&nbsp;per&nbsp;cent kaolinite
+beside 48&nbsp;per&nbsp;cent chlorite. <code>KaoliniteEvidence.best_bounds</code> now takes
+whichever of the two is narrower, which returns 100 to 100 and 99&nbsp;per&nbsp;cent kaolinite.
+Narrower rather than lower: between two honest measurements of one quantity the tighter is the
+more informative, and a bound is useful in proportion to what it excludes.</p>
+
+<p><b>A window with no reflection in it has no share to divide.</b> On a montmorillonite the
+7.15&nbsp;&Aring; window carries 80 counts against a strongest line of ten thousand. Every share
+measured from it is noise over noise, and the restraint built from it admits every division while
+still costing the fit an extra row to satisfy - and, because the restraint is only sound when the
+clays share one orientation, costing it the freedom to give them their own.
+<code>kaolinite_share_constraint</code> now declines where the window stands below a tenth of the
+strongest line. Across the nine standards that window stands at 100&nbsp;per&nbsp;cent of the
+strongest line on the four kaolinites and the two chlorites and at 0.8 and 5.6 on the
+montmorillonite and the sepiolite, so the threshold sits in a gap and not through a cluster.</p>
+
+<p>The two guards are independent and neither subsumes the other, which is worth stating because
+the montmorillonite needs both to be seen clearly. Its envelope says 0 to 1 while a collapse route
+measured from the same empty window says 1 to 1 - and the narrower of those is narrow, so the
+width test passes it. What rejects it is the window test, which sees the pattern the evidence does
+not. <code>informative</code> judges the width of a bound and makes no claim about whether the
+window supports one.</p>
+
+<h4>A note on orientation</h4>
+
+<p>A.66 reported that holding the whole mount to one orientation fixes six of the nine standards,
+and raised whether it should be the default. It should not, and the reason is that the standards
+cannot answer the question. They are near-pure, so on them "one orientation for the mount" and
+"one orientation for the single phase present" are nearly the same constraint, and what the
+experiment really showed is that <em>spurious</em> phases were buying cheap intensity at the
+bottom of the orientation axis. A real specimen holds several clays that do not settle alike - a
+kaolinite booklet, a chlorite plate, a smectite film and a sepiolite needle have different habits
+and no reason to share a texture - so forcing them to agree would be imposing something false to
+suppress a symptom. The leverage is the thing to address, at its source.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

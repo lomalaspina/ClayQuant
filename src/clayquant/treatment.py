@@ -39,6 +39,7 @@ from .diagnostics import scale_to_reference
 from .pattern import Pattern
 
 __all__ = [
+    "WINDOW_REFLECTION_SHARE",
     "ILLITE_001_MARGIN",
     "ILLITE_001",
     "channel_clay_evidence",
@@ -1420,6 +1421,20 @@ def expandable_bound(
     )
 
 
+WINDOW_REFLECTION_SHARE = 0.10
+"""How tall the 7.15 A window must stand before its share is worth restraining.
+
+A tenth of the pattern's strongest line.  Below that the window holds no
+reflection, only background and noise, and the kaolinite share measured from it
+is noise over noise: on the montmorillonite standards it comes back as the whole
+range, 0 to 1, which admits every division and restrains nothing.  Measured on
+the nine standards, the window stands at 100 per cent of the strongest line on
+the four kaolinites and the two chlorites, and at 0.8 and 5.6 per cent on the
+montmorillonite and the sepiolite, so the threshold sits in a gap rather than
+through a cluster.
+"""
+
+
 def kaolinite_share_constraint(
     measured: Pattern,
     library,
@@ -1479,6 +1494,18 @@ def kaolinite_share_constraint(
         grid[inside],
     ))
     if window_area <= 0.0:
+        return None
+    # And nothing worth restraining either.  A window that holds no reflection
+    # has no share to divide: on a montmorillonite the 7.15 A window carries 80
+    # counts against a strongest line of ten thousand, which is noise, and the
+    # bounds measured from it come back 0 to 1.  Restraining a fit with that
+    # asks it to satisfy an extra row that admits everything, and - because the
+    # restraint is only sound when the clays share one orientation - costs it
+    # the freedom to give them their own.
+    tallest = float(np.max(observed)) if observed.size else 0.0
+    in_window = np.clip(
+        np.interp(grid[inside], np.asarray(measured.two_theta), observed), 0.0, None)
+    if tallest > 0.0 and float(np.max(in_window)) < WINDOW_REFLECTION_SHARE * tallest:
         return None
 
     def areas_of(matches) -> np.ndarray:

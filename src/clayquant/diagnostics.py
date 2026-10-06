@@ -38,6 +38,7 @@ from .calibration import QUARTZ_100_D, reference_two_theta
 from .pattern import Pattern
 
 __all__ = [
+    "BOUND_WIDTH_LIMIT",
     "PeakMetrics",
     "measure_peak",
     "common_scale",
@@ -930,6 +931,17 @@ class ChloriteShare:
         )
 
 
+BOUND_WIDTH_LIMIT = 0.5
+"""How wide the kaolinite bound may be and still be worth applying.
+
+Half the range.  A bound wider than that excludes less than it admits, and the
+restraint built from it costs a fit its freedom without telling it anything: on
+a montmorillonite, whose 7.15 A window holds 80 counts against a strongest line
+of ten thousand, the bound comes back 0 to 1 and the constraint restrains
+nothing while still asking the fit to satisfy an extra row.
+"""
+
+
 @dataclass
 class KaoliniteEvidence:
     """Everything the three mounts say about kaolinite, and whether it agrees."""
@@ -995,6 +1007,59 @@ class KaoliniteEvidence:
         lows = [share.kaolinite[0] for share in usable]
         highs = [share.kaolinite[1] for share in usable]
         return float(min(lows)), float(max(highs))
+
+    @property
+    def best_bounds(self) -> tuple[float, float]:
+        """The tightest bound the three mounts support, envelope or collapse route.
+
+        The collapse route is a measurement where the envelope of
+        :attr:`bounds` is the span of several, so the route is usually the
+        tighter and preferring it is right - but not invariably, and the
+        exception is not rare enough to ignore.  On a dickite standard the route
+        gives 0.25 to 0.67 where the envelope gives 1.00 to 1.00, and applying
+        the wider wrong one as a restraint at weight 50 drove R_wp to 582 per
+        cent and halved the kaolinite the specimen is made of.  Taking whichever
+        is narrower returns 1.00 to 1.00 and 99 per cent kaolinite.
+
+        Narrower and not lower: a bound is only useful in proportion to how much
+        it excludes, and between two honest measurements of the same quantity
+        the tighter is the more informative.  Where they are equally wide the
+        envelope is kept, it being the one that cannot be narrower than its own
+        parts.
+        """
+        best = self.bounds
+        width = best[1] - best[0]
+        for route in self.collapse_routes:
+            low, high = route.kaolinite_bounds
+            if low != low or high != high:      # NaN: this route measured nothing
+                continue
+            if not (width == width) or (high - low) < width:
+                best, width = (float(low), float(high)), high - low
+        return best
+
+    @property
+    def informative(self) -> bool:
+        """Whether :attr:`best_bounds` says anything a fit should be held to.
+
+        A bound spanning half the range or more excludes almost nothing, and
+        applying it as a restraint costs whatever the restraint costs while
+        buying nothing.
+
+        This judges the *width* of :attr:`best_bounds` and nothing else, which
+        is all the evidence alone can judge.  A narrow bound is not the same as
+        a sound one: on a montmorillonite, whose 7.15 A window holds no
+        reflection, the envelope comes back 0 to 1 while a collapse route
+        measured from the same noise says 1 to 1, and the narrower of those is
+        narrow.  What catches that is the window itself, in
+        :func:`clayquant.treatment.kaolinite_share_constraint`, which sees the
+        pattern this does not and declines when the window stands below
+        :data:`~clayquant.treatment.WINDOW_REFLECTION_SHARE` of the strongest
+        line.  Both guards are needed and neither subsumes the other.
+        """
+        low, high = self.best_bounds
+        if low != low or high != high:
+            return False
+        return (high - low) < BOUND_WIDTH_LIMIT
 
     @property
     def references_agree(self) -> bool:

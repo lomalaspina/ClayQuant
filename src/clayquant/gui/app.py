@@ -3489,15 +3489,13 @@ def register_callbacks(app: Dash) -> None:
                     # and the share it measures is applied rather than reported:
                     # left only reported, a fit gave kaolinite 16 % of the
                     # 7.15 A window where the heated mount allowed 59 to 82.
-                    # Prefer the collapse routes, which are a measurement, over
-                    # the chlorite-ratio envelope, which is an inference.
-                    bound = (least, most)
-                    for route in evidence.collapse_routes:
-                        low, high = route.kaolinite_bounds
-                        if low == low and high == high:
-                            bound = (low, high)
-                            break
-                    if evidence.detected:
+                    # Which of the two measurements to take is
+                    # KaoliniteEvidence.best_bounds: usually the collapse route,
+                    # but the narrower of the two, because the route is not
+                    # always the tighter and the wider one applied as a restraint
+                    # is worse than no restraint (Sec. A.67).
+                    bound = evidence.best_bounds
+                    if evidence.detected and evidence.informative:
                         block = kaolinite_share_constraint(
                             state.corrected(), library, bound,
                             background=state.background_fit if use_background else None,
