@@ -183,6 +183,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-63">A.63 Corrensite, saponite, and a distinction a basal scan cannot make</a>
 <a href="#a-64">A.64 The channel clays, and a reflection that will not move</a>
 <a href="#a-65">A.65 A needle is not a plate, and its orientation cannot be measured here</a>
+<a href="#a-66">A.66 One orientation for the mount, and what the standards say about it</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7726,6 +7727,80 @@ optimum is shallow.</p>
 share of the mass agree: 3.7 and 3.5&nbsp;per&nbsp;cent, against 46 and 0.3 before. The weight is
 no longer free. That the fit still does not identify the sepiolite standard as sepiolite is a
 separate matter and is not yet resolved.</p>
+
+<h3 id="a-66">A.66 One orientation for the mount, and what the standards say about it</h3>
+
+<p>Running the nine standards through the whole workflow &mdash; screen, zero error, background,
+the air-dried ceiling, the kaolinite share from the heated mount &mdash; turned up something
+larger than any of those steps. Letting each clay choose its own texture is what was wrecking the
+answers.</p>
+
+<p>A basal series is enhanced as <var>r</var><sup>&minus;3</sup>, so intensity at the bottom of
+the orientation axis is cheap: a phase fitted at <var>r</var>&nbsp;=&nbsp;0.2 gives 125 times the
+scattering per gram that the same phase gives at <var>r</var>&nbsp;=&nbsp;1. When every clay may
+pick its own, the fit can cover a reflection with whichever phase is cheapest there rather than
+with the phase that owns it, and the texture it reports is not one the specimen has. Holding the
+whole mount to a single orientation removes that freedom, which is what the mount physically is:
+one smear, settled once.</p>
+
+<table><caption>The nine standards, with the workflow otherwise identical. Only the orientation
+freedom differs.</caption>
+<tr><th>standard</th><th>expected</th><th>each clay free</th><th>one orientation</th></tr>
+<tr><td>Chlorite_16</td><td>chlorite</td><td>kaolinite 69&nbsp;%, chlorite 26&nbsp;%</td>
+<td><b>chlorite 94&nbsp;%</b></td></tr>
+<tr><td>Prochlorite_15</td><td>chlorite</td><td>chlorite 84&nbsp;%, illite 16&nbsp;%</td>
+<td><b>chlorite 100&nbsp;%</b></td></tr>
+<tr><td>Montmorillonite_50</td><td>smectite</td><td>smectite 74&nbsp;%, illite 26&nbsp;%</td>
+<td><b>smectite 97&nbsp;%</b></td></tr>
+<tr><td>Illite_10</td><td>illite</td><td>illite 96&nbsp;%</td><td>illite 96&nbsp;%</td></tr>
+<tr><td>Dickite_7</td><td>kaolinite</td><td>kaolinite 99&nbsp;%</td><td>kaolinite 99&nbsp;%</td></tr>
+<tr><td>Kaolinite_12</td><td>kaolinite</td><td>kaolinite 91&nbsp;%</td><td>kaolinite 91&nbsp;%</td></tr>
+<tr><td>Kaolinite_43</td><td>kaolinite</td><td>kaolinite 72&nbsp;%, illite 26&nbsp;%</td>
+<td>kaolinite 72&nbsp;%</td></tr>
+<tr><td>Sepiolite</td><td>sepiolite</td><td>illite 92&nbsp;%, sepiolite 0&nbsp;%</td>
+<td>illite 75&nbsp;%, sepiolite 24&nbsp;%</td></tr>
+<tr><td>Montmorillonite_9</td><td>smectite</td><td>illite 63&nbsp;%, smectite 35&nbsp;%</td>
+<td>illite 55&nbsp;%, smectite 44&nbsp;%</td></tr>
+</table>
+
+<p>Six of the nine then give the right dominant phase, and the worst failure in the set &mdash;
+a chlorite standard read as 69&nbsp;per&nbsp;cent kaolinite &mdash; becomes 94&nbsp;per&nbsp;cent
+chlorite. It costs 2.6 points of <var>R</var><sub>wp</sub>, 51.1 to 53.7. That is the same trade
+this appendix has met repeatedly: the freer fit is the better fit by
+<var>R</var><sub>wp</sub> and the wrong one.</p>
+
+<p>Two steps of the workflow were missing from the offline driver and are now in it, and both
+matter on their own.</p>
+
+<p><b>The accompanying-mineral screen.</b> It needs quartz to put the three scans on one angle
+scale, and on a near-pure separate it often cannot find enough and declines, saying so in its
+note. The note had not been read. Quartz is in all of these separates and its 101 at
+3.343&nbsp;&Aring; is the illite 003 at 3.34&nbsp;&Aring;, so omitting it does not lose a little
+accuracy &mdash; it hands a whole reflection to illite, and read the sepiolite standard as
+92&nbsp;per&nbsp;cent illite. Where the screen declines, the minerals that are both common in a
+clay separate and sit on a clay diagnostic line are offered instead, and the fit is told that is
+what happened. The single-mount detector is not used for this: on these standards it returns
+ilmenite, corundum, pyrope and halite at scores above 0.88, which is the over-reporting the
+triplet screen exists to avoid.</p>
+
+<p><b>The kaolinite share from the heated mount</b>, applied rather than reported. Chlorite 002
+and kaolinite 001 coincide at 12.4&nbsp;deg and their 004 and 002 at 25&nbsp;deg, so a kaolinite
+reproduces the two strongest lines a chlorite has. Two refinements to how it is applied came out
+of running it on the standards. The collapse route is usually the tighter bound but not
+invariably &mdash; on the dickite it gives 25 to 67&nbsp;per&nbsp;cent where the evidence itself
+gives 100 to 100, and applying the wider wrong one at weight 50 drove
+<var>R</var><sub>wp</sub> to 582&nbsp;per&nbsp;cent &mdash; so the narrower of the two is taken.
+And the share means nothing when the window holds no reflection: on a montmorillonite the
+7.15&nbsp;&Aring; window carries 80 counts against a strongest line of ten thousand, the bounds
+come back 0 to 1, and a constraint built from them restrains nothing while still forcing the
+mount to one orientation. Both are now required to be informative before the restraint is
+built.</p>
+
+<p>What remains is three standards whose dominant phase is still wrong or divided: Kaolinite_43
+at 72&nbsp;per&nbsp;cent kaolinite against 26 illite, Montmorillonite_9 divided 55 to 44 between
+illite and smectite, and the sepiolite standard at 75&nbsp;per&nbsp;cent illite with sepiolite
+recovered only to 24. The last of those is the open problem of A.65: the calculated sepiolite
+reaches a cosine of 0.756 against the measured pattern and no orientation improves it.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
