@@ -999,7 +999,7 @@ CHANNEL_CLAY_110: dict[str, tuple[float, float]] = {
 
 Wide, because the 110 of a channel clay is not a fixed number: the channels hold
 zeolitic water and the cell follows what is in them.  The published sepiolite
-(COD 9014723) gives 11.93 A, a freely refined cell on one of these specimens
+(COD 9010148) gives 12.01 A, a freely refined cell on one of these specimens
 reached 12.35 A, and the measured maximum across three mounts sits at 12.44 to
 12.52 A.  The window spans that and no more.
 

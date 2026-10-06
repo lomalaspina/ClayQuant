@@ -3885,6 +3885,17 @@ def register_callbacks(app: Dash) -> None:
                     "fontSize": "0.8rem",
                 }),
             ])
+        if result.metadata.get("presubtracted"):
+            # Red rather than amber: this one means the numbers on screen are
+            # wrong, not that they need reading with care (Sec. A.70).
+            status = html.Div([
+                html.Div(status),
+                html.Div(result.metadata["presubtracted"], style={
+                    "marginTop": "8px", "padding": "8px", "background": "#fdecea",
+                    "border": "1px solid #d9534f", "borderRadius": "6px",
+                    "fontSize": "0.8rem",
+                }),
+            ])
         return (
             plot_fit(result),
             plot_components(result),

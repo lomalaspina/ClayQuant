@@ -47,9 +47,13 @@ def test_the_110_is_the_strongest_long_spacing_reflection():
     Not the *longest*: sepiolite's 020 at b/2 is 13.5 A and palygorskite's 010
     is 17.9 A.  Both are far weaker, and the 010 is extinct.
     """
-    for key, expected in (("sepiolite", 11.93), ("palygorskite", 10.37)):
+    # Each mineral's published spacing, which is the first value on its axis.
+    # Sepiolite's moved from 11.93 to 12.01 A when the structure changed from
+    # COD 9014723 to 9010148 (Sec. A.70), so it is read from the axis rather
+    # than written twice and left to drift out of agreement with it.
+    for key in ("sepiolite", "palygorskite"):
         crystal = load_crystal(key)
-        assert _d110(crystal) == pytest.approx(expected, abs=0.02)
+        assert _d110(crystal) == pytest.approx(FIBROUS_SPACINGS[key][0], abs=0.02)
         found = reflections(crystal, 2.5)
         long_lines = np.where(found.d > 8.0)[0]
         strongest = long_lines[int(np.argmax(found.f_squared[long_lines]))]

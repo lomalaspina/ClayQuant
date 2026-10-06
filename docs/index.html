@@ -187,6 +187,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-67">A.67 Which kaolinite bound to apply, and when not to apply one</a>
 <a href="#a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</a>
 <a href="#a-69">A.69 A channel breathes, and the test that finds one should admit it</a>
+<a href="#a-70">A.70 The weights, and a fault in the test harness rather than the program</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7738,6 +7739,9 @@ separate matter, and it was the line width rather than the texture: see A.68.</p
 
 <h3 id="a-66">A.66 One orientation for the mount, and what the standards say about it</h3>
 
+<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+
+
 <p>Running the nine standards through the whole workflow &mdash; screen, zero error, background,
 the air-dried ceiling, the kaolinite share from the heated mount &mdash; turned up something
 larger than any of those steps. Letting each clay choose its own texture is what was wrecking the
@@ -7812,6 +7816,9 @@ reaches a cosine of 0.756 against the measured pattern and no orientation improv
 
 <h3 id="a-67">A.67 Which kaolinite bound to apply, and when not to apply one</h3>
 
+<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+
+
 <p>The heated mount's measurement of the 7.15&nbsp;&Aring; window is applied as a restraint at
 weight 50 against a single pattern. A restraint that strong is not a neutral thing to pass a
 wrong bound to, and running the nine standards found two ways of passing one.</p>
@@ -7875,6 +7882,9 @@ and no reason to share a texture - so forcing them to agree would be imposing so
 suppress a symptom. The leverage is the thing to address, at its source.</p>
 
 <h3 id="a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</h3>
+
+<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+
 
 <p>A.65 closed with the sepiolite standard still unidentified: the texture was corrected, the
 weight was no longer free, and the calculated pattern reached a cosine of only 0.756 against the
@@ -7971,6 +7981,9 @@ corrected here.</p>
 
 <h3 id="a-69">A.69 A channel breathes, and the test that finds one should admit it</h3>
 
+<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+
+
 <p>A.68 corrected the channel clays&rsquo; line width, and that correction had a cost which has to
 be reported with it: on the near-pure Illite_10 standard palygorskite went from 4 to
 24&nbsp;per&nbsp;cent. The reason is plain once stated. The palygorskite 110 spans
@@ -8038,6 +8051,111 @@ it:</p>
 <p>5&nbsp;per&nbsp;cent is close to the geometric mean of 1.9 and 14, so it is about a factor of
 three from each. Glycol uptake is not a subtle effect and does not need a tight threshold to be
 caught.</p>
+
+<h3 id="a-70">A.70 The weights, and a fault in the test harness rather than the program</h3>
+
+<p>A.68 and A.69 were written while chasing a symptom: the fit would not identify the sepiolite
+standard as sepiolite. The width correction of A.68 was real and the channel-clay gate of A.69 was
+real, but neither was the cause, and the cause was not in ClayQuant at all. It was in the driver
+used to run the nine standards.</p>
+
+<p><code>nnls_fit</code> weights each point by 1&nbsp;/&nbsp;raw counts, which is counting
+statistics, and its own comment explains why it must be the raw counts rather than the subtracted
+ones: weighting by a subtracted pattern &ldquo;would put the largest weight on the flat regions
+between peaks, where the subtracted value is near zero and only noise remains, and almost none on
+the peaks that carry the information&rdquo;. The function takes the measurement and, optionally, the
+background fitted to it, and subtracts one from the other itself. The standards driver had already
+done the subtraction and passed the result with no background &mdash; so <code>raw</code> was the
+subtracted pattern, and the comment described exactly what then happened. Nothing checked.</p>
+
+<table><caption>The sepiolite standard: the same library, the same structures, only the call
+changed.</caption>
+<tr><th>how the fit was called</th><th><var>R</var><sub>wp</sub></th>
+<th>share of the 110 explained</th><th>result</th></tr>
+<tr><td>subtracted pattern, no background</td><td>86.6&nbsp;%</td><td>4.3&nbsp;%</td>
+<td>illite 65&nbsp;%</td></tr>
+<tr><td>counts as recorded, plus their background</td><td><b>38.9&nbsp;%</b></td>
+<td><b>86.0&nbsp;%</b></td><td><b>sepiolite 66&nbsp;%</b></td></tr>
+</table>
+
+<p>The strongest line in the pattern was being explained to one part in twenty-three, and a column
+that matched it to a cosine of 0.974 was given almost no weight, because scaling it up would have
+raised its tails in the flat regions where all the weight had gone. The program was never wrong:
+the application passes the corrected mount together with its fitted background, which is correct,
+and so did the driver used for the Clayfit3 members &mdash; which is why those results came out at
+<var>R</var><sub>wp</sub> near 42&nbsp;per&nbsp;cent while the standards came out at 50 to 134.
+That difference was visible the whole time and was read past.</p>
+
+<h4>The guard</h4>
+
+<p>A diffractogram records counts, so a raw one has no non-positive points; a subtracted one is
+clipped at zero across the flat regions. Measured over the standards, 0.00&nbsp;per&nbsp;cent of raw
+points are at or below zero against 5.9 to 14.0&nbsp;per&nbsp;cent of subtracted ones, so
+<code>PRESUBTRACTED_ZERO_FRACTION</code> is set at 1&nbsp;per&nbsp;cent &mdash; inside that gap with
+a factor of six to spare. When more than that share of the fitted points is non-positive and no
+background was passed, the fit reports it.</p>
+
+<p>Reported, not refused, which is the treatment <code>crowded</code> gets and for the same reason:
+a caller who means to fit a pre-subtracted pattern and accept the weighting may do so. What is not
+allowed is for it to happen without being said. The application shows this one in red rather than
+amber, because it does not mean the numbers need reading with care &mdash; it means they are
+wrong.</p>
+
+<h4>What this costs the record</h4>
+
+<p>Every number in this manual that came from the standards driver was computed under the wrong
+weights, and that includes the fit results quoted in A.66 and A.67 and the
+<var>R</var><sub>wp</sub> figures throughout A.68 and A.69. Where those sections rest on a
+measurement rather than on a fit &mdash; the 110 widths of A.68, the air-to-glycol spacings of
+A.69, the fraction of its 7.15&nbsp;&Aring; window a dickite retains at 550&nbsp;&deg;C in A.67
+&mdash; the measurement stands, because none of it goes through <code>nnls_fit</code>. Where they
+rest on a fit, the number is superseded and is marked where it appears.</p>
+
+<p>The general lesson is worth keeping separately from the particular bug. A validation harness is
+not a test: it has no expected answer to fail against, so a fault in it does not announce itself and
+instead appears as a property of the thing being validated. Three sections of this appendix were
+written about a symptom whose cause was in the harness, and the signal that should have caught it
+&mdash; two drivers on the same library disagreeing by a factor of two in
+<var>R</var><sub>wp</sub> &mdash; was in plain sight for the whole of that work.</p>
+
+<h4>A second sepiolite structure, which is worth having anyway</h4>
+
+<p>The structure was changed while looking for the cause, and on the corrected weighting it earns
+its place. Of the thirteen COD sepiolite entries, six are room-temperature and in
+<i>Pncn</i>; the two best-determined put their channel water near
+<var>x</var>&nbsp;=&nbsp;0.5, the channel centre, where the Sanchez <i>et al.</i> BAT25 structure
+previously loaded puts it near <var>x</var>&nbsp;=&nbsp;0 to 0.07. That is a difference in the
+projection onto the <var>ab</var> plane, which is precisely what sets every <var>hk</var>0
+intensity: for those reflections the phase is
+2&pi;<i>i</i>(<var>hx</var>&nbsp;+&nbsp;<var>ky</var>), so <var>z</var> drops out entirely.</p>
+
+<table><caption>Weak <var>hk</var>0 lines of the standard, normalised to the 110, against each
+candidate structure. The 400 is excluded from the score because the quartz and mica band at
+3.34&ndash;3.38&nbsp;&Aring; runs into it.</caption>
+<tr><th>structure</th><th>130</th><th>200</th><th>060</th><th>&minus;260</th><th>error</th>
+<th><var>R</var><sub>wp</sub></th></tr>
+<tr><td><b>measured</b></td><td><b>0.0</b></td><td><b>0.6</b></td><td><b>2.5</b></td>
+<td><b>2.6</b></td><td></td><td></td></tr>
+<tr><td>9010148 Post, Bish &amp; Heaney (2007)</td><td>3.3</td><td>3.0</td><td>6.0</td><td>7.1</td>
+<td><b>51</b></td><td><b>34.2&nbsp;%</b></td></tr>
+<tr><td>9015793 Giustetto <i>et al.</i> (2011)</td><td>4.3</td><td>3.9</td><td>7.4</td><td>7.0</td>
+<td>75</td><td>&mdash;</td></tr>
+<tr><td>9014723 Sanchez <i>et al.</i> BAT25 (was loaded)</td><td>4.6</td><td>5.1</td><td>8.3</td>
+<td>9.1</td><td>125</td><td>38.9&nbsp;%</td></tr>
+</table>
+
+<p>Post, Bish &amp; Heaney halves the weak-line error and explains 93.4&nbsp;per&nbsp;cent of the
+110 against BAT25's 86.0, so it is now the structure loaded. It is also, as it happens, the paper
+the <code>CifSource</code> description had named all along while the file beside it was
+Sanchez's &mdash; a mislabel corrected at the same time. Its published 110 is
+12.01&nbsp;&Aring; rather than 11.93, so the spacing axis is re-anchored, with the
+12.35&nbsp;&Aring; that best fits the standard placed on the axis rather than between two of its
+points.</p>
+
+<p>The weak <var>hk</var>0 lines are still two to three times stronger in the model than in the
+measurement, and that remains a real and unexplained difference between this specimen and any
+published structure. What has changed is its standing: it was reported as the thing preventing
+identification, and it is not &mdash; identification works. It is a residual.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

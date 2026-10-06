@@ -221,7 +221,7 @@ metadata rather than being buried.
 """
 
 FIBROUS_SPACINGS: dict[str, tuple[float, ...]] = {
-    "sepiolite": (11.93, 12.10, 12.25, 12.40, 12.55),
+    "sepiolite": (12.01, 12.15, 12.25, 12.35, 12.45, 12.55),
     "palygorskite": (10.37, 10.50, 10.65),
 }
 """(110) spacings to span for the channel clays, in A, published value first.
@@ -230,10 +230,18 @@ The 110 is the reflection these minerals are recognised by and the only one a
 clay separate shows strongly, so it is the one quantity a pattern determines and
 the one worth spanning.  It is not fixed in nature: the channels hold zeolitic
 water and the cell follows what is in them.  The published sepiolite here (COD
-9014723) gives 11.93 A; a TOPAS refinement of one of these specimens against a
+9010148) gives 12.01 A; a TOPAS refinement of one of these specimens against a
 freely refined cell reached 12.35 A, and the measured maximum sits at 12.44 to
-12.52 A across three mounts.  A library holding only 11.93 A would put the line
-0.3 deg away from where the specimen has it and the fit would not find it.
+12.52 A across three mounts.  A library holding only the published value would
+put the line 0.2 deg away from where the specimen has it and the fit would not
+find it.
+
+12.35 A is on the axis rather than between two of its points because that is
+where agreement with the sepiolite standard is best, and a parameter whose
+optimum falls between samples is reported at whichever neighbour the fit lands
+on.  The first value moved from 11.93 to 12.01 when the structure changed from
+COD 9014723 to 9010148 (Sec. A.70); it is the published spacing of whichever
+structure is loaded, and is named plainly as such.
 
 Spanned by scaling ``a`` and ``b`` together, which moves the 110 by the same
 factor and leaves ``c`` - the fibre axis, which the 110 does not involve - alone.

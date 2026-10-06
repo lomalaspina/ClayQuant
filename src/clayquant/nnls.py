@@ -37,6 +37,7 @@ from .background import BackgroundFit
 from .pattern import Pattern
 
 __all__ = [
+    "PRESUBTRACTED_ZERO_FRACTION",
     "DIAGNOSTIC_HALF_WIDTH",
     "DIAGNOSTIC_SIGNAL_TO_NOISE",
     "DIAGNOSTIC_SUPPORT_FRACTION",
@@ -389,6 +390,23 @@ def nnls_fit(
         if selection.sum() < len(library.entries) else ""
     )
 
+    # The weights below are 1 / raw counts, and `raw` is whatever was handed in.
+    # A pattern that has already had its background taken off is clipped at zero
+    # between the peaks, so weighting by it puts almost all the weight there.
+    # See PRESUBTRACTED_ZERO_FRACTION for what that costs.
+    non_positive = (
+        float(np.mean(raw[selection] <= 0.0)) if selection.any() else 0.0
+    )
+    presubtracted = (
+        f"{100 * non_positive:.1f} per cent of the fitted points are at or below zero, so "
+        f"this measurement has had a background removed, and none was passed to weight by. "
+        f"The weights are 1/raw counting statistics, so they are now largest on the flat "
+        f"regions between the peaks, where only noise is left, and smallest on the peaks. "
+        f"Pass the measurement as recorded together with the background that was fitted to "
+        f"it. R_wp and the phase shares from this fit are not trustworthy."
+        if background is None and non_positive > PRESUBTRACTED_ZERO_FRACTION else ""
+    )
+
     design = library.matrix(two_theta[selection]).T  # (n_points, n_entries)
     target = observed[selection]
 
@@ -500,6 +518,7 @@ def nnls_fit(
             "n_points": int(selection.sum()),
             "n_entries": len(library.entries),
             "crowded": crowded,
+            "presubtracted": presubtracted,
             "background_subtracted": background is not None,
             "constraints": [
                 {"name": item.name, "weight": float(item.weight),
@@ -1086,6 +1105,37 @@ contains one.  ``smectite_EG`` is its own 001 at 16.9 A.  ``C/S`` is deliberatel
 absent, as it is in Clayfit, because no equally sharp band has been established
 for it; an entry of a phase not named here is left alone rather than screened
 against a window chosen by guesswork.
+"""
+
+PRESUBTRACTED_ZERO_FRACTION = 0.01
+"""Share of fitted points at or below zero that means a background is gone.
+
+A guard on the one way of calling :func:`nnls_fit` that is silently wrong: a
+measurement whose background has already been removed, passed without the
+``background`` that removed it.  The weights are ``1 / raw`` counting
+statistics, and ``raw`` is whatever was handed in - so a pre-subtracted pattern
+weights the flat regions between the peaks, where only noise is left, far above
+the peaks that carry the information.  :func:`nnls_fit` already says why it must
+be the raw counts; nothing checked that it had them.
+
+It is not a subtle failure, which is what makes the silence costly.  On the
+sepiolite standard, fitted this way, the 110 - the strongest line in the pattern
+- came out 4 per cent explained, R_wp 87 per cent, and the specimen read as 65
+per cent illite.  With the same library, the same structures and the raw counts
+plus their background, the 110 is 86 per cent explained, R_wp is 39 per cent and
+the specimen reads as 66 per cent sepiolite.  Nothing about the model had been
+wrong (Sec. A.70).
+
+A diffractogram records counts, so a raw one has no non-positive points at all;
+a subtracted one is clipped at zero over the flat regions.  Measured across the
+standards: 0.00 per cent of raw points are at or below zero, against 5.9 to 14.0
+per cent of subtracted ones.  1 per cent sits in that gap with a factor of six
+to spare.
+
+The fit still runs and the note is reported rather than raised, which is the
+treatment :data:`crowded` gets and for the same reason: a caller who means to
+fit a pre-subtracted pattern and accept the weighting may do so.  What is not
+allowed is for it to happen without being said.
 """
 
 DIAGNOSTIC_HALF_WIDTH = 0.12

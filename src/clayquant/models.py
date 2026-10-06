@@ -478,13 +478,12 @@ FIBROUS_CIF_SOURCES: dict[str, CifSource] = {
     for source in [
         CifSource(
             key="sepiolite",
-            filename="sepiolite_COD_9014723.cif",
+            filename="sepiolite_COD_9010148.cif",
             icsd=0,
-            cod=9014723,
+            cod=9010148,
             description=(
-                "Sepiolite, Pncn, Sanchez, Garcia-Romero, Suarez, Silva, "
-                "Fuentes-Montero & Martinez-Criado (2011) Am. Mineral. 96, "
-                "1443-1454, sample BAT25 at 25 C"
+                "Sepiolite, Pncn, Post, Bish & Heaney (2007) Am. Mineral. 92, "
+                "91-97, Durango, room temperature in air"
             ),
             layers_per_cell=1,
         ),
