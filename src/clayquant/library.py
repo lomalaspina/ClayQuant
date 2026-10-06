@@ -97,6 +97,7 @@ __all__ = [
     "orderings_for",
     "CORRENSITE_FRACTION",
     "FIBROUS_ORIENTATION",
+    "FIBROUS_DIAMETERS",
     "FIBROUS_SPACINGS",
     "scaled_in_plane",
     "SMECTITE_SPECIES",
@@ -238,6 +239,33 @@ Spanned by scaling ``a`` and ``b`` together, which moves the 110 by the same
 factor and leaves ``c`` - the fibre axis, which the 110 does not involve - alone.
 That is a span of the quantity the pattern measures and not a refinement of the
 cell: the published value is the first point on the axis and is named plainly.
+"""
+
+FIBROUS_DIAMETERS: tuple[float, ...] = (90.0, 130.0, 190.0, 280.0)
+"""Fibre diameters to span for the channel clays, in A, measured value second.
+
+The coherent domain size *across* the fibre, which is what sets the width of
+every ``hk0`` reflection and so the width of the 110 the mineral is recognised
+by.  It is spanned for the same reason the platelets' CSDS is spanned: it is a
+property of the specimen and not of the mineral, and it varies by a factor of
+several between deposits.
+
+Spanning it is sound where spanning the orientation is not, and the difference
+is worth being explicit about.  ``r`` enters as a multiplier on a pattern whose
+shape it barely changes, so a fit handed a range of it buys intensity with mass
+and the residual does not object (see :data:`clayquant.models.FIBRE_ORIENTATION`).
+The diameter changes the *width* of a line and not its area, so the measurement
+determines it: on the sepiolite standard the 110 width picks 130 A from the
+air-dried and the glycolated mount independently, and agreement on the
+mineral's own lines peaks at the same value in both.
+
+The default spans 9 to 28 nm, which is the range reported for sepiolite and
+palygorskite fibre cross-sections.  Before this axis existed the channel clays
+were calculated at :data:`DEFAULT_PEAK_SHAPE`'s 400 A, which is a clay
+platelet's lateral extent: that made the 110 two and a half times too sharp
+(0.25 deg against a measured 0.62) and cost most of the agreement with the
+standard - a cosine of 0.756 against 0.978 on the mineral's own lines
+(Sec. A.68).
 """
 
 CONTINUUM_WINDOW = 6.0
@@ -645,6 +673,16 @@ class LibraryEntry:
     strain axis existed.
     """
 
+    domain_ab: float | None = None
+    """Coherent domain size across the fibre in A, for a channel clay.
+
+    The quantity :data:`FIBROUS_DIAMETERS` spans.  ``None`` for everything
+    else: a basal series is broadened by the stack's thickness along ``c*``,
+    which :attr:`csds_mean` carries, and the two are different directions in
+    different units.  Also ``None`` for a channel clay from a library written
+    before the axis existed, whose 110 is at the platelet width.
+    """
+
     normalization: float = 1.0
     """What the calculated pattern was divided by before storage.
 
@@ -738,6 +776,7 @@ class PatternLibrary:
         thickness: float | None = None,
         strain: float = 0.0,
         ordering: float = 0.0,
+        domain_ab: float | None = None,
         unit_mass: float | None = None,
         unit_volume: float | None = None,
         mass_attenuation: float | None = None,
@@ -798,6 +837,7 @@ class PatternLibrary:
                 thickness=thickness,
                 strain=strain,
                 ordering=ordering,
+                domain_ab=domain_ab,
                 normalization=scale,
                 unit_mass=unit_mass,
                 unit_volume=unit_volume,
@@ -971,6 +1011,7 @@ class PatternLibrary:
             for name, value in (("march_dollase", entry.march_dollase),
                                 ("thickness", entry.thickness),
                                 ("csds_mean", entry.csds_mean),
+                                ("domain_ab", entry.domain_ab),
                                 ("fraction", entry.fraction)):
                 if value is None:
                     continue
@@ -1035,6 +1076,10 @@ class PatternLibrary:
             ),
             strain=np.array([entry.strain for entry in self.entries]),
             ordering=np.array([entry.ordering for entry in self.entries]),
+            domain_ab=np.array(
+                [np.nan if entry.domain_ab is None else entry.domain_ab
+                 for entry in self.entries]
+            ),
             normalization=np.array([entry.normalization for entry in self.entries]),
             unit_mass=np.array(
                 [np.nan if entry.unit_mass is None else entry.unit_mass for entry in self.entries]
@@ -1072,6 +1117,12 @@ class PatternLibrary:
             # hold random stacks only.
             orderings = (
                 data["ordering"] if "ordering" in data.files else np.zeros(len(fractions))
+            )
+            # Libraries written before the fibre diameter became a library
+            # dimension hold the channel clays at the platelet width.
+            diameters = (
+                data["domain_ab"] if "domain_ab" in data.files
+                else np.full(len(fractions), np.nan)
             )
             # Libraries written before weight percent was possible carry neither
             # column; without them a fit still runs and reports shares, and the
@@ -1114,6 +1165,7 @@ class PatternLibrary:
                     thickness=None if np.isnan(spacing) else float(spacing),
                     strain=0.0 if np.isnan(strain) else float(strain),
                     ordering=0.0 if np.isnan(ordering) else float(ordering),
+                    domain_ab=None if np.isnan(diameter) else float(diameter),
                     normalization=float(scale),
                     unit_mass=None if np.isnan(mass) else float(mass),
                     unit_volume=None if np.isnan(volume) else float(volume),
@@ -1121,7 +1173,8 @@ class PatternLibrary:
                     metadata=metadata,
                 )
                 for (name, phase, row, air_row, orientation, fraction, size, spacing,
-                     strain, ordering, scale, mass, volume, attenuation, metadata) in zip(
+                     strain, ordering, diameter, scale, mass, volume, attenuation,
+                     metadata) in zip(
                     data["names"],
                     data["phases"],
                     data["intensity"],
@@ -1132,6 +1185,7 @@ class PatternLibrary:
                     spacings,
                     strains,
                     orderings,
+                    diameters,
                     scales,
                     masses,
                     volumes,
@@ -1261,6 +1315,7 @@ def build_library(
     smectite_orientation: float = 0.1,
     smectite_species: str = "dioctahedral",
     fibrous_spacings: dict[str, tuple[float, ...]] | None = None,
+    fibrous_diameters: tuple[float, ...] | None = None,
     fibrous_orientation: float = FIBROUS_ORIENTATION,
     air_dried_thickness: float | None = AIR_DRIED_SMECTITE_D001,
     progress: bool = False,
@@ -1373,6 +1428,10 @@ def build_library(
     domain_sizes = DISCRETE_THICKNESSES if domain_sizes is None else domain_sizes
     fibrous_spacings = (FIBROUS_SPACINGS if fibrous_spacings is None
                         else fibrous_spacings)
+    fibrous_diameters = (FIBROUS_DIAMETERS if fibrous_diameters is None
+                         else fibrous_diameters)
+    if not fibrous_diameters:
+        raise ValueError("at least one fibre diameter is needed")
     distributions = [lognormal_csds(float(mean), csds_beta) for mean in csds_means]
     if not distributions:
         raise ValueError("at least one CSDS mean is needed")
@@ -1421,6 +1480,7 @@ def build_library(
             "strains": {key: list(value) for key, value in strains.items()},
             "smectite_species": smectite_species,
             "fibrous_spacings": {k: list(v) for k, v in (fibrous_spacings or {}).items()},
+            "fibrous_diameters": list(fibrous_diameters),
             "fibrous_orientation": fibrous_orientation,
             "ordering_degrees": list(ORDERING_DEGREES),
             "illite_smectite_ordering_onset": ILLITE_SMECTITE_ORDERING_ONSET,
@@ -1685,22 +1745,38 @@ def build_library(
     # Without these entries a 12.4 A reflection that does not move had only one
     # column in the library that could carry it, the air-dried smectite, and a
     # non-negative fit has to use what it is given.
+    # The width of every hk0 line - the 110 among them - is set by the coherent
+    # domain *across* the fibre, and that is the one thing the default peak
+    # shape cannot be right about here: its 400 A is a clay platelet's lateral
+    # extent, which is three times a fibre's diameter.  The instrument's own
+    # size_ab is therefore replaced per diameter rather than used; size_c is
+    # left alone, because a fibre is long along c and the measurement shows no
+    # size broadening there.  See :data:`FIBROUS_DIAMETERS`.
     for key, spacings in (fibrous_spacings or {}).items():
         base_fibrous = load_crystal(key)
         axis, space = habit_axis(key) or ((0.0, 0.0, 1.0), "direct")
         announce(f"{key}: 1 orientation r = {fibrous_orientation:g} x {len(spacings)} "
-                 f"(110) spacings, about {tuple(int(v) for v in axis)} in {space} space")
+                 f"(110) spacings x {len(fibrous_diameters)} fibre diameters, "
+                 f"about {tuple(int(v) for v in axis)} in {space} space")
         for spacing in spacings:
             crystal = scaled_in_plane(base_fibrous, float(spacing))
             spacing_tag = f" d110={spacing:g}" if len(spacings) > 1 else ""
-            for r in (fibrous_orientation,):
+            for diameter in fibrous_diameters:
+                fibre_instrument = replace(
+                    instrument,
+                    peak_shape=replace(instrument.peak_shape, size_ab=float(diameter)),
+                )
+                diameter_tag = (f" D={diameter:g}" if len(fibrous_diameters) > 1 else "")
+                r = fibrous_orientation
                 library.add(
-                    powder_pattern(crystal, extended, instrument, r_march_dollase=r,
+                    powder_pattern(crystal, extended, fibre_instrument,
+                                   r_march_dollase=r,
                                    po_axis=axis, po_axis_space=space,
-                                   name=f"{key} PO={r:g}{spacing_tag}"),
+                                   name=f"{key} PO={r:g}{spacing_tag}{diameter_tag}"),
                     phase=key,
                     march_dollase=r,
                     thickness=float(spacing),
+                    domain_ab=float(diameter),
                     unit_mass=crystal.cell_mass,
                     unit_volume=crystal.volume,
                     mass_attenuation=mass_attenuation_of(crystal),

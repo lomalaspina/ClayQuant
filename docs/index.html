@@ -185,6 +185,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-65">A.65 A needle is not a plate, and its orientation cannot be measured here</a>
 <a href="#a-66">A.66 One orientation for the mount, and what the standards say about it</a>
 <a href="#a-67">A.67 Which kaolinite bound to apply, and when not to apply one</a>
+<a href="#a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7720,14 +7721,19 @@ to a cosine of 0.998 or better while the implied mass runs over three orders of 
 either direction, and an axis in it would not be a parameter the fit determines but a free
 multiplier on the weight. It is therefore fixed at one value, for the reason the glycolated
 smectite is one entry: what the single value decides is the basis the weight percent is on, and
-that is recorded rather than buried. 1.5 is where agreement with the sepiolite standard is best
-&mdash; a cosine of 0.756, against 0.623 for the best the plate model reaches &mdash; and the
-optimum is shallow.</p>
+that is recorded rather than buried. 1.5 is where agreement with the sepiolite standard is best,
+and the optimum is shallow.</p>
+
+<p class="note">The plate-against-needle figures this section originally gave &mdash; a cosine of
+0.756 against 0.623 &mdash; were taken with every calculated line two and a half times too sharp,
+and with the pole carrying the width anisotropy as well as the texture, so they compared two things
+at once. A.68 corrects both the width and the comparison. The conclusion below is unchanged; the
+numbers are superseded there.</p>
 
 <p>With the texture corrected, the sepiolite entry's share of the calculated intensity and its
 share of the mass agree: 3.7 and 3.5&nbsp;per&nbsp;cent, against 46 and 0.3 before. The weight is
-no longer free. That the fit still does not identify the sepiolite standard as sepiolite is a
-separate matter and is not yet resolved.</p>
+no longer free. That the fit still did not identify the sepiolite standard as sepiolite was a
+separate matter, and it was the line width rather than the texture: see A.68.</p>
 
 <h3 id="a-66">A.66 One orientation for the mount, and what the standards say about it</h3>
 
@@ -7866,6 +7872,101 @@ bottom of the orientation axis. A real specimen holds several clays that do not 
 kaolinite booklet, a chlorite plate, a smectite film and a sepiolite needle have different habits
 and no reason to share a texture - so forcing them to agree would be imposing something false to
 suppress a symptom. The leverage is the thing to address, at its source.</p>
+
+<h3 id="a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</h3>
+
+<p>A.65 closed with the sepiolite standard still unidentified: the texture was corrected, the
+weight was no longer free, and the calculated pattern reached a cosine of only 0.756 against the
+measurement. The cause turns out to be neither the texture nor the structure, and it was quiet in
+the way the worst defects are &mdash; every line was in the right place, so nothing looked
+broken.</p>
+
+<p>The measured 110 is 0.618&nbsp;degrees wide on the glycolated mount and 0.685 on the air-dried
+one. The calculated one was 0.251. Two and a half times too sharp, and a line that is too sharp
+cannot carry the measured peak&rsquo;s area at the measured height, so the fit could not use the
+column it was given: it recruited four different 110 spacings at once to synthesise a broad line
+out of narrow ones, and handed the leftover area to whatever else had something broad in the
+neighbourhood, which was the illite basal series.</p>
+
+<p>The width of an <var>hk</var>0 reflection is set by the coherent domain <em>across</em> the
+fibre. The library was calculating it from <code>DEFAULT_PEAK_SHAPE</code>&rsquo;s
+<code>size_ab</code>&nbsp;=&nbsp;400&nbsp;&Aring;, which is a clay platelet&rsquo;s lateral extent;
+a sepiolite fibre is a few tens of nanometres across. Nothing about the geometry was wrong &mdash;
+<code>PeakShape.fwhm</code> weights <code>size_ab</code> by sin<sup>2</sup> of the angle to the
+axis the texture is about, which for a channel clay is <var>c</var> in direct space, so an
+<var>hk</var>0 takes the diameter in full and a 00<var>l</var> takes <code>size_c</code>, which is
+<code>None</code> because a fibre is long along <var>c</var>. Only the number was a
+platelet&rsquo;s.</p>
+
+<table><caption>Calculated sepiolite against the standard, as the fibre diameter changes.
+Agreement is on the mineral&rsquo;s own lines, excluding the windows where this standard carries a
+glycolated smectite at 17&nbsp;&Aring;, a mica at 10&nbsp;&Aring; and quartz at
+3.34&nbsp;&Aring;.</caption>
+<tr><th>diameter, &Aring;</th><th>90</th><th>110</th><th>130</th><th>150</th><th>200</th>
+<th>400</th></tr>
+<tr><td>110 FWHM, deg</td><td>0.902</td><td>0.752</td><td>0.635</td><td>0.551</td><td>0.434</td>
+<td>0.251</td></tr>
+<tr><td>cosine, glycol mount</td><td>0.966</td><td>0.976</td><td><b>0.978</b></td><td>0.975</td>
+<td>0.956</td><td>0.756</td></tr>
+<tr><td>cosine, air-dried mount</td><td>0.968</td><td>0.979</td><td><b>0.981</b></td><td>0.977</td>
+<td>0.953</td><td>&mdash;</td></tr>
+</table>
+
+<p>Both mounts pick 130&nbsp;&Aring; independently, and the 110 width matches there too
+(0.635&nbsp;against&nbsp;0.618 and 0.685). Agreement on the mineral&rsquo;s own lines goes from
+0.756 to 0.978.</p>
+
+<p>The diameter is therefore a library axis, <code>FIBROUS_DIAMETERS</code>, spanning 90 to
+280&nbsp;&Aring; &mdash; 9 to 28&nbsp;nm, the reported range of sepiolite and palygorskite fibre
+cross-sections &mdash; with the measured value on the axis rather than at an end of it. It is
+spanned for the reason the platelets&rsquo; CSDS is spanned: it is a property of the specimen, not
+of the mineral.</p>
+
+<p>Spanning it is sound where spanning the orientation (A.65) is not, and the contrast is the whole
+lesson of both sections. <var>r</var> enters as very nearly a multiplier on a pattern whose shape
+it barely changes, so a fit handed a range of it spends the range on mass and the residual does not
+object. A diameter changes the <em>width</em> of a line and not its area, so the measurement
+determines it &mdash; which is why two independent mounts agree on it to the step of the axis. The
+test for whether a parameter may be spanned is not whether it is physically real but whether the
+pattern&rsquo;s shape depends on it.</p>
+
+<h4>What the standard does not settle</h4>
+
+<p>Correcting the width also made it possible to re-ask A.65&rsquo;s question properly, and the
+answer there was weaker than that section claimed. <code>PeakShape</code> refers <code>size_c</code>
+and <code>size_ab</code> to whatever axis the orientation is about, so moving the texture pole moves
+the line widths with it: the plate-against-needle comparison recorded in A.65 was measuring both at
+once. Holding the width anisotropy where the fibre puts it in every row &mdash; the check being
+that all the <var>r</var>&nbsp;=&nbsp;1 rows then agree exactly, since at <var>r</var>&nbsp;=&nbsp;1
+the axis cannot matter &mdash; gives:</p>
+
+<table><caption>Texture alone, with the width held at a 130&nbsp;&Aring; fibre throughout. Cosine
+on the mineral&rsquo;s own lines.</caption>
+<tr><th>model</th><th>cosine</th></tr>
+<tr><td>a random powder, <var>r</var>&nbsp;=&nbsp;1</td><td>0.946</td></tr>
+<tr><td>fibre about <var>c</var>, <var>r</var>&nbsp;=&nbsp;1.5</td><td>0.979</td></tr>
+<tr><td>plate on (100), <var>r</var>&nbsp;=&nbsp;0.7</td><td>0.983</td></tr>
+<tr><td>plate on (110), <var>r</var>&nbsp;=&nbsp;0.7</td><td>0.981</td></tr>
+<tr><td>plate on (010), <var>r</var>&nbsp;=&nbsp;0.7</td><td>0.882</td></tr>
+</table>
+
+<p>The mount is textured &mdash; three axes beat a random powder by 0.03 &mdash; and (010) is
+excluded. Which axis is not determined: the top three sit within 0.004 of each other, which is
+nothing. That is a statement about the experiment rather than a failure of it. All three do the same
+thing, because all three enhance <var>hk</var>0 against the rest: the fibre axis by expansion about
+<var>c</var>, a plate pole lying in the <var>hk</var>0 plane by compression onto it. A lath rolling
+freely about its length and a lath lying on one of its side faces both put <var>c</var> in the
+specimen plane, and an oriented basal scan sees only the difference in the roll angle. (010) fails
+because it lies in that plane too but puts 0<var>k</var>0 at the pole and the 110 at 64&nbsp;degrees
+from it, so it enhances the wrong member of the set.</p>
+
+<p>The fibre axis is kept, and on the structural argument rather than on those four thousandths: it
+is the crystallite&rsquo;s long direction, so it is the one choice for which the texture axis and
+the width anisotropy &mdash; which this code must take about the same axis &mdash; are both referred
+to the direction that governs them. A (110) pole would sharpen the 110 while enhancing it, since
+the 110 then sits at <var>alpha</var>&nbsp;=&nbsp;0 and takes <code>size_c</code>, which is the
+defect this section exists to remove. A.65&rsquo;s conclusion stands; its numbers did not, and are
+corrected here.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

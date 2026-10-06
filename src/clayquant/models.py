@@ -322,11 +322,44 @@ precisely, whatever the cell angles.  Measured instead from ``c*`` - which for
 the monoclinic palygorskite here is 17 degrees away - the 110 comes out at 76
 degrees rather than 90 and is under-enhanced.
 
-Measured on the sepiolite standard: with the 110 pole and ``r < 1`` the best
-agreement with the measured pattern is a cosine of 0.623, and the fitted ``r``
-runs to the bottom of its range because the pattern then collapses to the single
-110 line and nothing is left to determine ``r`` with.  About the fibre axis with
-``r > 1`` the best is 0.756, at ``r = 1.5``.
+What the sepiolite standard does and does not settle, measured once the fibre's
+own line width was right (:data:`clayquant.library.FIBROUS_DIAMETERS`), and with
+the width anisotropy held where the fibre puts it in every row.  That last is
+needed to ask the question at all: :class:`clayquant.profile.PeakShape` refers
+``size_c`` and ``size_ab`` to whatever axis the orientation is about, so moving
+the pole moves the line widths too, and a comparison that lets both move at once
+measures neither.  The check that the two came apart is that every ``r = 1`` row
+then agrees exactly, as it must.  Cosine on the mineral's own lines - excluding
+the windows where this standard carries a glycolated smectite at 17 A, a mica at
+10 A and quartz at 3.34 A, none of which a sepiolite model should be asked for:
+
+============================  ======
+a random powder, ``r = 1``     0.946
+fibre about ``c``, ``r = 1.5`` 0.979
+plate on (100), ``r = 0.7``    0.983
+plate on (110), ``r = 0.7``    0.981
+plate on (010), ``r = 0.7``    0.882
+============================  ======
+
+So the mount is textured - any of three axes beats a random powder by 0.03 - and
+(010) is excluded, but *which* axis is not determined: the top three sit within
+0.004 of each other, which is nothing.  That is not a failure of the data so
+much as a statement about it.  All three do the same thing to the pattern,
+because all three enhance ``hk0`` against the rest: the fibre axis by expansion
+about ``c``, a plate pole lying in the ``hk0`` plane by compression onto it.
+A lath rolling freely about its length and a lath lying on one of its side faces
+both put ``c`` in the specimen plane, and an oriented basal scan sees only the
+difference in the roll angle, which is small.  (010) fails because it is in that
+plane too but puts ``0k0`` at the pole and the 110 at 64 degrees from it, so it
+enhances the wrong member of the set.
+
+The fibre axis is kept, and on the structural argument rather than on those four
+thousandths: it is the crystallite's long direction, so it is the one choice for
+which the texture axis and the width anisotropy - which this code must take
+about the same axis - are both referred to the direction that actually governs
+them.  A (110) pole would sharpen the 110 while enhancing it, since the 110 then
+sits at ``alpha = 0`` and takes ``size_c``, and that is the defect
+:data:`clayquant.library.FIBROUS_DIAMETERS` exists to remove.
 """
 
 
@@ -340,8 +373,13 @@ measure it: over the whole needle range the calculated pattern keeps its shape
 to a cosine of 0.998 while the mass it implies scales as ``r^3``, so a spanned
 ``r`` is a free multiplier on the weight rather than a parameter the fit
 determines (Sec. A.65).  1.5 is where agreement with the sepiolite standard is
-best; the optimum is shallow and what the value fixes is the basis the weight
-percent is on.
+best; the optimum is shallow - 1.5 and 2.0 differ by 0.0001 in cosine - and
+what the value fixes is the basis the weight percent is on.
+
+The fibre's *diameter* is spanned rather than fixed, and the contrast says why
+this one is not.  Width is a shape and the measurement determines it; ``r``
+is very nearly a scale, and a fit handed a range of it spends the range on mass
+(:data:`clayquant.library.FIBROUS_DIAMETERS`).
 """
 
 
@@ -383,8 +421,10 @@ minerals but not layer silicates: chain silicates whose crystallites are laths,
 elongated along c, which settle on a side face rather than on a basal plane.
 Measured on the sepiolite standard, no orientation about c* improves the fit
 at all - every value below 1 makes it worse, which is what "this is not a
-platelet" looks like - while orientation about the 110 pole does improve it
-(Sec. A.37).
+platelet" looks like (Sec. A.37).  Orientation about the 110 pole appeared to
+improve it, which is why the chain clays were once listed here; re-measured
+against a fibre-width 110 it does not, and they are now in :data:`FIBRE_AXES`
+with the needle's own case of the March model.
 """
 
 
@@ -467,9 +507,12 @@ hold zeolitic water.  That has three consequences and all of them matter here.
 
 Its strongest reflection is the 110 and not a 00l, so it is built from the
 three-dimensional structure like any other mineral rather than from a layer
-model, and its texture pole is the fibre axis - :data:`MINERAL_HABIT` already
-carries (110) for both.  There is no layer spacing to span and no
-interstratification to model.
+model, and its texture axis is the fibre direction, which
+:data:`FIBRE_AXES` carries for both.  There is no layer spacing to span and no
+interstratification to model.  What there is to span is the 110 spacing, which
+follows what is in the channels, and the fibre diameter, which sets how wide
+that line is: :data:`clayquant.library.FIBROUS_SPACINGS` and
+:data:`clayquant.library.FIBROUS_DIAMETERS`.
 
 And the channels take water but not ethylene glycol, so a channel clay does not
 move between the air-dried and the glycolated mount.  That is what separates it
