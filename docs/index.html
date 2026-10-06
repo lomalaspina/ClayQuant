@@ -7739,8 +7739,10 @@ separate matter, and it was the line width rather than the texture: see A.68.</p
 
 <h3 id="a-66">A.66 One orientation for the mount, and what the standards say about it</h3>
 
-<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
-
+<p class="note">The table and verdict below were re-run after A.70 corrected the fit weighting.
+The conclusion is stronger than the superseded version's, not weaker: nine of nine rather than six
+of nine. The prose about what the orientation freedom does is unchanged, and the diagnosis in the
+second half of this section is new.</p>
 
 <p>Running the nine standards through the whole workflow &mdash; screen, zero error, background,
 the air-dried ceiling, the kaolinite share from the heated mount &mdash; turned up something
@@ -7756,30 +7758,72 @@ whole mount to a single orientation removes that freedom, which is what the moun
 one smear, settled once.</p>
 
 <table><caption>The nine standards, with the workflow otherwise identical. Only the orientation
-freedom differs.</caption>
+freedom differs. <var>R</var><sub>wp</sub> in brackets.</caption>
 <tr><th>standard</th><th>expected</th><th>each clay free</th><th>one orientation</th></tr>
-<tr><td>Chlorite_16</td><td>chlorite</td><td>kaolinite 69&nbsp;%, chlorite 26&nbsp;%</td>
-<td><b>chlorite 94&nbsp;%</b></td></tr>
-<tr><td>Prochlorite_15</td><td>chlorite</td><td>chlorite 84&nbsp;%, illite 16&nbsp;%</td>
-<td><b>chlorite 100&nbsp;%</b></td></tr>
-<tr><td>Montmorillonite_50</td><td>smectite</td><td>smectite 74&nbsp;%, illite 26&nbsp;%</td>
-<td><b>smectite 97&nbsp;%</b></td></tr>
-<tr><td>Illite_10</td><td>illite</td><td>illite 96&nbsp;%</td><td>illite 96&nbsp;%</td></tr>
-<tr><td>Dickite_7</td><td>kaolinite</td><td>kaolinite 99&nbsp;%</td><td>kaolinite 99&nbsp;%</td></tr>
-<tr><td>Kaolinite_12</td><td>kaolinite</td><td>kaolinite 91&nbsp;%</td><td>kaolinite 91&nbsp;%</td></tr>
-<tr><td>Kaolinite_43</td><td>kaolinite</td><td>kaolinite 72&nbsp;%, illite 26&nbsp;%</td>
-<td>kaolinite 72&nbsp;%</td></tr>
-<tr><td>Sepiolite</td><td>sepiolite</td><td>illite 92&nbsp;%, sepiolite 0&nbsp;%</td>
-<td>illite 75&nbsp;%, sepiolite 24&nbsp;%</td></tr>
-<tr><td>Montmorillonite_9</td><td>smectite</td><td>illite 63&nbsp;%, smectite 35&nbsp;%</td>
-<td>illite 55&nbsp;%, smectite 44&nbsp;%</td></tr>
+<tr><td>Chlorite_16</td><td>chlorite</td><td>chlorite 54&nbsp;%, kaolinite 28&nbsp;% (43.8)</td>
+<td><b>chlorite 90&nbsp;%</b>, illite 8 (44.5)</td></tr>
+<tr><td>Prochlorite_15</td><td>chlorite</td><td>chlorite 80&nbsp;%, illite 20&nbsp;% (61.0)</td>
+<td><b>chlorite 95&nbsp;%</b>, illite 5 (61.1)</td></tr>
+<tr><td>Montmorillonite_50</td><td>smectite</td><td>smectite 93&nbsp;%, chlorite 7&nbsp;% (48.1)</td>
+<td><b>smectite 99&nbsp;%</b> (49.9)</td></tr>
+<tr><td>Montmorillonite_9</td><td>smectite</td><td>illite 39&nbsp;%, smectite 29&nbsp;% (43.6)</td>
+<td><b>smectite 81&nbsp;%</b>, illite 12 (46.2)</td></tr>
+<tr><td>Illite_10</td><td>illite</td><td>illite 64&nbsp;%, chlorite 28&nbsp;% (24.7)</td>
+<td><b>illite 99&nbsp;%</b>, chlorite 1 (29.2)</td></tr>
+<tr><td>Sepiolite</td><td>sepiolite</td><td>sepiolite 77&nbsp;%, illite 23&nbsp;% (48.4)</td>
+<td><b>sepiolite 100&nbsp;%</b> (52.0)</td></tr>
+<tr><td>Dickite_7</td><td>kaolinite</td><td colspan="2">kaolinite 90&nbsp;%, illite 10&nbsp;%
+(64.6) &mdash; identical, already held to one orientation by the kaolinite restraint</td></tr>
+<tr><td>Kaolinite_12</td><td>kaolinite</td><td colspan="2">kaolinite 81&nbsp;%, illite 16&nbsp;%
+(39.2) &mdash; identical, as above</td></tr>
+<tr><td>Kaolinite_43</td><td>kaolinite</td><td colspan="2">kaolinite 68&nbsp;%, illite 29&nbsp;%
+(34.3) &mdash; identical, as above</td></tr>
 </table>
 
-<p>Six of the nine then give the right dominant phase, and the worst failure in the set &mdash;
-a chlorite standard read as 69&nbsp;per&nbsp;cent kaolinite &mdash; becomes 94&nbsp;per&nbsp;cent
-chlorite. It costs 2.6 points of <var>R</var><sub>wp</sub>, 51.1 to 53.7. That is the same trade
-this appendix has met repeatedly: the freer fit is the better fit by
-<var>R</var><sub>wp</sub> and the wrong one.</p>
+<p>Eight of nine become nine of nine, the mean share of the dominant phase goes from 72 to
+89&nbsp;per&nbsp;cent, and it costs 1.5 points of <var>R</var><sub>wp</sub>, 45.3 to 46.8. Of the
+six standards that were not already held to one orientation by the kaolinite restraint, <em>all
+six</em> improve. That is the same trade this appendix has met repeatedly: the freer fit is the
+better fit by <var>R</var><sub>wp</sub> and the wrong one.</p>
+
+<h4>What the freedom actually buys, measured on Illite_10</h4>
+
+<p>Under the free fit this near-pure illite separate reads 28&nbsp;per&nbsp;cent chlorite. The
+chlorite carries 5.8&nbsp;per&nbsp;cent of the <em>scattering</em>; what makes it 28 of the mass is
+that it was fitted at <var>r</var>&nbsp;=&nbsp;1, no texture at all, while the illite sat at 0.6 to
+0.7 and the I/S at 0.1 &mdash; both ends of the axis occupied at once.</p>
+
+<table><caption>Illite_10, free orientation. Mass per unit scattering is the weight share divided
+by the scattering share.</caption>
+<tr><th>phase</th><th>scattering&nbsp;%</th><th>weight&nbsp;%</th>
+<th>mass per unit scattering</th><th><var>r</var></th></tr>
+<tr><td>illite</td><td>47.3</td><td>59.0</td><td>1.25</td><td>0.6&ndash;0.7</td></tr>
+<tr><td>I/S 0.99/0.01</td><td>44.4</td><td>4.2</td><td>0.10</td><td>0.1</td></tr>
+<tr><td>chlorite</td><td>5.8</td><td><b>27.7</b></td><td><b>4.81</b></td><td><b>1.0</b></td></tr>
+<tr><td>kaolinite</td><td>1.9</td><td>7.1</td><td>3.76</td><td>1.0</td></tr>
+</table>
+
+<p>The arithmetic closes. Mass goes as <var>r</var><sup>&minus;3</sup>, so against an illite at
+0.65 a chlorite at 1.0 needs 0.65<sup>&minus;3</sup>&nbsp;=&nbsp;3.64 times the mass for the same
+scattering; the measured ratio is 4.81&nbsp;/&nbsp;1.25&nbsp;=&nbsp;3.85. The orientation difference
+accounts for essentially all of it. Across the mount the spread in mass per unit scattering is
+48-fold.</p>
+
+<p>And the chlorite is not there. Its 7.1&nbsp;&Aring; 002, which an oriented chlorite shows
+strongly, measures 0.48&nbsp;per&nbsp;cent of the strongest line in the pattern &mdash; 27 counts
+against 5800 &mdash; and the fit over-predicts that window fourfold, 9462 calculated against 2389
+observed, and keeps the chlorite anyway because the window is low-count while the chlorite buys
+improvements at 4.7 and 3.55&nbsp;&Aring;. The 14.2&nbsp;&Aring; region it is nominally explaining is
+carried by the I/S, not by it. Under one orientation the chlorite falls to 0.5&nbsp;per&nbsp;cent of
+the mass and the illite group goes to 99.</p>
+
+<p>This sharpens the objection recorded at the end of A.67, which was that a kaolinite booklet, a
+chlorite plate, a smectite film and a sepiolite needle have different habits and no reason to share
+a texture. That is true, and it is not what the free parameter is doing. An oriented basal scan
+barely determines <var>r</var> per phase &mdash; the pattern's shape depends on it weakly while the
+mass depends on it as the cube &mdash; so the freedom does not measure the difference in habit, it
+supplies an unconstrained mass multiplier per phase. One orientation for the mount is wrong in a
+known and bounded way; the freedom is wrong in an unbounded one.</p>
 
 <p>Two steps of the workflow were missing from the offline driver and are now in it, and both
 matter on their own.</p>
@@ -7816,7 +7860,14 @@ reaches a cosine of 0.756 against the measured pattern and no orientation improv
 
 <h3 id="a-67">A.67 Which kaolinite bound to apply, and when not to apply one</h3>
 
-<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+<p class="note">The <var>R</var><sub>wp</sub> figures quoted here &mdash; the dickite's
+582&nbsp;per&nbsp;cent above all &mdash; came from the standards driver that weighted by an
+already-subtracted pattern, which A.70 corrects, and are superseded. What this section rests on is
+not those: the dickite retaining 19.2&nbsp;per&nbsp;cent of its 7.15&nbsp;&Aring; window at
+550&nbsp;&deg;C, and the montmorillonite's window carrying 80 counts against ten thousand, are
+measurements of the mounts and do not pass through <code>nnls_fit</code>. On the corrected
+weighting the dickite fits at 90&nbsp;per&nbsp;cent kaolinite and
+<var>R</var><sub>wp</sub>&nbsp;64.6, with both guards doing the same work.</p>
 
 
 <p>The heated mount's measurement of the 7.15&nbsp;&Aring; window is applied as a restraint at
@@ -7883,7 +7934,12 @@ suppress a symptom. The leverage is the thing to address, at its source.</p>
 
 <h3 id="a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</h3>
 
-<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+<p class="note">This section opens by saying the fit would not identify the sepiolite standard as
+sepiolite. That was the misweighted driver of A.70, not the model, and the width correction below
+was found while chasing it. The correction stands on its own measurement &mdash; a 110 width of
+0.618&nbsp;deg against a calculated 0.251 &mdash; which does not pass through
+<code>nnls_fit</code>; the cosines likewise. On the corrected weighting the standard reads
+100&nbsp;per&nbsp;cent sepiolite.</p>
 
 
 <p>A.65 closed with the sepiolite standard still unidentified: the texture was corrected, the
@@ -7981,7 +8037,11 @@ corrected here.</p>
 
 <h3 id="a-69">A.69 A channel breathes, and the test that finds one should admit it</h3>
 
-<p class="note">The fit results in this section were computed with the standards driver that weighted by an already-subtracted pattern, which A.70 corrects. The measurements here stand, because they do not go through <code>nnls_fit</code>; the fitted shares and every <var>R</var><sub>wp</sub> are superseded.</p>
+<p class="note">The palygorskite shares quoted here came from the standards driver that weighted by
+an already-subtracted pattern, which A.70 corrects. The gate and the criterion are unaffected: the
+air-to-glycol spacings this section turns on are measurements of the mounts, not fits. On the
+corrected weighting Illite_10 fits no palygorskite at all and the sepiolite standard reads
+100&nbsp;per&nbsp;cent sepiolite with the channel-clay test firing.</p>
 
 
 <p>A.68 corrected the channel clays&rsquo; line width, and that correction had a cost which has to
