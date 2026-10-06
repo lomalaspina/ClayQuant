@@ -142,7 +142,9 @@ from ..quantification import Calibration, quantify
 from ..treatment import (
     channel_clay_entries,
     channel_clay_evidence,
+    EXPANDABLE_CONSTRAINT_WEIGHT,
     expandable_bound,
+    expandable_mass_constraint,
     expandable_entries,
     kaolinite_share_constraint,
     shift_evidence,
@@ -3428,6 +3430,7 @@ def register_callbacks(app: Dash) -> None:
         # measured off the two scans, and that puts a ceiling on how much
         # expandable layer the specimen can contain without having shown it.
         air_note = ""
+        expandable_ceiling = None
         air_state = STATE.mounts.get("air")
         wanted = (
             bool(use_air_dried) and "on" in (use_air_dried or [])
@@ -3445,8 +3448,17 @@ def register_callbacks(app: Dash) -> None:
                 air_note = f"The air-dried mount could not be read as evidence: {exc}"
             else:
                 air_note = bound.status
-                if not bound.unrestricted and bound.excluded:
-                    library = _library_subset(library, bound.allowed)
+                # The ceiling is carried to the constraint list rather than
+                # applied by deleting entries here.  It is a bound on
+                # *composition*, and deleting the entries above it also deletes
+                # their *shape* - which in this library is the only shape wide
+                # enough to carry a real clay's low-angle intensity.  On three
+                # real separates the deletion removed 2651 to 3131 entries and
+                # left one of them explaining 7 per cent of its 4.5-8.5 degree
+                # region (Sec. A.73).
+                expandable_ceiling = (
+                    None if bound.unrestricted or not bound.excluded else bound
+                )
                 # The same two mounts answer the opposite question, and the
                 # answer is used rather than only reported: a channel clay is
                 # admitted on a 110 that glycol could not expand, and refused
@@ -3483,6 +3495,22 @@ def register_callbacks(app: Dash) -> None:
                    if mount == "glycol" else f"{MOUNT_LABELS[mount]} is being fitted.")
             )
         constraints: list = []
+        if expandable_ceiling is not None:
+            block = expandable_mass_constraint(
+                library, expandable_ceiling, range_two_theta=tuple(fit_range),
+                weight=EXPANDABLE_CONSTRAINT_WEIGHT,
+            )
+            if block is not None:
+                constraints.append(block)
+                air_note += (
+                    f"  The ceiling is applied as a restraint on the fitted "
+                    f"expandable content, not by removing the "
+                    f"{len(expandable_ceiling.excluded)} entries above it: a bound "
+                    f"on composition must not delete the profiles the measurement "
+                    f"needs. If the fit still carries more expandable layer than "
+                    f"this allows, the data asked for it and the Expandable % "
+                    f"column says so."
+                )
 
         # The kaolinite evidence, as a restriction rather than as a report.
         # Parallel to the air-dried ceiling on the expandable clays: when the
