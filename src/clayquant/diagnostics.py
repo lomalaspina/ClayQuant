@@ -1012,20 +1012,32 @@ class KaoliniteEvidence:
     def best_bounds(self) -> tuple[float, float]:
         """The tightest bound the three mounts support, envelope or collapse route.
 
-        The collapse route is a measurement where the envelope of
-        :attr:`bounds` is the span of several, so the route is usually the
-        tighter and preferring it is right - but not invariably, and the
-        exception is not rare enough to ignore.  On a dickite standard the route
-        gives 0.25 to 0.67 where the envelope gives 1.00 to 1.00, and applying
-        the wider wrong one as a restraint at weight 50 drove R_wp to 582 per
-        cent and halved the kaolinite the specimen is made of.  Taking whichever
-        is narrower returns 1.00 to 1.00 and 99 per cent kaolinite.
+        A measurement before an inference is the right principle and the collapse
+        route is the measurement: the heated mount measures what leaves the
+        window, where the chlorite-ratio envelope infers the share through a
+        survival ratio that varies between chlorites.  So the route is preferred
+        nearly always, and was preferred always.
 
-        Narrower and not lower: a bound is only useful in proportion to how much
-        it excludes, and between two honest measurements of the same quantity
-        the tighter is the more informative.  Where they are equally wide the
-        envelope is kept, it being the one that cannot be narrower than its own
-        parts.
+        What that missed is that the route has an assumption of its own - that
+        what disappears from the window on heating is the kaolinite and what
+        stays is the chlorite - and a kaolinite polytype that does not fully
+        dehydroxylate at 550 C breaks it.  Measured on the standards, the
+        7.15 A window retains 0.0 per cent of its area on one kaolinite and
+        1.8 on another, and 19.2 per cent on the dickite.  The route reads that
+        surviving fifth as chlorite and returns 0.25 to 0.67 for a specimen that
+        is entirely kaolinite; applied as a restraint at weight 50 it drove R_wp
+        to 582 per cent and halved the kaolinite.  The envelope, which makes no
+        assumption about collapse, gives 1.00 to 1.00.
+
+        Taking whichever is narrower recovers the right answer there and leaves
+        the route preferred everywhere it is the tighter, which is everywhere
+        else in this collection.  It is a proxy for the real question and not an
+        answer to it: a route whose assumption fails can in principle come back
+        narrow and wrong, and nothing here would catch that.  What is claimed is
+        that between two bounds on one quantity the tighter excludes more, and
+        that the one case where the looser was taken is a case where it was also
+        wrong.  Where they are equally wide the envelope is kept, it being the
+        one that cannot be narrower than its own parts.
         """
         best = self.bounds
         width = best[1] - best[0]

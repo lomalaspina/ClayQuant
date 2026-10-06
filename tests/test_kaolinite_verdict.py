@@ -354,13 +354,35 @@ def test_the_constraint_is_reachable_from_the_fit_panel():
     assert app.KAOLINITE_CONSTRAINT_WEIGHT > 1.0
 
 
-def test_the_collapse_route_is_preferred_over_the_ratio_envelope():
-    """A measurement before an inference: the heated mount measures the share,
-    where the chlorite-ratio routes infer it through a ratio that varies
-    between chlorites."""
-    import inspect
+def test_the_collapse_route_is_preferred_where_it_is_the_tighter():
+    """A measurement before an inference, with the exception that found itself.
 
-    from clayquant.gui import app
+    The heated mount measures the share where the chlorite-ratio routes infer it
+    through a ratio that varies between chlorites, so the route wins nearly
+    always.  Its own assumption - that what leaves the window is the kaolinite -
+    fails on a polytype that does not fully dehydroxylate at 550 C, and there it
+    comes back wider as well as wrong.  The choice lives in
+    KaoliniteEvidence.best_bounds now, not in the application.
+    """
+    from clayquant.diagnostics import KaoliniteEvidence
 
-    source = inspect.getsource(app)
-    assert "for route in evidence.collapse_routes:" in source
+    class _Route:
+        def __init__(self, bounds):
+            self.kaolinite_bounds = bounds
+
+    class _Stub(KaoliniteEvidence):
+        def __init__(self, envelope, routes):
+            self._envelope, self._routes = envelope, tuple(_Route(b) for b in routes)
+
+        @property
+        def bounds(self):
+            return self._envelope
+
+        @property
+        def collapse_routes(self):
+            return self._routes
+
+    # the ordinary case: the route measures it and the envelope spans several
+    assert _Stub((0.2, 0.9), [(0.59, 0.82)]).best_bounds == (0.59, 0.82)
+    # the dickite case: the route read a surviving polytype as chlorite
+    assert _Stub((1.0, 1.0), [(0.25, 0.67)]).best_bounds == (1.0, 1.0)

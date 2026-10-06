@@ -7809,16 +7809,34 @@ reaches a cosine of 0.756 against the measured pattern and no orientation improv
 weight 50 against a single pattern. A restraint that strong is not a neutral thing to pass a
 wrong bound to, and running the nine standards found two ways of passing one.</p>
 
-<p><b>The collapse route is not always the tighter measurement.</b> Two numbers describe the same
-quantity: the envelope of every usable estimate, and the collapse route, which is a measurement
-where the envelope is the span of several. Preferring the route is right nearly always and was
-what the program did. On the dickite standard the route gives 25 to 67&nbsp;per&nbsp;cent of a
-mineral the specimen is entirely made of, where the envelope gives 100 to 100; applied, that drove
-<var>R</var><sub>wp</sub> to 582&nbsp;per&nbsp;cent and returned 52&nbsp;per&nbsp;cent kaolinite
-beside 48&nbsp;per&nbsp;cent chlorite. <code>KaoliniteEvidence.best_bounds</code> now takes
-whichever of the two is narrower, which returns 100 to 100 and 99&nbsp;per&nbsp;cent kaolinite.
-Narrower rather than lower: between two honest measurements of one quantity the tighter is the
-more informative, and a bound is useful in proportion to what it excludes.</p>
+<p><b>The collapse route has an assumption, and a dickite breaks it.</b> Two numbers describe the
+same quantity: the chlorite-ratio envelope, which infers the share through a survival ratio that
+varies between chlorites, and the collapse route, which measures it on the heated mount. A
+measurement before an inference is the right principle, and the program preferred the route
+always.</p>
+
+<p>The route assumes that what leaves the 7.15&nbsp;&Aring; window on heating is the kaolinite and
+what stays is the chlorite. A kaolinite polytype that does not fully dehydroxylate at
+550&nbsp;&deg;C breaks that, and the standards say how far:</p>
+
+<table><caption>Area remaining in the 7.15&nbsp;&Aring; window after 550&nbsp;&deg;C, against the
+quartz 101.</caption>
+<tr><th>standard</th><th>surviving</th></tr>
+<tr><td>Kaolinite_12</td><td>0.0&nbsp;%</td></tr>
+<tr><td>Kaolinite_43</td><td>1.8&nbsp;%</td></tr>
+<tr><td><b>Dickite_7</b></td><td><b>19.2&nbsp;%</b></td></tr>
+</table>
+
+<p>The route reads that surviving fifth as chlorite and returns 25 to 67&nbsp;per&nbsp;cent for a
+specimen that is entirely kaolinite; applied at weight 50 it drove <var>R</var><sub>wp</sub> to
+582&nbsp;per&nbsp;cent and returned 52&nbsp;per&nbsp;cent kaolinite beside 48 chlorite. The
+envelope, which assumes nothing about collapse, gives 100 to 100.
+<code>KaoliniteEvidence.best_bounds</code> takes whichever is narrower, which recovers 100 to 100
+and 99&nbsp;per&nbsp;cent kaolinite and leaves the route preferred everywhere it is the tighter.
+That is a proxy for the real question rather than an answer to it, and is written down as one: a
+route whose assumption fails could in principle come back narrow and wrong, and nothing here would
+catch it. What is claimed is that the tighter of two bounds on one quantity excludes more, and
+that the single case where the looser was taken is a case where it was also wrong.</p>
 
 <p><b>A window with no reflection in it has no share to divide.</b> On a montmorillonite the
 7.15&nbsp;&Aring; window carries 80 counts against a strongest line of ten thousand. Every share
