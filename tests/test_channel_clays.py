@@ -17,9 +17,11 @@ from clayquant.pattern import reflections
 from clayquant.quantification import CLAY_LIBRARY_PHASES
 from clayquant.treatment import (
     CHANNEL_CLAY_110,
+    CHANNEL_CLAY_MAXIMUM_EXPANSION,
     ILLITE_001,
     PeakShift,
     ShiftEvidence,
+    channel_clay_entries,
     channel_clay_evidence,
 )
 
@@ -136,3 +138,102 @@ def test_no_matched_reflections_says_so_rather_than_claiming_nothing_held():
     found = _evidence([])
     assert not found.found
     assert "nothing could be held" in found.status
+
+
+# --------------------------------------------------------------------------- #
+# a channel breathes: the criterion is physical, not statistical
+# --------------------------------------------------------------------------- #
+
+def test_the_sepiolite_standards_own_110_is_accepted():
+    """The case the statistical criterion refused.
+
+    12.095 to 12.320 A, +1.86 per cent, as the tallest line in the pattern.  It
+    was read as having moved because 0.147 deg is nine times its 0.017 deg
+    placement uncertainty - which is true, and is not the question.  A channel
+    holds zeolitic water and the cell breathes with it; what a channel clay
+    cannot do is take a glycol layer.
+    """
+    found = _evidence([_shift(12.095, 12.320, 14075.0, uncertainty=0.017)])
+    assert found.found
+    assert found.minerals == ["sepiolite"]
+    assert "1.9 per cent" in found.status
+
+
+def test_a_well_placed_line_is_not_punished_for_being_well_placed():
+    """The same expansion, refused or allowed by how sharp the line is.
+
+    Under the old criterion it was: the threshold moved with the uncertainty, so
+    the better the measurement the less breathing it permitted.
+    """
+    for uncertainty in (0.002, 0.005, 0.017, 0.05):
+        assert _evidence([_shift(12.10, 12.32, 9000.0, uncertainty)]).found
+
+
+def test_glycol_uptake_is_still_refused_at_every_level():
+    """One glycol layer takes 12.4 A to about 14.2, two to 16.9."""
+    assert not _evidence([_shift(12.40, 14.20, 9000.0)]).found
+    assert not _evidence([_shift(12.40, 16.90, 9000.0)]).found
+
+
+def test_the_threshold_sits_between_the_two_populations():
+    assert CHANNEL_CLAY_MAXIMUM_EXPANSION == pytest.approx(0.05)
+    # this specimen's breathing, and the whole hydration range of the 110
+    assert (12.320 - 12.095) / 12.095 < CHANNEL_CLAY_MAXIMUM_EXPANSION
+    assert (12.52 - 11.93) / 11.93 < CHANNEL_CLAY_MAXIMUM_EXPANSION
+    # and the smallest glycol expansion there is
+    assert (14.2 - 12.4) / 12.4 > CHANNEL_CLAY_MAXIMUM_EXPANSION
+
+
+def test_a_negative_tolerance_is_refused():
+    with pytest.raises(ValueError, match="must not be negative"):
+        channel_clay_evidence(
+            ShiftEvidence([_shift(12.1, 12.1, 9000.0)], 0.0, 0.0, 0.02, False, 0.0, [], ""),
+            maximum_expansion=-0.1)
+
+
+# --------------------------------------------------------------------------- #
+# and the evidence decides whether the phase is in the library at all
+# --------------------------------------------------------------------------- #
+
+class _Entry:
+    def __init__(self, phase):
+        self.phase = phase
+
+
+class _Library:
+    def __init__(self, phases):
+        self.entries = [_Entry(p) for p in phases]
+
+
+PHASES = ("illite", "sepiolite", "palygorskite", "smectite_EG", "sepiolite")
+
+
+def test_a_channel_clay_the_mounts_support_is_kept():
+    evidence = _evidence([_shift(12.095, 12.320, 14075.0, 0.017)])
+    kept = channel_clay_entries(_Library(PHASES), evidence)
+    assert [PHASES[i] for i in kept] == ["illite", "sepiolite", "smectite_EG", "sepiolite"]
+
+
+def test_a_channel_clay_with_no_evidence_is_dropped():
+    """Palygorskite took 24 per cent of the Illite_10 standard without this.
+
+    Nothing at all falls in either channel-clay window on eight of the nine
+    standards, so the test is sharp rather than marginal.
+    """
+    evidence = _evidence([_shift(ILLITE_001, ILLITE_001, 9000.0)])
+    assert not evidence.found
+    kept = channel_clay_entries(_Library(PHASES), evidence)
+    assert [PHASES[i] for i in kept] == ["illite", "smectite_EG"]
+
+
+def test_a_test_that_could_not_be_made_is_not_a_negative_result():
+    """No air-dried mount, so nothing is dropped."""
+    kept = channel_clay_entries(_Library(PHASES), None)
+    assert kept == list(range(len(PHASES)))
+
+
+def test_only_the_channel_clays_are_ever_dropped():
+    evidence = _evidence([_shift(ILLITE_001, ILLITE_001, 9000.0)])
+    library = _Library(("illite", "chlorite", "kaolinite_1M", "I/S", "C/S",
+                        "corrensite", "smectite_EG", "Quartz"))
+    assert channel_clay_entries(library, evidence) == list(range(8))

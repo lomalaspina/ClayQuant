@@ -46,6 +46,8 @@ __all__ = [
     "ChannelClayFinding",
     "ChannelClayEvidence",
     "CHANNEL_CLAY_MINIMUM_HEIGHT",
+    "CHANNEL_CLAY_MAXIMUM_EXPANSION",
+    "channel_clay_entries",
     "CHANNEL_CLAY_110",
     "AIR_DRIED_STATES",
     "ExpandableBound",
@@ -1018,6 +1020,34 @@ CHANNEL_CLAY_MINIMUM_HEIGHT = 0.02
 A held maximum far down in the noise is not a mineral.
 """
 
+CHANNEL_CLAY_MAXIMUM_EXPANSION = 0.05
+"""How far a channel clay's 110 may move between the mounts, as a fraction of d.
+
+A *physical* threshold, and it replaces a statistical one that was asking the
+wrong question.  This test originally called a reflection held when it had not
+moved by more than its own placement uncertainty, which is
+:attr:`PeakShift.moved` and is exactly right on the expandable side: there the
+question is whether anything moved at all.  Here it is not.  A channel holds
+zeolitic water and the cell breathes with it, so a channel clay's 110 is free to
+move a little between an air-dried and a glycolated mount; what it cannot do is
+take a glycol layer.  A strong, sharp, well-placed line is located to a few
+thousandths of a degree, so the statistical test calls that breathing a movement
+and refuses the mineral on the strength of its own best reflection.
+
+On the sepiolite standard it did precisely that.  The 110 goes from 12.095 to
+12.320 A, +1.86 per cent, as the tallest line in the pattern, and it was read as
+having moved because 0.147 deg is nine times its 0.017 deg placement
+uncertainty.
+
+5 per cent sits in the gap between the two populations rather than at one edge
+of it.  Below it: this specimen's 1.86 per cent, and the 11.93 to 12.52 A
+spread the sepiolite 110 covers over all hydration states, which is 4.9 per cent
+across *different* specimens and conditions.  Above it: glycol uptake, which is
+not a small effect - one glycol layer takes a 12.4 A interlayer to about 14.2 A
+(+14 per cent) and two take it to 16.9 (+36).  The threshold is near the
+geometric mean of 1.86 and 14, so it is about a factor of three from each.
+"""
+
 
 @dataclass
 class ChannelClayFinding:
@@ -1070,22 +1100,31 @@ def channel_clay_evidence(
     shift: ShiftEvidence,
     windows: dict[str, tuple[float, float]] | None = None,
     minimum_height: float = CHANNEL_CLAY_MINIMUM_HEIGHT,
+    maximum_expansion: float = CHANNEL_CLAY_MAXIMUM_EXPANSION,
 ) -> ChannelClayEvidence:
-    """Read :func:`shift_evidence` for reflections that held their position.
+    """Read :func:`shift_evidence` for reflections glycol could not expand.
 
     Takes the measurement already made rather than repeating it, so the two
     tests cannot disagree about what moved.  A reflection counts when it lies in
-    one of ``windows``, is tall enough to be a line at all, and did not move by
-    more than its own placement uncertainty - that last being
-    :attr:`PeakShift.moved`, the same test the expandable side uses.
+    one of ``windows``, is tall enough to be a line at all, and its spacing
+    changed by less than ``maximum_expansion``.
+
+    That last is a physical threshold and not the statistical one the expandable
+    side uses, for the reason set out in
+    :data:`CHANNEL_CLAY_MAXIMUM_EXPANSION`: a channel breathes, so the question
+    is not whether the 110 moved but whether it took a glycol layer.
     """
     windows = CHANNEL_CLAY_110 if windows is None else windows
+    if maximum_expansion < 0.0:
+        raise ValueError("maximum_expansion must not be negative")
     if not shift.shifts:
         return ChannelClayEvidence([], "No matched reflections, so nothing could be held.")
     tallest = max(item.height for item in shift.shifts) or 1.0
     findings: list[ChannelClayFinding] = []
     for item in shift.shifts:
-        if item.height < minimum_height * tallest or item.moved:
+        expansion = (abs(item.d_glycol - item.d_air) / item.d_air
+                     if item.d_air > 0 else float("inf"))
+        if item.height < minimum_height * tallest or expansion > maximum_expansion:
             continue
         for mineral, (low, high) in windows.items():
             if low <= item.d_air <= high:
@@ -1099,8 +1138,10 @@ def channel_clay_evidence(
             [], "No reflection held its position where a channel clay's 110 would be.")
     parts = []
     for finding in sorted(findings, key=lambda f: -f.shift.height):
+        change = (abs(finding.shift.d_glycol - finding.shift.d_air)
+                  / finding.shift.d_air if finding.shift.d_air > 0 else float("nan"))
         parts.append(
-            f"{finding.d_spacing:.2f} A held to within {2.0 * finding.shift.uncertainty:.3f} deg"
+            f"{finding.d_spacing:.2f} A moved by {100 * change:.1f} per cent"
             f" ({finding.mineral}"
             + (", though the illite 001 is only 0.2 A away" if finding.near_illite else "")
             + ")"
@@ -1110,6 +1151,44 @@ def channel_clay_evidence(
         "A reflection that glycolation did not move, where a smectite 001 would have "
         "moved to about 16.9 A: " + "; ".join(parts) + ".",
     )
+
+
+def channel_clay_entries(
+    library,
+    evidence: "ChannelClayEvidence | None" = None,
+    windows: dict[str, tuple[float, float]] | None = None,
+) -> list[int]:
+    """Indices to keep: every entry but a channel clay the mounts do not support.
+
+    The counterpart of :func:`expandable_entries`, and it closes the loop this
+    test was written for.  :func:`channel_clay_evidence` measures positive
+    evidence for a channel clay - a 110 in its own window that glycol could not
+    expand - and that evidence was being reported and then not used, so a
+    non-negative fit could still spend a channel clay anywhere its broad 110
+    happened to help.
+
+    It did.  Palygorskite took 24 per cent of the Illite_10 standard, whose
+    illite 001 at 10.02 A sits 0.35 A from the palygorskite 110 and has a
+    low-angle tail a broad line fits well.  Across the nine standards *nothing
+    at all* falls in either channel-clay window except on the sepiolite
+    standard, so this is a sharp test rather than a marginal one.
+
+    The asymmetry with the other clays is deliberate and is the point of
+    Sec. A.64: a channel clay is the one phase group here identified by a
+    positive diagnostic rather than by fitting better than the alternatives, so
+    it is admitted on that diagnostic and refused without it.  Passing
+    ``evidence=None`` - no air-dried mount, so the test could not be made -
+    keeps everything, because a test that was not performed is not a negative
+    result.
+    """
+    windows = CHANNEL_CLAY_110 if windows is None else windows
+    if evidence is None:
+        return list(range(len(library.entries)))
+    supported = set(evidence.minerals)
+    return [
+        index for index, entry in enumerate(library.entries)
+        if entry.phase not in windows or entry.phase in supported
+    ]
 
 
 @dataclass

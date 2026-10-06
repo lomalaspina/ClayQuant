@@ -140,6 +140,8 @@ from ..plots import (
 from ..profile import PeakShape
 from ..quantification import Calibration, quantify
 from ..treatment import (
+    channel_clay_entries,
+    channel_clay_evidence,
     expandable_bound,
     expandable_entries,
     kaolinite_share_constraint,
@@ -3436,12 +3438,29 @@ def register_callbacks(app: Dash) -> None:
                     state.subtracted() if use_background else state.corrected(),
                 )
                 bound = expandable_bound(evidence, library)
+                channel = channel_clay_evidence(evidence)
             except Exception as exc:  # noqa: BLE001 - reported, never fatal
                 air_note = f"The air-dried mount could not be read as evidence: {exc}"
             else:
                 air_note = bound.status
                 if not bound.unrestricted and bound.excluded:
                     library = _library_subset(library, bound.allowed)
+                # The same two mounts answer the opposite question, and the
+                # answer is used rather than only reported: a channel clay is
+                # admitted on a 110 that glycol could not expand, and refused
+                # without one.  Reporting it and leaving the column in the
+                # library let palygorskite take 24 per cent of a near-pure
+                # illite standard (Sec. A.69).
+                keep = channel_clay_entries(library, channel)
+                if len(keep) < len(library.entries):
+                    dropped = len(library.entries) - len(keep)
+                    library = _library_subset(library, np.asarray(keep, dtype=int))
+                    air_note += (
+                        f"  {channel.status}  The channel clays were left out of "
+                        f"the fit on that evidence: {dropped} entries removed."
+                    )
+                elif channel.found:
+                    air_note += f"  {channel.status}"
         if bool(exclude_expandable) and "on" in (exclude_expandable or []):
             # Blunter than the ceiling and asked for separately: every entry
             # carrying any expandable layer goes, rather than those above what

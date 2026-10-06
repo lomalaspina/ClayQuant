@@ -176,6 +176,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-66">A.66 One orientation for the mount, and what the standards say about it</a>
 <a href="#a-67">A.67 Which kaolinite bound to apply, and when not to apply one</a>
 <a href="#a-68">A.68 A fibre has a fibre&rsquo;s line width, and that was most of the misfit</a>
+<a href="#a-69">A.69 A channel breathes, and the test that finds one should admit it</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -7957,6 +7958,76 @@ to the direction that governs them. A (110) pole would sharpen the 110 while enh
 the 110 then sits at <var>alpha</var>&nbsp;=&nbsp;0 and takes <code>size_c</code>, which is the
 defect this section exists to remove. A.65&rsquo;s conclusion stands; its numbers did not, and are
 corrected here.</p>
+
+<h3 id="a-69">A.69 A channel breathes, and the test that finds one should admit it</h3>
+
+<p>A.68 corrected the channel clays&rsquo; line width, and that correction had a cost which has to
+be reported with it: on the near-pure Illite_10 standard palygorskite went from 4 to
+24&nbsp;per&nbsp;cent. The reason is plain once stated. The palygorskite 110 spans
+10.37&ndash;10.65&nbsp;&Aring; and the illite 001 sits at 10.02; a broad line there fits the
+low-angle tail of a strong illite 001 well, and before A.68 the calculated palygorskite 110 was too
+sharp to do it. Widening a column correctly made it a better absorber of something that is not
+palygorskite.</p>
+
+<p>The remedy was already in the program and was not being used. A.64 added the test that
+identifies a channel clay &mdash; a 110 in that mineral&rsquo;s own window which glycolation could
+not expand, because the channels take water but are too narrow for ethylene glycol &mdash; and the
+result was computed, reported in the note, and then thrown away. The library kept its channel-clay
+columns whatever the two mounts said, so a non-negative fit could spend them wherever a broad line
+happened to help. <code>channel_clay_entries</code> closes that loop: the channel clays are kept
+when the mounts support them and dropped when they do not.</p>
+
+<p>The asymmetry with every other clay here is deliberate. A chlorite or an illite is reported
+because it fits better than the alternatives; a channel clay is the one phase group in this program
+with a positive diagnostic of its own, so it is admitted on that diagnostic and refused without it.
+A test that could not be made &mdash; no air-dried mount &mdash; keeps everything, because an
+unperformed test is not a negative result.</p>
+
+<p>It is a sharp test and not a marginal one. Across the nine standards, <em>nothing at all</em>
+falls in either channel-clay window except on the sepiolite standard:</p>
+
+<table><caption>What the air-dried and glycolated pair measures inside the channel-clay
+windows, on each standard.</caption>
+<tr><th>standard</th><th>in either window</th></tr>
+<tr><td>Chlorite_16, Dickite_7, Illite_10, Kaolinite_12, Kaolinite_43,<br>
+Montmorillonite_50, Montmorillonite_9, Prochlorite_15</td><td>nothing</td></tr>
+<tr><td>Sepiolite</td><td>12.095&nbsp;&rarr;&nbsp;12.320&nbsp;&Aring;, +1.86&nbsp;per&nbsp;cent,
+the tallest line in the pattern</td></tr>
+</table>
+
+<h4>The criterion was statistical where it should have been physical</h4>
+
+<p>That sepiolite row is the test&rsquo;s own false negative, and fixing the gate without fixing the
+criterion would have dropped sepiolite from the sepiolite standard. The test called a reflection
+held when it had not moved by more than its own placement uncertainty &mdash;
+<code>PeakShift.moved</code>, the same test the expandable side uses. On the expandable side that is
+exactly right: there the question is whether anything moved at all.</p>
+
+<p>Here it is the wrong question. A channel holds zeolitic water and the cell breathes with it, so a
+channel clay&rsquo;s 110 is free to move a little between the two mounts; what it cannot do is take
+a glycol layer. And the statistical form has a perverse consequence: the threshold moves with the
+uncertainty, so the sharper and stronger the line, the less breathing it is permitted. The sepiolite
+standard&rsquo;s 110 is the tallest line in its pattern and is placed to 0.017&nbsp;degrees, so its
+0.147-degree displacement reads as nine standard errors of movement &mdash; which is true, and is
+not the question. The mineral was refused on the strength of its own best reflection.</p>
+
+<p><code>CHANNEL_CLAY_MAXIMUM_EXPANSION</code> is a fractional change in <var>d</var> instead, set at
+5&nbsp;per&nbsp;cent, and it sits in the gap between the two populations rather than at one edge of
+it:</p>
+
+<table><caption>What has to pass and what has to fail.</caption>
+<tr><th></th><th>change in <var>d</var></th></tr>
+<tr><td>this specimen&rsquo;s 110, air to glycol</td><td>+1.9&nbsp;%</td></tr>
+<tr><td>the sepiolite 110 over all hydration states, 11.93&ndash;12.52&nbsp;&Aring;</td>
+<td>4.9&nbsp;%</td></tr>
+<tr><td><b>threshold</b></td><td><b>5&nbsp;%</b></td></tr>
+<tr><td>one glycol layer, 12.4&nbsp;&rarr;&nbsp;14.2&nbsp;&Aring;</td><td>+14&nbsp;%</td></tr>
+<tr><td>two glycol layers, 12.4&nbsp;&rarr;&nbsp;16.9&nbsp;&Aring;</td><td>+36&nbsp;%</td></tr>
+</table>
+
+<p>5&nbsp;per&nbsp;cent is close to the geometric mean of 1.9 and 14, so it is about a factor of
+three from each. Glycol uptake is not a subtle effect and does not need a tight threshold to be
+caught.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

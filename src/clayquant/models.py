@@ -482,7 +482,9 @@ FIBROUS_CIF_SOURCES: dict[str, CifSource] = {
             icsd=0,
             cod=9014723,
             description=(
-                "Sepiolite, Pncn, Post, Bish & Heaney (2007) Am. Mineral. 92, 91-97"
+                "Sepiolite, Pncn, Sanchez, Garcia-Romero, Suarez, Silva, "
+                "Fuentes-Montero & Martinez-Criado (2011) Am. Mineral. 96, "
+                "1443-1454, sample BAT25 at 25 C"
             ),
             layers_per_cell=1,
         ),
