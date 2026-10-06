@@ -3750,21 +3750,28 @@ def register_callbacks(app: Dash) -> None:
             # cannot ask for itself.
             diagnostic_note = ""
             if bool(use_diagnostic) and "on" in (use_diagnostic or []):
-                fitted = (
-                    library if selection is None
-                    else _library_subset(
-                        library,
-                        np.asarray([library.names.index(name) for name in result.names],
-                                   dtype=int),
-                    )
+                # The constraints have to be cut to the same entries as the
+                # library, by the same indices.  screen_diagnostic_peaks subsets
+                # whatever it is handed by positions into the library it is
+                # handed, so passing a full-library constraint beside a
+                # one-per-family subset silently restrains the wrong columns -
+                # the first N of the library rather than the N that were chosen.
+                # It only bites when the screen drops an entry and refits, which
+                # is exactly when the restraint still has work to do (Sec. A.72).
+                picked = (
+                    None if selection is None
+                    else np.asarray([library.names.index(name) for name in result.names],
+                                    dtype=int)
                 )
+                fitted = library if picked is None else _library_subset(library, picked)
                 screened = screen_diagnostic_peaks(
                     state.corrected(),
                     fitted,
                     result=result,
                     background=state.background_fit if use_background else None,
                     range_two_theta=tuple(fit_range),
-                    constraints=constraints,
+                    constraints=(constraints if picked is None
+                                 else [item.subset(picked) for item in constraints]),
                     treatment=mount,
                 )
                 result = screened.result
