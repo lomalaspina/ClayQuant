@@ -132,5 +132,17 @@ def test_a_direction_of_zero_length_is_refused():
 
 
 def test_the_published_spacing_is_still_the_first_point():
-    assert FIBROUS_SPACINGS["sepiolite"][0] == pytest.approx(11.93, abs=0.01)
+    """Read from the structure, not written down beside it.
+
+    This test held the literal 11.93 A of COD 9014723 and so had to be edited
+    when the structure changed to 9010148 and its 12.01 A (Sec. A.70).  A test
+    that has to be edited whenever the thing it checks changes is not checking
+    anything: what matters is that the axis starts at the *loaded* structure's
+    own spacing, whichever structure that is.
+    """
+    crystal = load_crystal("sepiolite")
+    published = float(np.atleast_1d(
+        crystal.d_spacing(np.array([[1.0, 1.0, 0.0]])))[0])
+    assert FIBROUS_SPACINGS["sepiolite"][0] == pytest.approx(published, abs=0.02)
+    assert FIBROUS_SPACINGS["sepiolite"] == tuple(sorted(FIBROUS_SPACINGS["sepiolite"]))
     assert habit_pole("sepiolite") is None, "no plate pole for a needle"
