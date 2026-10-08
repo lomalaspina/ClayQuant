@@ -282,8 +282,49 @@ CONTINUUM_WINDOW = 6.0
 CONTINUUM_MIN_ANGLE = 1.0
 """Lowest angle a pattern is calculated at; below it the Lorentz factor is useless."""
 
-PREFERRED_ORIENTATIONS: tuple[float, ...] = tuple(round(0.1 * k, 1) for k in range(1, 11))
-"""March-Dollase parameters 0.1 to 1.0 in steps of 0.1."""
+PREFERRED_ORIENTATIONS: tuple[float, ...] = tuple(round(0.1 * k, 1) for k in range(3, 11))
+"""March-Dollase parameters 0.3 to 1.0 in steps of 0.1.
+
+**Why it starts at 0.3 and not at 0.1.**  ``r`` is not a free shape parameter,
+it is the width of an orientation distribution, and a mount cannot be better
+oriented than it was made.  ``P(alpha; r) = (r^2 cos^2 alpha + sin^2 alpha / r)
+^ (-3/2)`` has a half width that follows from ``r`` alone:
+
+=====  ==========  =================
+``r``  FWHM        Gaussian sigma*
+=====  ==========  =================
+0.10    2.8 deg     1.2 deg
+0.20    7.9 deg     3.4 deg
+0.30   14.7 deg     6.2 deg
+0.40   23.1 deg     9.8 deg
+0.50   33.7 deg    14.3 deg
+0.60   47.4 deg    20.1 deg
+=====  ==========  =================
+
+Moore and Reynolds describe an oriented clay mount by a Gaussian ``sigma*`` and
+put a good settled or smear mount at about 12 deg and an exceptionally well
+oriented one at about 6.  So ``r = 0.3`` is already the best film anyone makes,
+``r = 0.4`` to ``0.5`` is the ordinary one, and ``r = 0.1`` is a 2.8 deg
+distribution - the mosaic spread of a single crystal, not a settled powder.
+Those values described nothing that can be prepared.
+
+They were not harmless.  A basal series is enhanced as ``r ** -3``, so an entry
+at 0.1 is calculated to scatter a thousand times more per gram than the same
+entry at 1, and the fit buys low-angle intensity most cheaply at the bottom of
+whatever axis it is given.  Measured over twelve clay separates on a background
+that passes :func:`~clayquant.background.background_pedestal`, nine of twelve
+had a clay sitting on ``r = 0.1`` and the clay content of four of them came back
+at 4.5, 29.7, 33.0 and 39.9 per cent by weight - of specimens that are clay
+separates, against quartz at 95 per cent on the first of them.  The fit was not
+wrong; it was offered a texture no mount has and took it, because nothing said
+it could not.
+
+Removing the bottom two steps is therefore a statement about what exists rather
+than a tuning parameter.  Where a fit now collects on 0.3,
+:func:`clayquant.nnls.parameters_at_an_edge` reports it as a bound, which is the
+honest reading: the data wanted a sharper texture than a clay film has, and the
+reason is somewhere other than the texture.
+"""
 
 ILLITE_SMECTITE_FRACTIONS: tuple[float, ...] = (
     0.20,
@@ -1366,7 +1407,7 @@ def build_library(
     csds_beta: float = 0.35,
     host_thicknesses: dict[str, tuple[float, ...]] | None = None,
     smectite_thickness: float | None = None,
-    smectite_orientation: float = 0.1,
+    smectite_orientation: float = 0.3,
     smectite_species: str = "dioctahedral",
     fibrous_spacings: dict[str, tuple[float, ...]] | None = None,
     fibrous_diameters: tuple[float, ...] | None = None,
@@ -1406,11 +1447,14 @@ def build_library(
         build and leaves the expandable clays unrestrained.
     smectite_orientation:
         March-Dollase parameter the pure smectite pattern is calculated at.  The
-        default is 0.1, the orientation a fit typically gives the other platy
-        clays on an oriented mount, rather than the 1 of a random powder that it
-        used to be: the two differ by a factor of 1000 in the mass behind one
-        fitted coefficient, and 1 put a smectite carrying 0.95 % of the
-        scattering at 22 % of the clay weight on a real mount.  The quantifier
+        default is 0.3, the sharpest texture a clay film is made with and the
+        bottom of :data:`PREFERRED_ORIENTATIONS`, rather than the 1 of a random
+        powder that it used to be: the two differ by a factor of 37 in the mass
+        behind one fitted coefficient, and 1 put a smectite carrying 0.95 % of
+        the scattering at 22 % of the clay weight on a real mount.  It tracked
+        the bottom of the orientation axis when that was 0.1 and tracks it
+        still, so that this entry is on the same basis as the clays whose
+        texture the fit measures.  The quantifier
         rebases it onto the texture the fit actually measured
         (:func:`clayquant.quantification.rebase_fixed_orientation`), so this
         value decides the basis only when that is switched off.  It

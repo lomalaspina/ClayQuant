@@ -176,6 +176,11 @@ def test_the_library_is_built_on_the_measured_texture_by_default():
 
     from clayquant.library import build_library
 
+    from clayquant.library import PREFERRED_ORIENTATIONS
+
     default = inspect.signature(build_library).parameters["smectite_orientation"].default
-    assert default == pytest.approx(0.1)
+    # It tracks the bottom of the orientation axis, so that the one entry whose
+    # texture is assumed is on the same basis as the clays whose texture is
+    # measured.  When that floor moved from 0.1 to 0.3 this had to move with it.
+    assert default == pytest.approx(min(PREFERRED_ORIENTATIONS))
     assert FIXED_ORIENTATION_PHASES == ("smectite_EG",)

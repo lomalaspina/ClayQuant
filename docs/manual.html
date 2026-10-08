@@ -180,6 +180,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-70">A.70 The weights, and a fault in the test harness rather than the program</a>
 <a href="#a-71">A.71 One number, six sentences, and a tool that lied about itself</a>
 <a href="#a-72">A.72 The background the fit was asked to call a mineral</a>
+<a href="#a-73">A.73 A texture no mount has, and the weights it bought</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -8339,6 +8340,55 @@ a flag on the first band is weaker evidence than a flag further out. And a backg
 is what makes a wrong shape visible and it is also what makes a uniform offset invisible. A model that
 passes here has not been certified correct. It has been found not to be wrong in the way that moves a
 quantification.</p>
+
+
+<h3 id="a-73">A.73 A texture no mount has, and the weights it bought</h3>
+
+<p>With A.72&rsquo;s background guard in place, twelve clay separates were re-run on a background
+that passes it. The clay ratios improved &mdash; eleven of twelve accounted for more of the measured
+counts, and the mean difference from Clayfit3 fell from 15.1 to 11.4 points per phase &mdash; and the
+weight percentages fell apart. Four specimens that <em>are</em> clay separates came back at 4.5, 29.7,
+33.0 and 39.9&nbsp;% clay by weight, the first of them against 95&nbsp;% quartz.</p>
+
+<p>Nine of the twelve had a clay sitting on <code>r&nbsp;=&nbsp;0.1</code>, the bottom of the
+orientation axis. That is the whole of it. A basal series is enhanced as <code>r<sup>&minus;3</sup></code>,
+so an entry at 0.1 is calculated to scatter a thousand times more per gram than the same entry at 1,
+and the fit buys low-angle intensity most cheaply at the bottom of whatever axis it is given.
+Removing the background pedestal made the clay scattering smaller, and the mass conversion turned that
+into a collapse.</p>
+
+<p>The fit was not wrong. It was offered a texture that does not exist.</p>
+
+<p>March-Dollase <code>r</code> is not a free shape parameter; it is the width of an orientation
+distribution, and <code>P(&alpha;;r) = (r&sup2;cos&sup2;&alpha; + sin&sup2;&alpha;/r)<sup>&minus;3/2</sup></code>
+fixes that width from <code>r</code> alone:</p>
+
+<table><caption>What each value of the axis describes.</caption>
+<tr><th><code>r</code></th><th>FWHM of P(&alpha;)</th><th>equivalent Gaussian &sigma;*</th><th></th></tr>
+<tr><td>0.10</td><td>2.8&deg;</td><td>1.2&deg;</td><td>single-crystal mosaic spread</td></tr>
+<tr><td>0.20</td><td>7.9&deg;</td><td>3.4&deg;</td><td>sharper than any film</td></tr>
+<tr><td>0.30</td><td>14.7&deg;</td><td>6.2&deg;</td><td>exceptionally well oriented</td></tr>
+<tr><td>0.40</td><td>23.1&deg;</td><td>9.8&deg;</td><td>a good mount</td></tr>
+<tr><td>0.50</td><td>33.7&deg;</td><td>14.3&deg;</td><td>an ordinary mount</td></tr>
+<tr><td>0.60</td><td>47.4&deg;</td><td>20.1&deg;</td><td>a poor one</td></tr>
+</table>
+
+<p>Moore and Reynolds describe an oriented clay mount by a Gaussian &sigma;*, and put a good settled
+or smear mount at about 12&deg; and an exceptionally well oriented one at about 6. So
+<code>r&nbsp;=&nbsp;0.3</code> is already the best film anyone makes, and <code>r&nbsp;=&nbsp;0.1</code>
+is a 2.8&deg; distribution &mdash; the mosaic spread of a single crystal, not a settled powder. The
+bottom two steps of the axis described nothing that can be prepared, and they were the two the fit
+reached for.</p>
+
+<p>The axis now runs 0.3 to 1.0. This is a statement about what exists rather than a tuning parameter,
+and it is deliberately not a constraint on how orientations are assigned: each composition still
+chooses its own, and where a fit now collects on 0.3,
+<code>parameters_at_an_edge</code> reports it as a bound. That is the honest reading &mdash; the data
+wanted a sharper texture than a clay film has, and the reason is somewhere other than the texture.</p>
+
+<p>The fixed orientation of the single glycolated-smectite entry moves with it, from 0.1 to 0.3, so
+that the one pattern whose texture is assumed stays on the same basis as the clays whose texture is
+measured.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under
