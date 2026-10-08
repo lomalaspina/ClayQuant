@@ -349,7 +349,7 @@ spacing of this axis rather than anything new.
 
 CHLORITE_IRON: tuple[tuple[float, float], ...] = (CHLORITE_PUBLISHED_IRON,) + tuple(
     (two_one, hydroxide)
-    for two_one in (0.0, 0.05, 0.10, 0.20, 0.30)
+    for two_one in (0.0, 0.05, 0.10, 0.20, 0.30, 0.45, 0.60, 0.80, 1.00)
     for hydroxide in (0.0, 0.015, 0.035, 0.08, 0.15)
 )
 """Octahedral iron of the chlorite entries, as (2:1 sheet, hydroxide sheet).
@@ -404,7 +404,53 @@ cent low while the 005 is 18 per cent high, a systematic shape no iron content
 corrects.  Prochlorite 15's 004, measured at 0.750 of its 002, is outside what
 the whole composition space reaches at all - 0.368 to 0.676 - so there it is the
 layer model that falls short and not the axis.  Scanning further in iron only
-moves the other orders away.
+moves the other orders away *for these two standards*, which is a statement
+about them and not about the axis; see the next paragraph for a specimen it is
+the wrong statement about.
+
+**Why the 2:1 sheet now reaches 1.0.**  It stopped at 0.30, and the consequence
+was not a slightly coarse composition but a chlorite the library could not
+describe at all.  Over all 4160 chlorite entries the library held, the 7.15 A
+002 came out between 1.27 and 8.06 times the area of the 14 A 001 - so *no*
+entry, at any iron content or orientation, had its 001 stronger than its 002.
+That is not a corner of the composition space, it is the ordinary Fe-rich
+chlorite: the 001 grows with the contrast between the sheets, and the contrast
+grows with iron in the 2:1 sheet.  Calculated on the published structure at
+``r = 1``, 002/001 falls 2.68, 1.73, 1.49, 1.19, 0.86 as the 2:1 sheet goes
+0, 0.20, 0.30, 0.50, 1.00, and 003/001 falls 2.76, 1.07, 0.73, 0.37, 0.10 - so
+the old ceiling of 0.30 cut the axis off just above 002/001 of 1.  What it left
+out is not a tail of the range but the whole of the half where the 001 is the
+strongest basal reflection, which is where an Fe-rich chlorite lives.
+
+**What a real separate does and does not settle.**  The specimen that raised
+this has a chlorite 001 that nearly tripled on heating to 550 C, which is the
+dehydroxylation signature and not something a 3 % chlorite can do, and a fit
+that could satisfy that 001 and the 4.75 A 003 only by overshooting the 7.15 A
+window by 54 %.  That is the symptom the extension is meant to cure.  It is
+*not* proof of it, and the reason is worth stating where the next person will
+look: the specimen's own 002/001 is not a measurement but a background model's
+opinion.  Over the models in :data:`CLAYFIT_MODELS`, the same scan gives 0.66
+(exponential), 1.02 (QPA), 1.05 (polynomial), 1.50 (polynomial with the A/2theta
+term) and 1.63 (Sonneveld-Visser) - because the 14 A window sits on the
+direct-beam tail, where the models disagree most, and is four fifths background
+whichever is chosen.  The old floor of 1.27 falls *inside* that spread.  So this
+specimen says the ratio may well be out of reach and cannot show that it is.
+
+The case for the axis is therefore the first paragraph's and not this one's: an
+occupancy that runs 0 to 1 was spanned to 0.30, and the half left out is the
+half an Fe-rich chlorite occupies.  The two chlorite standards above sit at low
+iron and keep the entries they already chose, every value the axis held is still
+in it, and what is added is reach past them.
+
+The hydroxide sheet is deliberately left at 0.15.  It moves both ratios the
+*other* way - iron there lowers the contrast and raises the even orders, which
+is why (0, 0.15) is the 8.06 at the top of the range above - so the span of
+002/001 and 003/001 is already bounded on that side, and the pairs with both
+sheets iron-rich fall inside it.  What those pairs would add is cell mass rather
+than shape: a chamosite carries iron in both sheets, and a weight percent
+computed from a composition with the hydroxide sheet held near magnesium is
+light by however much that is.  That is a known and unfixed approximation, taken
+in preference to squaring the axis for shapes that are already spanned.
 """
 
 ILLITE_COMPOSITION: tuple[tuple[float, float], ...] = (

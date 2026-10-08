@@ -118,3 +118,50 @@ def test_a_hydroxide_only_axis_would_not_pass(reachable):
     )
     best = min(worst_error(r, MEASURED["Chlorite 16"]) for r in hydroxide_only)
     assert best > 0.4
+
+
+def test_the_axis_reaches_a_chlorite_whose_001_beats_its_002(reachable):
+    """An Fe-rich chlorite has its 001 stronger than its 002, and must be in there.
+
+    This is the gap the axis had.  Stopping the 2:1 sheet at 0.30 left every one
+    of the library's 4160 chlorite entries with a 002 from 1.27 to 8.06 times the
+    001, so the whole half of the composition range where the 001 is the
+    strongest basal reflection was missing - and that half is where the ordinary
+    Fe-rich chlorite of a sediment or a low-grade metabasite sits.
+
+    Measured consequence on a real separate: its 14 A window held 302 counts deg
+    against the 7.15 A window's 199, so the chlorite's own 002/001 was at most
+    0.66, and the fit could cover the 001 and the 4.75 A 003 only by putting 54 %
+    more intensity into the 7.15 A window than the specimen had.  That overshoot
+    then collided with the kaolinite bound from the heated mount, and the chlorite
+    lost: 25.7 % of the clay became 2.7 %.  Neither side of that collision was a
+    fitting error.
+    """
+    ratios = {pair: values[0] for pair, values in reachable.items()}  # 001 over 002
+    best = max(ratios.values())
+    assert best > 1.0, (
+        f"no chlorite in the library has its 001 stronger than its 002 - the "
+        f"strongest 001 reaches only {best:.2f} of the 002. An Fe-rich chlorite "
+        f"cannot be fitted, and on a specimen that has one the 7.15 A window is "
+        f"overshot instead."
+    )
+
+
+def test_the_two_one_sheet_spans_the_whole_occupancy():
+    """The axis has to reach the ferrous end member, not stop part way to it.
+
+    ``chlorite_crystal`` documents (1.0, 1.0) as a fully ferrous chamosite-like
+    end member, so an axis that stops at 0.30 is spanning less than a third of
+    the occupancy it is named for.  The value is what matters rather than the
+    count: a finer grid that still stopped early would not fix the shape that was
+    missing.
+    """
+    two_one = sorted({value for value, _ in CHLORITE_IRON})
+    assert max(two_one) == pytest.approx(1.0), (
+        f"the 2:1 sheet reaches only {max(two_one)}, short of the ferrous end "
+        f"member at 1.0"
+    )
+    assert len(two_one) >= 8, (
+        "fewer than eight values over the whole occupancy leaves steps in the "
+        "003/001 ratio larger than the ones the low end of the axis already uses"
+    )
