@@ -189,6 +189,7 @@ hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 <a href="#a-69">A.69 A channel breathes, and the test that finds one should admit it</a>
 <a href="#a-70">A.70 The weights, and a fault in the test harness rather than the program</a>
 <a href="#a-71">A.71 One number, six sentences, and a tool that lied about itself</a>
+<a href="#a-72">A.72 The background the fit was asked to call a mineral</a>
 <a href="#a-13">A.13 Summary</a>
 <a class="top" href="#d">D Structure provenance</a>
 <a class="top" href="#b">B File formats</a>
@@ -8283,6 +8284,71 @@ the code beside it.</p>
 in all three the error was invisible precisely because the report is what one reads instead of the
 code. The remedy is the same each time and is now applied in each place: the reporting is given a
 test of its own, against the property rather than against yesterday's output.</p>
+
+
+<h3 id="a-72">A.72 The background the fit was asked to call a mineral</h3>
+
+<p>An operator looked at a fit that was missing a chlorite and asked whether the background might be
+the reason, &ldquo;because the fit gets really bad above 20 degrees&rdquo;. It was, and the fault was
+larger than the one being chased.</p>
+
+<p>The default background model is Clayfit&rsquo;s, <code>a&nbsp;exp(&minus;b&nbsp;2&theta)&nbsp;+&nbsp;c</code>,
+which only ever falls. That mount&rsquo;s background does not: it falls to about 300 counts near
+11&nbsp;deg and then rises again into an amorphous hump peaking near 26&nbsp;deg. A monotonic curve
+has no shape for a hump, so it ran flat underneath it and left 165 to 240 counts standing under every
+point from 20 to 34&nbsp;deg. Nothing in the program said so. The subtracted pattern looked like
+intensity, because that is exactly what a pedestal of counts looks like.</p>
+
+<table><caption>What each model left, in counts above the pattern&rsquo;s own floor, per 4&nbsp;deg band.</caption>
+<tr><th>model</th><th>4&ndash;8</th><th>8&ndash;12</th><th>12&ndash;16</th><th>16&ndash;20</th><th>20&ndash;24</th><th>24&ndash;28</th><th>28&ndash;34</th><th>sound</th></tr>
+<tr><td>Exponential (default)</td><td>0</td><td>&minus;117</td><td>&minus;80</td><td>&minus;23</td><td>159</td><td>210</td><td>0</td><td>no</td></tr>
+<tr><td>Chebyshev</td><td>&minus;79</td><td>&minus;41</td><td>&minus;36</td><td>0</td><td>158</td><td>200</td><td>33</td><td>no</td></tr>
+<tr><td>ALS</td><td>129</td><td>&minus;25</td><td>&minus;17</td><td>0</td><td>71</td><td>63</td><td>&minus;11</td><td>no</td></tr>
+<tr><td>Polynomial</td><td>24</td><td>&minus;28</td><td>&minus;7</td><td>&minus;7</td><td>41</td><td>39</td><td>0</td><td>yes</td></tr>
+<tr><td>Sonneveld&ndash;Visser</td><td>11</td><td>0</td><td>&minus;2</td><td>&minus;1</td><td>38</td><td>22</td><td>&minus;2</td><td>yes</td></tr>
+<tr><td>QPA percentile</td><td>24</td><td>5</td><td>&minus;4</td><td>&minus;4</td><td>6</td><td>&minus;15</td><td>0</td><td>yes</td></tr>
+</table>
+
+<p>What it cost, on one specimen, is not a rounding error. Switching from the default to a model that
+follows the floor moved the kaolinite bound from the heated mount from 97&ndash;99&nbsp;% of the
+7.15&nbsp;&Aring; window to 82&ndash;92&nbsp;%, the chlorite from 25.7 to 18.7&nbsp;% of the clay, and
+the accompanying minerals from 15 to 60&nbsp;% of the weight. A separate question about the chlorite
+library turned on a ratio that reads 0.66 under the default model and 1.63 under
+Sonneveld&ndash;Visser &mdash; which is to say it was not a measurement at all.</p>
+
+<p>So the program now measures it. <code>background_pedestal</code> divides the fitted range into
+4&nbsp;deg bands, takes the fifth percentile of each as its floor, and reports how far the background
+sits below it. The Background tab shows the per-band numbers under every curve, red when a band is
+flagged, so that two models can be compared by the one number that distinguishes them.</p>
+
+<p>Three estimators were written before the one that works, and the two that failed are worth the
+space because each looked obviously right.</p>
+
+<p><strong>The band minimum.</strong> The lowest observed point of a band is the closest thing in it
+to pure background, so the difference there is the pedestal. It is also biased: the minimum of a few
+hundred Poisson samples sits two to three and a half sigma below their mean, so a correct background
+reads 40 to 80 counts low and a 200-count pedestal reads 130. Worse, on the over-subtraction side it
+is fatal &mdash; about half of a correctly fitted band lies below its own background, that being what
+noise about a curve means, so the obvious test of &ldquo;how much of the band went to zero&rdquo;
+fires on every background that is right. The test that caught this is in the suite.</p>
+
+<p><strong>The clipped mean.</strong> Unbiased, and wrong for the opposite reason: on a real clay
+pattern it measures the broad diffuse scattering as well as the background, and condemned all seven
+models including the three that reach the floor.</p>
+
+<p><strong>A low quantile, less the median band.</strong> The fifth percentile has an exact Gaussian
+offset whatever the sample size, so subtracting it gives an unbiased floor; and since a correct
+background still sits under a real pattern&rsquo;s floor by roughly the same amount everywhere
+&mdash; the diffuse part &mdash; subtracting the median band removes what every model has in common
+and leaves what this one got wrong. That is the measurement in the table.</p>
+
+<p>Two things it cannot do, stated so that nobody relies on the opposite. A band with no peak-free
+point in it has no floor to find, which is a live risk below about 6&nbsp;deg on an oriented mount, so
+a flag on the first band is weaker evidence than a flag further out. And a background wrong by the
+<em>same</em> amount at every angle has the same profile as one that is right: subtracting the median
+is what makes a wrong shape visible and it is also what makes a uniform offset invisible. A model that
+passes here has not been certified correct. It has been found not to be wrong in the way that moves a
+quantification.</p>
 
 <hr>
 <p class="small">ClayQuant 0.1.0 &mdash; user and reference manual. The program is distributed under

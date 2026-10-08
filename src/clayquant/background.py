@@ -43,7 +43,7 @@ from __future__ import annotations
 import hashlib
 import math
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -106,6 +106,13 @@ __all__ = [
     "snip_baseline",
     "sonneveld_visser_baseline",
     "select_background_points",
+    "PEDESTAL_BAND",
+    "PEDESTAL_NOTICE",
+    "PEDESTAL_SHARE",
+    "PEDESTAL_SIGMAS",
+    "BackgroundPedestal",
+    "PedestalBand",
+    "background_pedestal",
 ]
 
 
@@ -2202,4 +2209,444 @@ def clayfit_background(
         smooth_degrees=smooth_degrees,
         smooth_order=int(qpa_final_order),
         note=note,
+    )
+
+
+PEDESTAL_BAND = 4.0
+"""Width of the bands the pedestal is measured over, in degrees.
+
+Wide enough that a clay pattern has somewhere between its reflections to put a
+floor - the gaps either side of the 7.15 and 4.75 A regions are each more than
+a degree - and narrow enough to say *where* the background went wrong rather
+than that it did.  A band with no peak-free point in it reads as a pedestal
+whether or not there is one, which is the known limitation stated on
+:func:`background_pedestal` and the reason the counting-statistics test below
+is applied as well.
+"""
+
+PEDESTAL_SIGMAS = 3.0
+"""Counting sigmas the gap must clear before a band is reported.
+
+The gap is a number of counts and the pattern's own Poisson noise is the scale
+to read it against: at 500 counts a sigma is 22, so the 165-count gap that
+raised this is seven and a half of them and a 13-count one is half of one.
+Three is the same threshold the diagnostic reflections use.
+"""
+
+PEDESTAL_SHARE = 0.25
+"""Share of a band's net intensity that must be pedestal before it is a fault.
+
+A gap can be significant against the noise and still be a small part of what
+the band hands the fit.  What makes it worth stopping for is the second
+measure: a quarter of the band's net intensity being flat counts under no
+reflection means the fit is being asked to explain, with minerals, something no
+mineral is under - and it will, by inflating whatever is broad enough to cover
+it.
+"""
+
+
+PEDESTAL_QUANTILE = 0.05
+"""Quantile of a band taken as its floor.
+
+Not the minimum.  The minimum of a few hundred Poisson samples sits two to three
+and a half sigma below their mean, so a correctly fitted background is already
+under the lowest point of every band by 40 to 80 counts and a pedestal of 200
+reads as 130; the bias grows with the number of points in a band, and correcting
+it needs an extreme-value expectation that is only asymptotic.  A quantile has
+an exact Gaussian offset instead - the fifth percentile is 1.645 sigma below the
+mean, whatever the sample size - so subtracting that offset gives an unbiased
+floor.  Measured on synthetic Poisson patterns, a background set exactly right
+reads -7 to +5 counts and one set 200 low reads 193 to 205.
+
+Low enough to stay under the reflections and high enough not to be an extreme
+order statistic: a band would have to be 95 per cent peak before this leaves the
+background, which is the same condition the docstring's low-angle caveat
+describes.
+"""
+
+PEDESTAL_NOTICE = 0.10
+"""Share of the whole subtracted pattern that is pedestal before it is worth saying.
+
+The two per-band tests are an ``and``, which is right for calling one band a
+fault and wrong for the whole pattern: a gap can clear the noise in every band
+and clear a quarter of none of them, and the counts still reach the fit.  The
+asymmetric least-squares model does exactly that on the mount this was built
+for - 94 counts at 7.90 deg, 3.6 sigma, no band over a quarter, and 11 per cent
+of the pattern pedestal all the same.  A tenth is where it stops being a
+rounding error on a weight percent.
+"""
+
+@dataclass(frozen=True)
+class PedestalBand:
+    """One band's worth of background that was left behind, or taken twice."""
+
+    low: float
+    high: float
+    gap: float
+    """Counts of background left under the band, positive where it was left.
+
+    The clipped mean of ``counts - baseline`` over the band: the level the
+    subtracted pattern sits at once its reflections have been clipped away, which
+    is zero for a background that has done its job.  Negative where the model ran
+    above the data and the counts were taken twice.
+    """
+
+    noise: float
+    """Counting noise of the band, from the same clipped estimate."""
+
+    sigmas: float
+    """``gap / noise`` - the pedestal against the scale of the pattern's own noise."""
+
+    net: float
+    """Net area of the band after subtraction, in counts x degrees."""
+
+    share: float
+    """Fraction of :attr:`net` that the pedestal accounts for.
+
+    ``gap`` times the band's width over ``net``.  One means the band's whole net
+    content is pedestal and there is no reflection in it at all.
+    """
+
+    clipped: float
+    """Fraction of the band subtracted to exactly zero.
+
+    Reported rather than tested.  About half of a correctly fitted band is below
+    its own background - that is what noise about a curve means - so this number
+    is near 0.5 when nothing is wrong and is not a fault on its own.  It is here
+    because it says how much of the band has been flattened, which matters when
+    reading a plot of the subtracted pattern.
+    """
+
+    excess: float = 0.0
+    """Counts this band's floor stands above the pattern's own typical floor.
+
+    :attr:`gap` minus the median of :attr:`gap` over every band, and the number
+    the tests are made on.  A correct background still sits some way under a real
+    clay pattern's floor, because part of what is there is diffuse scattering and
+    no measurement separates it from unremoved background - but it sits under it
+    by about the *same* amount everywhere.  A background with the wrong shape
+    does not: it tracks the floor over part of the range and leaves it over the
+    rest, and that difference is the fault.  Subtracting the median removes what
+    every model has in common and leaves what this one got wrong.
+    """
+
+    @property
+    def flagged(self) -> bool:
+        return (self.excess >= PEDESTAL_SIGMAS * self.noise
+                and self.share >= PEDESTAL_SHARE)
+
+    @property
+    def oversubtracted(self) -> bool:
+        return self.sigmas <= -PEDESTAL_SIGMAS
+
+    def describe(self) -> str:
+        return (
+            f"{self.low:.0f}-{self.high:.0f} deg: {self.excess:+.0f} counts above "
+            f"the pattern's floor ({self.excess / self.noise:+.1f} sigma), "
+            f"{100.0 * self.share:.0f}% of what the band hands the fit"
+        )
+
+
+@dataclass(frozen=True)
+class BackgroundPedestal:
+    """How much of the subtracted pattern is background the model did not reach."""
+
+    bands: tuple[PedestalBand, ...]
+    share: float
+    """Pedestal as a fraction of the net intensity over the whole range."""
+
+    monotonic: bool
+    """Whether the fitted background only ever falls across the range."""
+
+    floor_rise: float
+    """Counts by which the pattern's own floor rises after its lowest band.
+
+    A background that falls monotonically can follow a floor that falls
+    monotonically.  Where the floor turns and comes back up - an amorphous hump,
+    a fluorescence rise - a monotonic model has no shape for it, and this is how
+    much of a rise it is being asked to ignore.
+    """
+
+    model: str = ""
+
+    @property
+    def flagged(self) -> tuple[PedestalBand, ...]:
+        return tuple(band for band in self.bands if band.flagged)
+
+    @property
+    def over(self) -> tuple[PedestalBand, ...]:
+        """Bands the background ran *above*, whose counts were clipped away."""
+        return tuple(band for band in self.bands if band.oversubtracted)
+
+    @property
+    def found(self) -> bool:
+        """Whether a band is a pedestal.  See :attr:`over` for the other direction."""
+        return bool(self.flagged)
+
+    @property
+    def notable(self) -> bool:
+        """Whether enough of the pattern is pedestal to matter, band by band or not."""
+        return self.share >= PEDESTAL_NOTICE
+
+    @property
+    def sound(self) -> bool:
+        """Whether the background is wrong in neither direction and by no amount."""
+        return not self.flagged and not self.over and not self.notable
+
+    @property
+    def worst(self) -> "PedestalBand | None":
+        return max(self.bands, key=lambda band: band.excess, default=None)
+
+    @property
+    def status(self) -> str:
+        """One paragraph an operator can act on, or a sentence that all is well."""
+        model = f"The {self.model} background" if self.model else "The background"
+        over = self.over
+        above = ""
+        if over:
+            deepest = min(over, key=lambda band: band.sigmas)
+            where = ", ".join(f"{band.low:.0f}-{band.high:.0f}" for band in over)
+            above = (
+                f" It also runs *above* the pattern over {where} deg - by "
+                f"{abs(deepest.gap):.0f} counts ({abs(deepest.sigmas):.1f} sigma) at "
+                f"its worst, with {100.0 * deepest.clipped:.0f}% of that band "
+                f"subtracted to exactly zero. Whatever weak reflections were there "
+                f"have been taken away rather than fitted, and no fit can get them "
+                f"back."
+            )
+        if not self.found:
+            worst = self.worst
+            if worst is None:
+                return f"{model} was not measured against the pattern."
+            if self.notable:
+                reached = (
+                    f"{model} clears every band's own test, but {100.0 * self.share:.0f}% "
+                    f"of the subtracted pattern is still background rather than "
+                    f"diffraction - the largest is {worst.excess:.0f} counts "
+                    f"({worst.excess / worst.noise:.1f} sigma) over "
+                    f"{worst.low:.0f}-{worst.high:.0f} "
+                    f"deg. Spread thinly enough to pass band by band and not thinly "
+                    f"enough to ignore: the fit will put minerals under it."
+                )
+            else:
+                reached = (
+                    f"{model} reaches the pattern's floor everywhere: the largest gap "
+                    f"is {worst.excess:.0f} counts ({worst.excess / worst.noise:.1f} sigma) over {worst.low:.0f}-{worst.high:.0f} deg, and {100.0 * self.share:.0f}% "
+                    f"of the subtracted pattern is background - nothing a mineral "
+                    f"would be asked to explain."
+                )
+            return (reached + above) if above else reached
+        flagged = self.flagged
+        worst = max(flagged, key=lambda band: band.gap)
+        where = ", ".join(f"{band.low:.0f}-{band.high:.0f}" for band in flagged)
+        sentence = (
+            f"{model} does not reach the pattern over {where} deg. At its worst it "
+            f"sits {worst.excess:.0f} counts ({worst.excess / worst.noise:.1f} sigma) above the pattern's own floor over the "
+            f"{worst.low:.0f}-{worst.high:.0f} deg band, which is "
+            f"{100.0 * worst.share:.0f}% of what that band hands the fit; over the "
+            f"whole range {100.0 * self.share:.0f}% of the subtracted pattern is "
+            f"background rather than diffraction. The fit will account for it with "
+            f"minerals, because minerals are all it has."
+        )
+        if self.monotonic and self.floor_rise > 0.0:
+            sentence += (
+                f" The cause is the shape rather than the fitting: this model only "
+                f"ever falls, while the pattern's own floor rises {self.floor_rise:.0f} "
+                f"counts again further out - a hump this model has no shape for. A "
+                f"model that can turn (Polynomial, QPA, Sonneveld-Visser), or the "
+                f"A/2theta term added to one, is what follows it."
+            )
+        return sentence + above
+
+
+def background_pedestal(
+    two_theta: np.ndarray,
+    intensity: np.ndarray,
+    background,
+    band: float = PEDESTAL_BAND,
+    range_two_theta: "tuple[float, float] | None" = None,
+    model: str = "",
+) -> BackgroundPedestal:
+    """Measure the background a model left behind, band by band.
+
+    A fitted background can be wrong in two directions and only one of them is
+    visible.  Running *above* the data clips the reflections, and the subtracted
+    pattern goes flat where it should not, which an operator sees at once.
+    Running *below* the data leaves a pedestal of counts standing under every
+    point of the region, and that is invisible: it looks like intensity.  The fit
+    then explains it the only way it can, by inflating whatever phase is broad
+    enough to cover it, and every number downstream moves - which is the failure
+    this measures.
+
+    **What the level of a band is, and why not its minimum.**  The obvious
+    statistic is the lowest observed point: if the background does not come down
+    to it, the difference is a floor no reflection is under.  It is also wrong,
+    and the test that caught it is in the suite.  The minimum of a few hundred
+    Poisson samples sits two to three and a half sigma *below* their mean, so a
+    correctly fitted background is already under the lowest point of every band
+    by 40 to 80 counts, and a pedestal of 200 reads as 130.  The error is in the
+    safe direction but it is not small, it grows with the number of points in a
+    band, and on the over-subtraction side it is fatal: about half of a correct
+    band lies below its own background, so any test on "how much of the band went
+    to zero" fires on every background that is right.
+
+    The clipped mean of ``counts - baseline`` is unbiased and is also wrong,
+    for the opposite reason: on a real clay pattern it measures the broad diffuse
+    scattering as well as the background, and reports every model as a pedestal
+    of 70 to 140 counts including the ones that reach the floor.  What is wanted
+    is a *floor*, not a level.
+
+    So the floor is a low quantile with its own offset taken out - see
+    :data:`PEDESTAL_QUANTILE`.  That is unbiased, is not an extreme order
+    statistic, and stays under the reflections.  It does not go to zero on a real
+    pattern, because some of what sits above a correct background there is
+    genuine diffuse diffraction and no measurement separates the two; what it
+    does is leave the *difference* between a model that follows the floor and one
+    that does not, which is the whole of what this is for.
+
+    The level is then read twice: against that noise, so a gap of a few counts is
+    not called a fault, and against the band's net content, so a significant gap
+    that is a small part of what the band carries is not either.  Both have to be
+    crossed - see :data:`PEDESTAL_SIGMAS` and :data:`PEDESTAL_SHARE` - and
+    :data:`PEDESTAL_NOTICE` catches the pedestal that is thin enough to pass
+    every band and still reaches the fit.
+
+    **The one case it reads wrong, and it is at the low-angle end.**  A band with
+    no peak-free point in it has no floor to find, and the clipping has nothing
+    to clip down to.  The level then measures the reflection and the band is
+    reported as a pedestal when the background may be right.  On an oriented clay
+    mount this is a live risk below about 6 deg, where the basal reflections are
+    broad and the direct-beam tail is steep, so a flag on the first band is
+    weaker evidence than a flag further out.  It is left as a report rather than
+    made into a refusal for exactly this reason: the measurement is sound, its
+    interpretation on one band is not always, and the operator can see the curve.
+
+    ``background`` is anything that gives the baseline - a
+    :class:`ClayfitBackground`, a :class:`BackgroundFit`, or the array itself.
+
+    Measured on a real glycol mount over 4-34 deg, as the floor left behind in
+    counts per 4 deg band and the share of the whole subtracted pattern:
+
+    ====================  ====  ====  =====  =====  =====  =====  =====  =====  =====
+    model                  4-8  8-12  12-16  16-20  20-24  24-28  28-34  share  sound
+    ====================  ====  ====  =====  =====  =====  =====  =====  =====  =====
+    exponential              0  -117    -80    -23    159    210      0   17 %     no
+    Chebyshev              -79   -41    -36      0    158    200     33   10 %     no
+    ALS                    129   -25    -17      0     71     63    -11   16 %     no
+    polynomial + 500/2th   -10   -43     -4      0     54     55     21   13 %     no
+    polynomial              24   -28     -7     -7     41     39      0    8 %    yes
+    Sonneveld-Visser        11     0     -2     -1     38     22     -2    6 %    yes
+    QPA percentile          24     5     -4     -4      6    -15      0    3 %    yes
+    ====================  ====  ====  =====  =====  =====  =====  =====  =====  =====
+
+    The exponential is ``a exp(-b 2theta) + c``, which only ever falls, while that
+    scan's background rises again into an amorphous hump near 26 deg: it tracks
+    the floor up to 20 deg and then stands 159 and 210 counts above it, which is
+    seven and nine sigma.  The models that reach the floor do so because they can
+    turn.  Note the second known limitation at work in the last column: the
+    polynomial with the ``A/2theta`` term sits *closest* to the floor of all of
+    them in absolute counts and is still marked, because it over-subtracts by 43
+    counts at 8-12 deg while leaving 55 at 24-28, and a floor that moves by a
+    hundred counts across the range is a shape that does not fit whichever side
+    of the data it falls on.
+
+    **The second case it cannot see.**  A background wrong by the same amount at
+    every angle has the same profile as one that is right, and this will pass it.
+    Subtracting the median band is what makes a wrong *shape* visible and it is
+    also what makes a uniform offset invisible; the raw :attr:`PedestalBand.gap`
+    still carries it, for anyone who wants to look, but nothing here tests it,
+    because on a real pattern a uniform offset cannot be told from diffuse
+    scattering.  It is the rarer fault and the less damaging one, inflating
+    everything rather than setting one region against another.  A model that
+    passes here has not been certified correct; it has been found not to be wrong
+    in the way that moves a quantification.
+    """
+    angle = np.asarray(two_theta, dtype=float)
+    counts = np.asarray(intensity, dtype=float)
+    if angle.shape != counts.shape:
+        raise ValueError("two_theta and intensity must have the same shape")
+    baseline = np.asarray(
+        background(angle) if callable(background) else background, dtype=float)
+    if baseline.shape != angle.shape:
+        raise ValueError("the background must cover the same points as the pattern")
+    if band <= 0.0:
+        raise ValueError("the band width must be positive")
+
+    inside = np.ones(angle.shape, dtype=bool)
+    if range_two_theta is not None:
+        low, high = float(range_two_theta[0]), float(range_two_theta[1])
+        inside = (angle >= low) & (angle <= high)
+    if int(np.count_nonzero(inside)) < 4:
+        return BackgroundPedestal(bands=(), share=0.0, monotonic=False,
+                                  floor_rise=0.0, model=model)
+    angle, counts, baseline = angle[inside], counts[inside], baseline[inside]
+
+    from scipy.stats import norm
+
+    # Gaussian offset of the quantile from the mean: -1.645 sigma at the fifth
+    # percentile.  Exact, and the reason a quantile is used rather than a minimum.
+    offset = float(norm.ppf(PEDESTAL_QUANTILE))
+
+    edges = np.arange(float(angle[0]), float(angle[-1]), band)
+    bands: list[PedestalBand] = []
+    pedestal_area = 0.0
+    net_area = 0.0
+    for start in edges:
+        stop = min(start + band, float(angle[-1]))
+        # The last band absorbs a short remainder rather than being reported as a
+        # band of its own: half a degree does not hold a floor.
+        if stop - start < 0.5 * band and bands:
+            start = bands[-1].low
+            bands.pop()
+        here = (angle >= start) & (angle <= stop)
+        if int(np.count_nonzero(here)) < 4:
+            continue
+        difference = counts[here] - baseline[here]
+        # The floor, with the quantile's own offset taken out, and the counting
+        # noise at that floor as the scale to read it against.
+        floor = float(np.quantile(counts[here], PEDESTAL_QUANTILE))
+        sigma = math.sqrt(max(floor, 1.0))
+        gap = float(np.quantile(difference, PEDESTAL_QUANTILE)) - offset * sigma
+        net = float(np.trapezoid(np.clip(difference, 0.0, None), angle[here]))
+        width = stop - start
+        bands.append(PedestalBand(
+            low=float(start), high=float(stop), gap=gap,
+            noise=sigma, sigmas=gap / sigma, net=net, share=0.0,
+            clipped=float(np.count_nonzero(difference <= 0.0)) / difference.size,
+        ))
+        net_area += net
+
+    # What every model has in common is the diffuse scattering; what this one got
+    # wrong is how much its floor varies.  The median is the common part.
+    if bands:
+        common = float(np.median([b.gap for b in bands]))
+        measured = []
+        for b in bands:
+            excess = b.gap - common
+            width = b.high - b.low
+            measured.append(replace(
+                b, excess=excess,
+                share=(excess * width / b.net) if b.net > 0.0 else 0.0))
+            pedestal_area += max(excess, 0.0) * width
+        bands = measured
+
+    # Does the model have the shape the pattern asks for?  Compared on the band
+    # levels rather than on the raw minimum, which is noise.
+    levels = np.array(
+        [float(np.median(counts[(angle >= b.low) & (angle <= b.high)])) for b in bands],
+        dtype=float) if bands else np.array([], dtype=float)
+    rise = 0.0
+    if levels.size >= 2:
+        bottom = int(np.argmin(levels))
+        if bottom < levels.size - 1:
+            rise = float(np.max(levels[bottom:]) - levels[bottom])
+    steps = np.diff(baseline)
+    monotonic = bool(np.all(steps <= 1e-9)) or bool(np.all(steps >= -1e-9))
+
+    return BackgroundPedestal(
+        bands=tuple(bands),
+        share=(pedestal_area / net_area) if net_area > 0.0 else 0.0,
+        monotonic=monotonic,
+        floor_rise=rise,
+        model=model,
     )

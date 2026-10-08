@@ -62,6 +62,7 @@ from ..background import (
     QPA_MODEL_NAME,
     QPA_PERCENTILE_WINDOW,
     ClayfitBackground,
+    background_pedestal,
     clayfit_background,
     SONNEVELD_VISSER_ITERATIONS,
     sonneveld_visser_reach,
@@ -439,6 +440,48 @@ def between_the_peaks(pattern, fit) -> float:
         return float("nan")
     quiet = left <= np.quantile(left, 0.4)
     return float(np.median(left[quiet])) if quiet.any() else float("nan")
+
+
+def pedestal_panel(pattern, fit, range_two_theta=None):
+    """The background guard, as a panel the operator cannot miss, or nothing.
+
+    Red rather than amber when a band is flagged, on the same reasoning as the
+    weighting guard: this does not mean the numbers need reading with care, it
+    means the fit is being handed counts that no mineral is under and will put
+    minerals under them anyway.  Amber where no band crosses both thresholds but
+    enough of the pattern is pedestal to matter.
+
+    A measurement is shown whatever it says, including when it says the curve is
+    sound, because the operator is choosing between six models and the number
+    that separates them is exactly this one.
+    """
+    try:
+        found = background_pedestal(
+            pattern.two_theta, pattern.intensity, fit,
+            range_two_theta=range_two_theta, model=getattr(fit, "model", ""),
+        )
+    except Exception as exc:  # noqa: BLE001 - a guard must never break the view
+        return html.Div(f"The background could not be measured against the "
+                        f"pattern: {exc}",
+                        style={"marginTop": "8px", "fontSize": "0.78rem",
+                               "color": "#666"})
+    if found.found:
+        colours = {"background": "#fdecea", "border": "1px solid #d9534f"}
+    elif not found.sound:
+        colours = {"background": "#fcf8e3", "border": "1px solid #f0ad4e"}
+    else:
+        colours = {"background": "#f4f8f4", "border": "1px solid #cfe0cf"}
+    rows = "  ".join(
+        f"{band.low:.0f}\u2013{band.high:.0f}\u00b0 {band.excess:+.0f}"
+        for band in found.bands
+    )
+    return html.Div([
+        html.Div(found.status),
+        html.Div(f"Counts above the pattern's own floor, per band:  {rows}",
+                 style={"marginTop": "6px", "fontFamily": "monospace",
+                        "fontSize": "0.72rem", "color": "#555"}),
+    ], style={**colours, "marginTop": "8px", "padding": "8px",
+              "borderRadius": "6px", "fontSize": "0.8rem"})
 
 
 def background_report(pattern, fit, background) -> str:
@@ -2595,11 +2638,14 @@ def register_callbacks(app: Dash) -> None:
         Input("bg-bending", "value"),
         Input("bg-apply", "n_clicks"),
         Input("bg-apply-all", "n_clicks"),
+        # The guard measures the window the fit will actually see, not the whole
+        # scan: a pedestal outside the fitted range costs nothing.
+        State("fit-range", "value"),
     )
     def update_background(mount, _loaded, _zeroed, kind, order, inverse, amplitude,
                           radius, stride, qpa_window, qpa_baseline_smooth,
                           qpa_baseline_order, qpa_final_smooth, qpa_final_order,
-                          granularity, bending, _apply, _apply_all):
+                          granularity, bending, _apply, _apply_all, fit_range):
         state = STATE.mounts[mount]
         if state.raw is None:
             return empty_figure(f"{MOUNT_LABELS[mount]} is not loaded"), ""
@@ -2687,7 +2733,11 @@ def register_callbacks(app: Dash) -> None:
                            name="subtracted", line={"color": "#2ca02c", "width": 1})
         style_axes(figure, "Counts")
 
-        return figure, html.Div(background_report(pattern, fit, background) + applied)
+        return figure, html.Div([
+            html.Div(background_report(pattern, fit, background) + applied),
+            pedestal_panel(pattern, fit,
+                           range_two_theta=tuple(fit_range) if fit_range else None),
+        ])
 
     @app.callback(
         Output("zero-slider", "value"),
